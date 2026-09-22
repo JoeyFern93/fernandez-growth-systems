@@ -1274,6 +1274,16 @@
       box-shadow: var(--shadow-lg);
     }
 
+    .portrait-photo {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+    }
+
     .portrait-frame::before,
     .portrait-frame::after {
       position: absolute;
@@ -1313,6 +1323,14 @@
       font-size: 2.8rem;
       font-weight: 830;
       letter-spacing: -0.04em;
+    }
+
+    .form-honeypot {
+      position: absolute !important;
+      left: -10000px !important;
+      width: 1px !important;
+      height: 1px !important;
+      overflow: hidden !important;
     }
 
     .portrait-caption {
@@ -2420,9 +2438,8 @@
     <section class="section section-warm" id="about">
       <div class="container about-grid">
         <div class="portrait-card">
-          <!-- Replace .portrait-frame with a real image of Joe when a portrait is supplied. -->
-          <div class="portrait-frame" role="img" aria-label="Portrait area for Joe Fernandez">
-            <span class="portrait-initials" aria-hidden="true">JF</span>
+          <div class="portrait-frame">
+            <img class="portrait-photo" src="data:image/webp;base64,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" alt="Joe Fernandez, founder of Fernandez Growth Systems" loading="lazy" decoding="async">
           </div>
           <div class="portrait-caption">
             <strong>Joe Fernandez</strong>
@@ -2558,8 +2575,11 @@
             </ul>
           </div>
 
-          <!-- Connect this form to the selected CRM or form endpoint before launch. -->
-          <form class="review-form" id="review-form" action="#" method="post">
+          <form class="review-form" id="review-form" action="https://formsubmit.co/joeyfernandez81@gmail.com" method="post">
+            <input type="hidden" name="_subject" value="New Fernandez Growth Systems Review Request">
+            <input type="hidden" name="_next" value="https://joeyfern93.github.io/fernandez-growth-systems/?submitted=1#review">
+            <input type="hidden" name="_template" value="table">
+            <input class="form-honeypot" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true">
             <div class="form-grid">
               <div class="field">
                 <label for="name">Your name</label>
@@ -2597,7 +2617,7 @@
 
             <div class="form-actions">
               <button class="button button-white" type="submit">Request a review <span aria-hidden="true">→</span></button>
-              <p class="form-note">Submitting this draft form does not yet send data. Connect it to the chosen CRM before launch.</p>
+              <p class="form-note">Your request will be emailed directly to Joe. Please do not include passwords or sensitive account information.</p>
             </div>
             <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
           </form>
@@ -2628,6 +2648,7 @@
       const navigationLinks = navigation.querySelectorAll('a');
       const reviewForm = document.getElementById('review-form');
       const formStatus = document.getElementById('form-status');
+      const submitButton = reviewForm.querySelector('button[type="submit"]');
       const year = document.getElementById('year');
 
       function closeMenu() {
@@ -2655,10 +2676,16 @@
         }
       });
 
-      reviewForm.addEventListener('submit', function (event) {
-        event.preventDefault();
-        formStatus.textContent = 'The form is working as a draft, but it is not connected to an email inbox or CRM yet. Connect the final endpoint before launch.';
+      if (new URLSearchParams(window.location.search).get('submitted') === '1') {
+        formStatus.textContent = 'Thank you. Your request has been sent to Joe.';
         formStatus.classList.add('visible');
+      }
+
+      reviewForm.addEventListener('submit', function () {
+        formStatus.textContent = 'Sending your request…';
+        formStatus.classList.add('visible');
+        submitButton.disabled = true;
+        submitButton.setAttribute('aria-busy', 'true');
       });
 
       year.textContent = String(new Date().getFullYear());
