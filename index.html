@@ -7,10 +7,20 @@
 
   <title>Fernandez Growth Systems | Growth Systems for Owner-Led Businesses</title>
   <meta name="description" content="Joe Fernandez helps established owner-led businesses connect their website, marketing, lead tracking, CRM, and follow-up into one practical growth system.">
+  <meta name="robots" content="index, follow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="canonical" href="https://joeyfern93.github.io/fernandez-growth-systems/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%2313233f'/%3E%3Ccircle cx='52' cy='51' r='15' fill='none' stroke='%236ca3ff' stroke-width='3'/%3E%3Ctext x='9' y='37' fill='white' font-family='Arial,sans-serif' font-size='17' font-weight='700'%3EFGS%3C/text%3E%3C/svg%3E">
 
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Fernandez Growth Systems">
-  <meta property="og:description" content="One accountable partner for the systems behind your growth.">
+  <meta property="og:site_name" content="Fernandez Growth Systems">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://joeyfern93.github.io/fernandez-growth-systems/">
+  <meta property="og:title" content="Fernandez Growth Systems | One Accountable Growth Partner">
+  <meta property="og:description" content="Joe Fernandez connects the website, marketing, lead tracking, CRM, and follow-up behind established owner-led businesses.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Fernandez Growth Systems | One Accountable Growth Partner">
+  <meta name="twitter:description" content="Practical growth systems for established owner-led businesses—directly with Joe Fernandez.">
 
   <style>
     :root {
@@ -402,9 +412,34 @@
       text-decoration: none;
     }
 
-    .nav-link:hover {
+    .nav-link:hover,
+    .nav-link[aria-current="location"] {
       color: var(--blue-dark);
       background: var(--blue-soft);
+    }
+
+    .nav-link[aria-current="location"] {
+      box-shadow: inset 0 -2px 0 rgba(36, 103, 209, 0.48);
+    }
+
+    .scroll-progress {
+      position: absolute;
+      right: 0;
+      bottom: -1px;
+      left: 0;
+      height: 2px;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .scroll-progress span {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--teal));
+      transform: scaleX(0);
+      transform-origin: left center;
+      will-change: transform;
     }
 
     .header-cta {
@@ -1229,22 +1264,20 @@
     }
 
     .fit-list li::before {
-      display: grid;
+      display: block;
       width: 22px;
       height: 22px;
-      place-items: center;
       border-radius: 50%;
-      color: #8dd9ce;
-      background: rgba(20, 124, 115, 0.2);
-      content: "✓";
-      font-size: 0.7rem;
-      font-weight: 900;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 12 4 4 8-9' fill='none' stroke='%238dd9ce' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px 14px no-repeat,
+        rgba(20, 124, 115, 0.2);
+      content: "";
     }
 
     .fit-card:last-child .fit-list li::before {
-      color: #d8b2ad;
-      background: rgba(153, 69, 61, 0.18);
-      content: "—";
+      background:
+        linear-gradient(#d8b2ad, #d8b2ad) center / 10px 2px no-repeat,
+        rgba(153, 69, 61, 0.18);
     }
 
     .about-grid {
@@ -1670,6 +1703,122 @@
       color: var(--white);
     }
 
+
+    .next-steps {
+      position: relative;
+      z-index: 1;
+      margin-top: 31px;
+      padding-top: 27px;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .next-steps-label {
+      margin: 0 0 15px;
+      color: #9fc0f7;
+      font-size: 0.7rem;
+      font-weight: 850;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .next-steps ol {
+      display: grid;
+      gap: 13px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: review-steps;
+    }
+
+    .next-steps li {
+      display: grid;
+      grid-template-columns: 29px 1fr;
+      align-items: start;
+      gap: 11px;
+      color: #dce7f5;
+      font-size: 0.86rem;
+      line-height: 1.48;
+      counter-increment: review-steps;
+    }
+
+    .next-steps li::before {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border: 1px solid rgba(125, 213, 200, 0.36);
+      border-radius: 50%;
+      color: #a8e7dd;
+      background: rgba(20, 124, 115, 0.16);
+      content: counter(review-steps);
+      font-size: 0.68rem;
+      font-weight: 850;
+    }
+
+    .field-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 7px;
+      color: #aebed2;
+      font-size: 0.68rem;
+      line-height: 1.4;
+    }
+
+    .character-count {
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .review-form .button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+      transform: none;
+    }
+
+    .back-to-top {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 80;
+      display: grid;
+      width: 46px;
+      height: 46px;
+      place-items: center;
+      border: 1px solid rgba(19, 35, 63, 0.12);
+      border-radius: 50%;
+      color: var(--ink);
+      background: rgba(255, 253, 249, 0.94);
+      box-shadow: 0 12px 34px rgba(19, 35, 63, 0.16);
+      opacity: 0;
+      pointer-events: none;
+      text-decoration: none;
+      transform: translateY(12px);
+      transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .back-to-top:hover {
+      color: var(--blue-dark);
+      background: var(--white);
+    }
+
+    .back-to-top.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .mobile-cta-bar {
+      display: none;
+    }
+
+    .back-to-top:focus-visible,
+    .mobile-cta-bar:focus-visible {
+      outline: 3px solid rgba(36, 103, 209, 0.35);
+      outline-offset: 3px;
+    }
+
     @media (max-width: 1040px) {
       :root {
         --header-height: 72px;
@@ -1956,6 +2105,60 @@
         padding: 21px;
       }
 
+      .back-to-top {
+        right: 16px;
+        bottom: calc(82px + env(safe-area-inset-bottom));
+        width: 43px;
+        height: 43px;
+      }
+
+      .mobile-cta-bar {
+        position: fixed;
+        right: 12px;
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        left: 12px;
+        z-index: 79;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 18px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 15px;
+        color: var(--white);
+        background: var(--blue);
+        box-shadow: 0 16px 45px rgba(19, 35, 63, 0.3);
+        font-size: 0.86rem;
+        font-weight: 800;
+        line-height: 1.2;
+        text-align: center;
+        text-decoration: none;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(18px);
+        transition: opacity 180ms ease, transform 180ms ease, background 180ms ease;
+      }
+
+      .mobile-cta-bar.is-visible {
+        display: flex;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .mobile-cta-bar:hover {
+        background: var(--blue-dark);
+      }
+
+      body.nav-open .mobile-cta-bar {
+        display: none;
+      }
+
+      .field-meta {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+      }
+
       .footer-grid {
         gap: 20px;
       }
@@ -2053,6 +2256,7 @@
         <a class="button header-cta" href="#review">Request a review</a>
       </nav>
     </div>
+    <div class="scroll-progress" aria-hidden="true"><span id="scroll-progress-bar"></span></div>
   </header>
 
   <main id="main-content">
@@ -2348,7 +2552,7 @@
             <span class="eyebrow">Selected work</span>
             <h2>Proof should show what changed—not just what was delivered.</h2>
           </div>
-          <p class="lede">This first case is intentionally anonymized and limited to verified operational outcomes. Client-approved names, quotations, and financial results can be added as they become available.</p>
+          <p class="lede">An anonymized engagement showing verified operational changes across a real owner-led business. Client-approved names and longer-term commercial outcomes can be added as evidence becomes available.</p>
         </div>
 
         <article class="case-study">
@@ -2358,7 +2562,7 @@
               <h3>Restoring attribution and follow-up visibility across a multi-platform customer journey.</h3>
             </div>
             <div class="case-meta">
-              <span><strong>Business:</strong> Established, owner-led property business</span>
+              <span><strong>Business:</strong> Established, owner-led business</span>
               <span><strong>Work:</strong> Website, advertising, analytics, CRM, and lead workflow</span>
               <span><strong>Role:</strong> Diagnosis, implementation, testing, and documentation</span>
             </div>
@@ -2574,6 +2778,15 @@
               <li>Clear scope before paid work begins</li>
               <li>Direct communication with Joe</li>
             </ul>
+
+            <div class="next-steps" aria-labelledby="next-steps-title">
+              <p class="next-steps-label" id="next-steps-title">What happens next</p>
+              <ol>
+                <li>Share what feels disconnected and what a better outcome would look like.</li>
+                <li>Joe reviews the context, current tools, and likely points of friction.</li>
+                <li>If there is a fit, you receive a clear Review scope and investment before paid work begins.</li>
+              </ol>
+            </div>
           </div>
 
           <form class="review-form" id="review-form" action="https://formsubmit.co/joeyfernandez81@gmail.com" method="post">
@@ -2584,19 +2797,19 @@
             <div class="form-grid">
               <div class="field">
                 <label for="name">Your name</label>
-                <input id="name" name="name" type="text" autocomplete="name" required>
+                <input id="name" name="name" type="text" autocomplete="name" maxlength="100" required>
               </div>
               <div class="field">
                 <label for="email">Work email</label>
-                <input id="email" name="email" type="email" autocomplete="email" required>
+                <input id="email" name="email" type="email" autocomplete="email" maxlength="200" required>
               </div>
               <div class="field">
                 <label for="business">Business name</label>
-                <input id="business" name="business" type="text" autocomplete="organization" required>
+                <input id="business" name="business" type="text" autocomplete="organization" maxlength="150" required>
               </div>
               <div class="field">
                 <label for="website">Website</label>
-                <input id="website" name="website" type="url" inputmode="url" placeholder="https://">
+                <input id="website" name="website" type="text" inputmode="url" autocomplete="url" maxlength="300" placeholder="yourbusiness.com">
               </div>
               <div class="field field-full">
                 <label for="challenge">What feels most disconnected?</label>
@@ -2612,13 +2825,17 @@
               </div>
               <div class="field field-full">
                 <label for="message">What would you like to improve?</label>
-                <textarea id="message" name="message" placeholder="A few sentences about the current situation, what you have tried, and what a better outcome would look like."></textarea>
+                <textarea id="message" name="message" minlength="40" maxlength="2000" aria-describedby="message-help message-count" placeholder="A few sentences about the current situation, what you have tried, and what a better outcome would look like." required></textarea>
+                <div class="field-meta">
+                  <span id="message-help">Please share at least 40 characters so Joe can prepare.</span>
+                  <span class="character-count" id="message-count" aria-live="polite">0 / 2000</span>
+                </div>
               </div>
             </div>
 
             <div class="form-actions">
               <button class="button button-white" type="submit">Request a review <span aria-hidden="true">→</span></button>
-              <p class="form-note">Your request will be emailed directly to Joe. Please do not include passwords or sensitive account information.</p>
+              <p class="form-note">Your request is delivered to Joe through FormSubmit and used to respond and assess fit. Please do not include passwords or sensitive account information.</p>
             </div>
             <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
           </form>
@@ -2642,44 +2859,153 @@
     </div>
   </footer>
 
+  <a class="back-to-top" id="back-to-top" href="#top" aria-label="Back to top"><span aria-hidden="true">↑</span></a>
+  <a class="mobile-cta-bar" id="mobile-cta" href="#review">Request a Growth Systems Review <span aria-hidden="true">&nbsp;→</span></a>
+
   <script>
     (function () {
       const menuButton = document.querySelector('.menu-toggle');
       const navigation = document.querySelector('.site-nav');
       const navigationLinks = navigation.querySelectorAll('a');
+      const sectionLinks = Array.from(navigation.querySelectorAll('.nav-link[href^="#"]'));
+      const trackedSections = sectionLinks
+        .map(function (link) {
+          return {
+            link: link,
+            section: document.querySelector(link.getAttribute('href'))
+          };
+        })
+        .filter(function (item) { return item.section; });
+      const reviewSection = document.getElementById('review');
       const reviewForm = document.getElementById('review-form');
       const formStatus = document.getElementById('form-status');
       const submitButton = reviewForm.querySelector('button[type="submit"]');
+      const websiteInput = document.getElementById('website');
+      const messageInput = document.getElementById('message');
+      const messageCount = document.getElementById('message-count');
+      const backToTop = document.getElementById('back-to-top');
+      const mobileCta = document.getElementById('mobile-cta');
+      const progressBar = document.getElementById('scroll-progress-bar');
       const year = document.getElementById('year');
+      let scrollTicking = false;
 
-      function closeMenu() {
+      function closeMenu(returnFocus) {
         menuButton.setAttribute('aria-expanded', 'false');
         menuButton.setAttribute('aria-label', 'Open navigation');
         navigation.classList.remove('open');
         document.body.classList.remove('nav-open');
+        if (returnFocus) {
+          menuButton.focus();
+        }
+      }
+
+      function openMenu() {
+        menuButton.setAttribute('aria-expanded', 'true');
+        menuButton.setAttribute('aria-label', 'Close navigation');
+        navigation.classList.add('open');
+        document.body.classList.add('nav-open');
+        window.requestAnimationFrame(function () {
+          const firstLink = navigation.querySelector('a');
+          if (firstLink) firstLink.focus();
+        });
+      }
+
+      function updateMessageCount() {
+        messageCount.textContent = messageInput.value.length + ' / 2000';
+      }
+
+      function updateScrollUi() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
+        const headerOffset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-height')) || 78;
+        let activeId = '';
+
+        progressBar.style.transform = 'scaleX(' + progress + ')';
+        backToTop.classList.toggle('is-visible', scrollTop > 700);
+
+        trackedSections.forEach(function (item) {
+          if (item.section.getBoundingClientRect().top <= headerOffset + 150) {
+            activeId = item.section.id;
+          }
+        });
+
+        trackedSections.forEach(function (item) {
+          if (item.section.id === activeId) {
+            item.link.setAttribute('aria-current', 'location');
+          } else {
+            item.link.removeAttribute('aria-current');
+          }
+        });
+
+        const reviewRect = reviewSection.getBoundingClientRect();
+        const showMobileCta = window.innerWidth <= 760 &&
+          scrollTop > 620 &&
+          reviewRect.top > window.innerHeight * 0.72;
+        mobileCta.classList.toggle('is-visible', showMobileCta);
+        scrollTicking = false;
+      }
+
+      function requestScrollUpdate() {
+        if (!scrollTicking) {
+          scrollTicking = true;
+          window.requestAnimationFrame(updateScrollUi);
+        }
       }
 
       menuButton.addEventListener('click', function () {
         const isOpen = menuButton.getAttribute('aria-expanded') === 'true';
-        menuButton.setAttribute('aria-expanded', String(!isOpen));
-        menuButton.setAttribute('aria-label', isOpen ? 'Open navigation' : 'Close navigation');
-        navigation.classList.toggle('open', !isOpen);
-        document.body.classList.toggle('nav-open', !isOpen);
+        if (isOpen) {
+          closeMenu(false);
+        } else {
+          openMenu();
+        }
       });
 
       navigationLinks.forEach(function (link) {
-        link.addEventListener('click', closeMenu);
+        link.addEventListener('click', function () {
+          closeMenu(false);
+        });
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
+          closeMenu(true);
+        }
+      });
+
+      document.addEventListener('pointerdown', function (event) {
+        if (
+          menuButton.getAttribute('aria-expanded') === 'true' &&
+          !navigation.contains(event.target) &&
+          !menuButton.contains(event.target)
+        ) {
+          closeMenu(false);
+        }
       });
 
       window.addEventListener('resize', function () {
         if (window.innerWidth > 1040) {
-          closeMenu();
+          closeMenu(false);
+        }
+        requestScrollUpdate();
+      });
+
+      window.addEventListener('scroll', requestScrollUpdate, { passive: true });
+
+      messageInput.addEventListener('input', updateMessageCount);
+
+      websiteInput.addEventListener('blur', function () {
+        const value = websiteInput.value.trim();
+        if (value && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+          websiteInput.value = 'https://' + value.replace(/^\/+/, '');
         }
       });
 
       if (new URLSearchParams(window.location.search).get('submitted') === '1') {
         formStatus.textContent = 'Thank you. Your request has been sent to Joe.';
         formStatus.classList.add('visible');
+        window.history.replaceState({}, document.title, window.location.pathname + '#review');
       }
 
       reviewForm.addEventListener('submit', function () {
@@ -2689,6 +3015,8 @@
         submitButton.setAttribute('aria-busy', 'true');
       });
 
+      updateMessageCount();
+      updateScrollUi();
       year.textContent = String(new Date().getFullYear());
     }());
   </script>
