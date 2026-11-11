@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://joeyfern93.github.io/fernandez-growth-systems/sitemap.xml

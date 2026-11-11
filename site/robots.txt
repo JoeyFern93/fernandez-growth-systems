@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /thank-you
+Sitemap: https://www.fernandezgrowthsystems.com/sitemap.xml

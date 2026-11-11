@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10251c">
+  <meta name="description" content="Practice a skill, then watch it back. Free delayed camera replay for athletes with a touch-friendly review timeline, slow playback, and on-device clip recording.">
+  <meta name="color-scheme" content="dark">
+  <title>Replay Cam | Delayed Video Replay for Athletes | Fernandez Growth Systems</title>
+  <link rel="canonical" href="https://www.fernandezgrowthsystems.com/replay/">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to replay controls</a>
+  <header class="app-header">
+    <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><img src="../assets/fern-mark.png" alt="" width="25" height="25">Fernandez Growth Systems</a><h1>Replay Cam<span class="beta-label">BETA</span></h1><p>Practice. Step back. Watch it again.</p></div>
+    <div class="header-actions">
+      <span id="connectionBadge" class="badge">Ready</span>
+      <button id="installBtn" class="button button-secondary" hidden>Install</button>
+      <button id="fullscreenBtn" class="button button-secondary">Full screen</button>
+    </div>
+  </header>
+
+  <main class="app-shell" id="main" tabindex="-1">
+    <section class="viewer-panel" aria-labelledby="viewerTitle">
+      <div class="section-heading">
+        <div><p class="eyebrow">DELAYED VIEW</p><h2 id="viewerTitle">Athlete replay</h2></div>
+        <output id="delayBadge" class="delay-badge">10 seconds behind</output>
+      </div>
+
+      <div id="replayStage" class="replay-stage">
+        <div class="stage-toolbar"><button id="exitFullscreenBtn" class="button button-secondary" type="button" hidden>Exit full screen</button></div>
+        <div id="viewer" class="viewer" tabindex="0" aria-label="Camera replay">
+          <video id="delayedVideo" autoplay playsinline muted></video>
+          <canvas id="delayedCanvas" hidden></canvas>
+          <div id="viewerMessage" class="viewer-message">
+            <strong>Ready to replay</strong><span>Start your camera, or try a moving demo without camera access.</span>
+          </div>
+          <div class="viewer-overlay"><span id="engineBadge">On-device</span><span id="actualBadge">No camera</span></div>
+        </div>
+
+        <section class="review-controls" aria-labelledby="reviewLabel">
+          <div class="review-heading">
+            <label id="reviewLabel" for="reviewRange">Review recent footage</label>
+            <output id="reviewPosition" for="reviewRange">Start camera to build history</output>
+          </div>
+          <input id="reviewRange" type="range" min="0" max="1" value="0" step="0.05" disabled aria-label="Review recorded video" aria-describedby="reviewHelp">
+          <div class="range-labels review-time-labels"><span id="historyStart">Oldest</span><span id="historyEnd">Newest</span></div>
+          <div class="review-actions" role="group" aria-label="Replay review controls">
+            <button id="rewindBtn" class="button button-secondary" type="button" aria-label="Back 5 seconds" disabled>−5s</button>
+            <button id="playPauseBtn" class="button button-secondary" type="button" aria-pressed="false" disabled>Pause replay</button>
+            <button id="forwardBtn" class="button button-secondary" type="button" aria-label="Forward 5 seconds" disabled>+5s</button>
+            <button id="returnDelayBtn" class="button button-secondary" type="button" disabled>Back to delay</button>
+          </div>
+          <div class="review-speed">
+            <label for="playbackSpeed">Review speed</label>
+            <select id="playbackSpeed" disabled><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1× — normal</option></select>
+          </div>
+          <p id="reviewHelp" class="help-text review-help">Drag the timeline to pause and rewatch. The camera keeps recording; older footage clears as the rolling buffer fills. Compatibility mode keeps a shorter history. Choose <strong>Back to delay</strong> to follow your practice again.</p>
+        </section>
+      </div>
+
+      <div class="primary-controls">
+        <button id="startBtn" class="button button-primary">Start camera</button>
+        <button id="startDemoBtn" class="button button-secondary" type="button" aria-describedby="demoHelp">Try demo</button>
+        <button id="stopBtn" class="button button-danger" disabled>Stop</button>
+        <button id="flipBtn" class="button button-secondary" disabled>Switch camera</button>
+        <button id="mirrorBtn" class="button button-secondary" aria-pressed="false">Mirror: off</button>
+      </div>
+      <p id="demoHelp" class="help-text demo-help">No camera needed. Demo uses a moving timer and colored bar to try the same recording, delay, timeline, and clip controls. Press Stop before starting your camera.</p>
+
+      <div class="delay-control">
+        <label for="delayRange">Replay delay <strong id="delayValue">10 seconds</strong></label>
+        <input id="delayRange" type="range" min="1" max="120" value="10" step="1">
+        <div class="range-labels"><span>1 sec</span><span>120 sec</span></div>
+        <div class="delay-presets" role="group" aria-label="Quick replay delay">
+          <button class="preset" type="button" data-delay="5" aria-pressed="false">5 sec</button>
+          <button class="preset" type="button" data-delay="10" aria-pressed="true">10 sec</button>
+          <button class="preset" type="button" data-delay="20" aria-pressed="false">20 sec</button>
+          <button class="preset" type="button" data-delay="30" aria-pressed="false">30 sec</button>
+        </div>
+        <p id="restartNote" class="inline-note" hidden>Release the slider to apply the new delay.</p>
+      </div>
+      <p class="session-hint">Set your device down, start the camera, and wait for the buffer to fill. Keep this page open while practicing.</p>
+    </section>
+
+    <aside class="side-panel">
+      <section class="card" aria-labelledby="clipTitle">
+        <div class="section-heading compact"><div><p class="eyebrow">CLIP</p><h2 id="clipTitle">Record the replay</h2></div></div>
+        <label for="clipLength">Length</label>
+        <select id="clipLength">
+          <option value="5">5 seconds</option><option value="8" selected>8 seconds</option>
+          <option value="10">10 seconds</option><option value="15">15 seconds</option>
+          <option value="20">20 seconds</option><option value="30">30 seconds</option>
+        </select>
+        <button id="recordClipBtn" class="button button-success button-block" disabled>Record next 8 seconds</button>
+        <a id="downloadLink" class="button button-secondary button-block" hidden>Download clip</a>
+        <p class="help-text">Recording begins when you press the button and saves the next part of the current view, including its mirror setting and review speed. Seek to the moment you want and play it before recording. Review controls lock while a clip records.</p>
+      </section>
+
+      <details class="card guide-card">
+        <summary>Setup and device help</summary>
+        <ol><li>Place your device where it can see the whole skill.</li><li>Choose a delay that gives you time to return to the screen.</li><li>Tap <strong>Start camera</strong> and allow camera access when your browser asks.</li><li>Wait for the replay to appear, then practice and watch.</li><li>Drag <strong>Review recent footage</strong> backward, then use play or slow playback to inspect a skill. Tap <strong>Back to delay</strong> when you are ready to practice again.</li></ol>
+        <p class="help-text">If the camera is blocked, check this site's camera permission in your browser. Open Replay Cam directly in Safari or Chrome.</p>
+        <p class="help-text">Use the timeline with a finger, mouse, or arrow keys. Full screen keeps the review controls beside or below the video. Available delay, history, full screen, and clip recording depend on your device and browser. Compatibility mode uses a shorter history at lower quality. Switching apps or locking your screen stops the session and clears the rolling history; start again when you return.</p>
+        <p class="help-text">To add a shortcut on iPhone or iPad: Safari → Share → Add to Home Screen. Where supported, the Install button does this for you.</p>
+      </details>
+
+      <details class="card settings-card">
+        <summary>Camera and quality settings</summary>
+        <div class="settings-grid">
+          <label for="cameraSelect">Camera</label>
+          <select id="cameraSelect"><option value="">Default camera</option></select>
+          <label for="captureResolution">Camera quality</label>
+          <select id="captureResolution"><option value="640x360">360p</option><option value="1280x720" selected>720p — recommended</option><option value="1920x1080">1080p</option></select>
+          <label for="replayResolution">Replay quality</label>
+          <select id="replayResolution"><option value="426x240">240p — lowest battery use</option><option value="640x360">360p</option><option value="854x480" selected>480p — recommended</option><option value="1280x720">720p</option></select>
+          <label for="captureFps">Camera frame rate</label>
+          <select id="captureFps"><option value="15">15 FPS</option><option value="30" selected>30 FPS — recommended</option><option value="60">60 FPS camera / 30 FPS replay</option></select>
+        </div>
+        <p class="help-text">Settings apply the next time the camera starts. Replay processing is capped at 30 FPS to control heat and battery use.</p>
+      </details>
+
+      <section class="card privacy-card" aria-labelledby="privacyTitle">
+        <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Video stays on this device</h2>
+        <p>Replay Cam does not upload camera video or record audio. The rolling replay clears when you stop; a downloaded clip stays on your device. Downloaded clips become normal files on this device, so follow your organization’s recording, consent, and deletion policies.</p>
+      </section>
+
+      <section class="card diagnostics-card" aria-labelledby="statusTitle">
+        <p class="eyebrow">STATUS</p><h2 id="statusTitle">Session details</h2>
+        <dl><div><dt>Camera</dt><dd id="cameraStatus">Stopped</dd></div><div><dt>Replay</dt><dd id="replayStatus">Waiting</dd></div><div><dt>Buffer</dt><dd id="bufferStatus">0 seconds</dd></div></dl>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="app-footer"><a href="/">Back to Fernandez Growth Systems</a><span>Replay Cam · Free practice tool</span></footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <video id="liveVideo" autoplay playsinline muted hidden></video>
+  <canvas id="processingCanvas" hidden></canvas>
+  <canvas id="clipCanvas" hidden></canvas>
+  <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
+  <script src="js/app.js" defer></script>
+  <script src="js/replay-ui.js" defer></script>
+</body>
+</html>

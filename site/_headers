@@ -1,0 +1,40 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/thank-you*
+  X-Robots-Tag: noindex, nofollow
+
+/404*
+  X-Robots-Tag: noindex, nofollow
+
+/replay/*
+  Permissions-Policy: camera=(self), microphone=(), geolocation=()
+
+/
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/index.html
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/growth-systems-review
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/build-fix-sprint
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/ongoing-growth-support
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/inquiry-privacy
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/replay/sw.js
+  Cache-Control: no-cache
+
+# Keep Cloudflare provider URLs out of search; retain indexing on the business domain.
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex
