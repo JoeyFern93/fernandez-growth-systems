@@ -2489,12 +2489,3 @@ h3 { line-height: 1.2; }
 .footer-brand img { width: 27px; height: 31px; object-fit: contain; filter: brightness(0) invert(1); opacity: .94; }
 .contact-shell .eyebrow { color: #c7dfb7; }
 .review-form :focus-visible, .form-status:focus { outline-color: #c7dfb7; }
-
-/* Replay Cam tool entry. */
-.replay-feature { margin-top: 22px; padding: 25px; display: grid; grid-template-columns: 76px minmax(0,1fr) auto; align-items: center; gap: 24px; background: #eef3e5; border: 1px solid #c6d7bd; border-radius: 18px; }
-.replay-feature-icon { width: 70px; height: 70px; color: #2f6b43; }
-.replay-feature-icon svg { width: 100%; height: 100%; }
-.replay-feature h3 { margin: 5px 0 9px; font-size: 1.45rem; }
-.replay-feature p { margin: 0; max-width: 64ch; }
-.replay-feature .button { white-space: nowrap; }
-@media(max-width: 760px) { .replay-feature { grid-template-columns: 1fr; gap: 15px; padding: 22px; } .replay-feature-icon { display: none; } .replay-feature .button { justify-self: start; } }

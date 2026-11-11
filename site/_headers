@@ -9,6 +9,7 @@
   X-Robots-Tag: noindex, nofollow
 
 /replay/*
+  X-Robots-Tag: noindex, nofollow
   Permissions-Policy: camera=(self), microphone=(), geolocation=()
 
 /
