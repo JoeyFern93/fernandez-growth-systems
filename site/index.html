@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com; img-src 'self' data:; connect-src 'self' https://api.web3forms.com https://hcaptcha.com https://*.hcaptcha.com; frame-src https://hcaptcha.com https://*.hcaptcha.com; form-action 'none'; base-uri 'none'; object-src 'none'">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173d2b">
@@ -563,11 +563,11 @@
             </div>
           </div>
 
-          <form class="review-form" id="review-form" name="fgs-inquiry" action="/thank-you" method="post" aria-describedby="inquiry-note">
+          <form class="review-form" id="review-form" name="fgs-inquiry" action="https://api.web3forms.com/submit" method="post" data-inquiry-provider="web3forms" data-inquiry-enabled="true" data-inquiry-transport="ajax-only" aria-describedby="inquiry-note">
             <p hidden><label>Leave this field empty <input name="bot-field" tabindex="-1" autocomplete="off"></label></p>
             <p class="inquiry-intro" id="inquiry-note">Share a little context. Fields marked <span aria-hidden="true">*</span><span class="sr-only">with an asterisk</span> are required. Your website and service preference are optional.</p>
             <p class="interest-context" id="interest-context" hidden></p>
-            <fieldset class="inquiry-fields" disabled data-migration-blocked="true">
+            <fieldset class="inquiry-fields" disabled data-nojs-disabled="true">
               <legend class="sr-only">Tell Joe about your business</legend>
               <div class="form-grid">
                 <div class="field"><label for="name">Your name <span aria-hidden="true">*</span></label><input id="name" name="name" type="text" autocomplete="name" maxlength="100" required></div>
@@ -579,9 +579,15 @@
                 <div class="field field-full"><label for="message">What would you like to improve? <span aria-hidden="true">*</span></label><textarea id="message" name="message" minlength="20" maxlength="2000" aria-describedby="message-help message-count" placeholder="What is happening now, and what would you like to work better?" required></textarea><div class="field-meta"><span id="message-help">A sentence or two is enough (20–2,000 characters).</span><span class="character-count" id="message-count">0 / 2000</span></div></div>
               </div>
             </fieldset>
-            <div class="form-actions"><button class="button button-white" type="submit" disabled aria-disabled="true">Preview: inquiries unavailable</button></div>
+            <div id="inquiry-captcha-group" aria-describedby="captcha-help">
+              <p id="captcha-help" class="form-note">Complete the spam check before sending. If it does not work, email <a href="mailto:joe@fernandezgrowthsystems.com">joe@fernandezgrowthsystems.com</a>.</p>
+              <div id="inquiry-captcha"></div>
+            </div>
+            <p hidden aria-hidden="true"><input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off"></p>
+            <noscript><p class="form-note">JavaScript is needed for this inquiry form. Email <a href="mailto:joe@fernandezgrowthsystems.com">joe@fernandezgrowthsystems.com</a> instead.</p></noscript>
+            <div class="form-actions"><button class="button button-white" type="submit" disabled aria-disabled="true" data-nojs-disabled="true">Send inquiry</button></div>
             <p class="form-note inquiry-privacy">Your details are used to respond to this inquiry. This does not sign you up for marketing. Please leave out passwords, payment details, and sensitive account information. <a href="/inquiry-privacy">How inquiry information is handled</a>.</p>
-            <div class="form-status visible" id="form-status" role="status" aria-live="polite" tabindex="-1">This preview does not send inquiries. Email delivery will be tested before the live site moves.</div>
+            <div class="form-status visible" id="form-status" role="status" aria-live="polite" tabindex="-1">JavaScript is needed to send this form. You can email joe@fernandezgrowthsystems.com instead.</div>
           </form>
         </div>
       </div>
@@ -609,7 +615,11 @@
   <a class="mobile-cta-bar" id="mobile-cta" href="#review">Request a Growth Systems Review <span aria-hidden="true">&nbsp;→</span></a>
 
   <script src="assets/home.js" defer></script>
-  <script src="assets/migration-staging.js" defer></script>
+  <script src="/assets/inquiry-web3forms.js"></script>
+  <script src="/assets/inquiry-config.js"></script>
+  <script>window.fgsInquiryCaptchaReady = function () {};</script>
+  <script>FGSWeb3Forms.init(window, window.FGS_INQUIRY_CONFIG);</script>
+  <script src="https://js.hcaptcha.com/1/api.js?onload=fgsInquiryCaptchaReady&amp;render=explicit&amp;recaptchacompat=off" async defer></script>
 
 </body>
 </html>
