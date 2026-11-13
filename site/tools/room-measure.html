@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#173d2b">
+<title>Room Measure | Fernandez Growth Systems</title>
+<meta name="description" content="Sketch rooms, record wall measurements, convert units, calculate rectangular areas, and save editable plans. Free manual room planning in your browser.">
+<meta name="robots" content="noindex, follow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<link rel="canonical" href="https://www.fernandezgrowthsystems.com/tools/room-measure">
+<style>
+:root{--green:#173d2b;--green2:#2c684c;--ink:#22372d;--muted:#66786d;--paper:#f4f6f1;--line:#d6dfd6;--gold:#f2c76c;--red:#9f3d30;--white:#fff;--radius:16px;color-scheme:light}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer;min-height:44px;border:1px solid var(--line);border-radius:11px;padding:9px 13px;background:white;color:var(--ink);font-weight:650}button:disabled{opacity:.4;cursor:default}button.primary{background:var(--green);color:white;border-color:var(--green)}button.active{background:#d9ecdf;border-color:var(--green);color:var(--green)}button.danger{color:var(--red)}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #d7a344;outline-offset:2px}input,select,textarea{width:100%;min-height:44px;border:1px solid #b9c9bd;background:white;color:var(--ink);border-radius:9px;padding:9px 11px}textarea{resize:vertical;min-height:85px}label{display:block;font-size:13px;font-weight:650;margin-bottom:5px}.small{font-size:12px;color:var(--muted)}.muted{color:var(--muted)}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.spread{justify-content:space-between}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stack{display:grid;gap:13px}.hidden{display:none!important}.badge{display:inline-block;padding:4px 8px;border-radius:20px;background:#e2ede3;color:var(--green);font-size:11px;font-weight:750;letter-spacing:.03em}.pill{padding:3px 7px;border-radius:10px;background:#eef2ec;font-size:11px;white-space:nowrap}.pill.missing{background:#fff0cd;color:#7a5716}.pill.estimate{background:#fff0cd;color:#7a5716}.top{background:var(--green);color:white;padding:14px max(16px,env(safe-area-inset-left));}.top-inner{max-width:1180px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}.brand{font-size:20px;font-weight:800;letter-spacing:-.02em}.top .small{color:#c5d9ca}.top button{background:#ffffff10;border-color:#ffffff40;color:white;font-size:13px}.top button.primary{background:var(--gold);border-color:var(--gold);color:var(--green)}.wrap{max-width:1212px;margin:auto;padding:16px}.controls{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}.roomtabs{display:flex;gap:7px;flex:1}.roomtabs button{flex:1;min-width:125px;max-width:270px}.units{display:flex;align-items:center;gap:8px}.units label{margin:0;white-space:nowrap}.units select{min-width:125px;width:auto}.workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px;align-items:start}.card{background:white;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 3px 14px #183b2810}.canvas-head{padding:12px 14px;border-bottom:1px solid var(--line)}.canvas-head h1{font-size:18px;margin:0 0 3px}.toolbar{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;padding:9px 10px;border-bottom:1px solid var(--line);scrollbar-width:thin}.toolbar button{font-size:12px;padding:7px 10px;white-space:nowrap;min-height:44px}.canvas-host{height:480px;position:relative;background:#fcfdf9}.canvas-host svg{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.hint{position:absolute;left:10px;right:10px;top:9px;z-index:1;pointer-events:none;font-size:12px;text-align:center;color:#52685b}.canvas-bottom{padding:9px 12px;display:flex;gap:7px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line)}.canvas-bottom button{padding:7px 11px;font-size:12px}.snap{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;margin:0}.snap input{width:19px;min-height:19px;height:19px}.aside{display:grid;gap:13px}.panel{padding:15px}.panel h2{font-size:15px;margin:0 0 10px}.panel p{margin:6px 0}.stat{font-size:23px;font-weight:800;letter-spacing:-.02em;color:var(--green)}.wall-list{display:grid;gap:7px;max-height:340px;overflow:auto}.wall{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;width:100%;font-size:13px;font-weight:500;padding:8px 10px}.wall strong{font-size:13px}.details{margin-top:16px}.details summary{cursor:pointer;padding:13px 15px;font-weight:700;min-height:46px}.details-content{padding:0 15px 16px}.room-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.room-form .wide{grid-column:1/-1}.foot{max-width:1212px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:12px}.autosave{font-size:11px}.autosave.warn{color:#ffdb9b}.toast{position:fixed;bottom:max(22px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);width:max-content;z-index:1000;background:var(--green);color:white;padding:12px 17px;border-radius:12px;box-shadow:0 4px 24px #0003;font-size:13px;pointer-events:none}.large .canvas-card{position:fixed;inset:0;z-index:30;border-radius:0;display:flex;flex-direction:column}.large .canvas-host{height:auto;flex:1}.large .canvas-bottom{padding-bottom:max(10px,env(safe-area-inset-bottom))}dialog{border:1px solid var(--line);border-radius:20px;color:var(--ink);padding:0;max-width:min(480px,calc(100vw - 24px));width:480px;max-height:90dvh;overflow:auto;box-shadow:0 20px 80px #0004}dialog::backdrop{background:#10271888}.dialog-inner{padding:22px}dialog h2{font-size:21px;margin:0 0 8px}dialog p{margin:6px 0 16px}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}.error{color:var(--red);font-size:13px;min-height:18px}.measure-box{display:grid;grid-template-columns:1fr 1fr;gap:10px}.measure-box.solo{grid-template-columns:1fr}.checkline{display:flex;align-items:flex-start;gap:9px;font-weight:500;font-size:13px}.checkline input{width:20px;min-height:20px;flex-shrink:0;margin:2px 0}.export-list{display:grid;gap:9px;margin-top:18px}.export-list button{text-align:left;padding:12px 14px}.export-list small{display:block;font-weight:400;margin-top:3px;opacity:.8}.help-list{padding-left:22px}.help-list li{margin-bottom:12px}.note{padding:11px 13px;border-left:3px solid #d9b253;background:#fff8e5;border-radius:4px;font-size:13px}.segbar{display:flex;gap:8px}.segbar button{flex:1}#reportText{height:180px;min-height:180px;font:12px/1.5 ui-monospace,monospace}
+@media(max-width:850px){.workspace{grid-template-columns:1fr}.aside{grid-template-columns:1fr 1fr}.aside .walls-panel{grid-column:1/-1}.wall-list{max-height:270px;grid-template-columns:1fr 1fr}.canvas-host{height:51svh;min-height:310px;max-height:570px}.top-inner{align-items:flex-start}.brand{font-size:18px}.top .small{font-size:10px}.wrap{padding:11px}.top{padding:12px}.top button{padding:7px 10px;min-height:42px}.roomtabs button{min-width:0;font-size:13px}.controls{gap:9px}.units{width:100%;justify-content:space-between}.units select{flex:1;max-width:190px}.room-form{grid-template-columns:1fr 1fr}.canvas-head h1{font-size:16px}.panel{padding:12px}.toolbar{position:relative}.dialog-inner{padding:18px}.aside .stat{font-size:20px}.foot{padding-bottom:max(20px,env(safe-area-inset-bottom))}}
+@media(max-width:390px){.aside{grid-template-columns:1fr}.aside .walls-panel{grid-column:auto}.wall-list{grid-template-columns:1fr}.brand{font-size:16px}.top-inner{gap:7px}.top button{font-size:12px;padding:7px 8px}.room-form{grid-template-columns:1fr}.room-form .wide{grid-column:auto}}
+@media print{.top,.controls,.toolbar,.canvas-bottom,.details,.foot,.aside,.hint{display:none!important}.wrap{padding:0}.workspace{display:block}.card{box-shadow:none;border:0}.canvas-host{height:650px}body{background:white}}
+.tools-back{display:inline-block;margin-bottom:4px;color:#dcebdd;font-size:12px;text-decoration:none}.tools-back:hover{text-decoration:underline}.tools-back:focus-visible{outline:3px solid #f2c76c;outline-offset:3px}.skip-link{position:fixed;top:8px;left:8px;z-index:100;padding:10px 15px;border-radius:9px;background:#fff;color:#173d2b;transform:translateY(-160%)}.skip-link:focus{transform:translateY(0)}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to room drawing</a>
+<header class="top"><div class="top-inner"><div><a class="tools-back" href="/tools">&larr; All tools</a><div class="brand">FGS Room Measure</div><div class="small">Draw the shape. Record actual measurements.</div><div id="saveStatus" class="autosave" role="status">Ready</div></div><div class="row"><button id="helpBtn" aria-label="How to use this tool">Help</button><button id="exportBtn" class="primary">Save / send</button></div></div></header>
+<main class="wrap" id="main" tabindex="-1">
+<div class="controls"><nav class="roomtabs" aria-label="Choose a room"><button id="room1Tab" class="active">Room 1</button><button id="room2Tab">Room 2</button></nav><div class="units"><label for="unit">Display / entry units</label><select id="unit"><option value="ft-in">Feet + inches</option><option value="ft">Decimal feet</option><option value="in">Inches</option><option value="m">Meters</option><option value="cm">Centimeters</option><option value="mm">Millimeters</option></select><button id="rectangleBtn">Rectangle shortcut</button></div></div>
+<div class="workspace">
+<section class="card canvas-card" aria-label="Room drawing">
+<div class="canvas-head"><div class="row spread"><div><h1 id="roomTitle">Room 1</h1><span id="roomLocation" class="small"></span></div><button id="expandBtn" aria-label="Expand drawing canvas">Expand</button></div></div>
+<div class="toolbar" role="toolbar" aria-label="Drawing tools"><button data-tool="wall" class="active" aria-pressed="true">Walls</button><button data-tool="measure" aria-pressed="false">Measure</button><button data-tool="select" aria-pressed="false">Move / edit</button><button data-tool="pen" aria-pressed="false">Freehand</button><button id="objectBtn">+ Door / item / note</button><button data-tool="pan" aria-pressed="false">Pan</button></div>
+<div class="canvas-host"><div id="canvasHint" class="hint">Tap each corner. Tap the first corner to close.</div><svg id="drawing" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" role="img" aria-label="Room sketch; tap corners to draw walls"></svg></div>
+<div class="canvas-bottom"><div class="row"><button id="undoBtn" aria-label="Undo last change">Undo</button><button id="redoBtn" aria-label="Redo last change">Redo</button><button id="closeBtn">Close outline</button><button id="clearDrawingBtn" class="danger" aria-label="Clear the selected room drawing">Clear drawing</button></div><div class="row"><label class="snap"><input id="snap" type="checkbox" checked>Straight walls</label><button id="zoomOut" aria-label="Zoom out">&minus;</button><button id="zoomIn" aria-label="Zoom in">+</button><button id="fitBtn">Fit</button></div></div>
+</section>
+<aside class="aside">
+<section class="card panel"><h2>Room area</h2><div id="areaValue" class="stat">Not calculated</div><p id="areaNote" class="small">Use Rectangle shortcut only if the room is rectangular. Freehand sketches do not produce measured areas.</p></section>
+<section class="card panel"><h2>Measurements recorded</h2><div id="progressValue" class="stat">0 / 0 walls</div><p id="progressNote" class="small">Draw the outline, then tap a wall or a wall below to enter its length.</p></section>
+<section class="card panel walls-panel"><div class="row spread"><h2>Wall lengths</h2><span class="badge">SKETCH &ne; SCALE</span></div><div id="wallList" class="wall-list"></div></section>
+</aside>
+</div>
+<details class="card details"><summary>Room details, location and notes</summary><div class="details-content"><div class="room-form"><div><label for="roomName">Room name</label><input id="roomName" maxlength="120"></div><div><label for="floor">Floor</label><input id="floor" maxlength="120" placeholder="For example: second floor"></div><div class="wide"><label for="location">Location in the house</label><input id="location" maxlength="500" placeholder="For example: north side, beside the stairs"></div><div class="wide"><label for="roomNotes">Use, shared areas, closets and extra measurements</label><textarea id="roomNotes" maxlength="5000" placeholder="Describe how you use this room and any alcoves or storage."></textarea></div><div class="wide row spread"><span class="small">Room details are included in the export.</span><button id="clearRoomBtn" class="danger">Clear this room's drawing</button></div></div></div></details>
+</main>
+<p class="foot">No account or internet connection is required after download. No measurements are uploaded by this tool. Browser autosave can be unavailable or cleared, so save a JSON or HTML copy after recording measurements. Sketches are not to scale. Measure the actual room before entering lengths.</p>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<dialog id="wallDialog"><div class="dialog-inner"><h2 id="wallDialogTitle">Wall length</h2><p class="small">Enter the actual wall-to-wall measurement. The drawn line is only a sketch.</p><div class="stack"><div><label for="wallUnit">Units</label><select id="wallUnit"></select></div><div id="wallInputs" class="measure-box"><div><label id="wallMajorLabel" for="wallMajor">Feet</label><input id="wallMajor" inputmode="decimal" autocomplete="off" placeholder="0"></div><div id="wallMinorWrap"><label for="wallMinor">Inches (fractions allowed)</label><input id="wallMinor" inputmode="text" autocomplete="off" placeholder="0 or 6 1/2"></div></div><div><label for="wallSource">Measurement source</label><select id="wallSource"><option value="measured">I measured it</option><option value="estimate">Approximate / estimate</option><option value="listing">Property listing / record</option></select></div><div><label for="wallNote">Optional measurement note</label><input id="wallNote" maxlength="500" placeholder="For example: excludes closet, tape measurement"></div></div><div id="wallError" class="error" role="alert"></div><div class="actions"><button id="removeWallMeasurement" class="danger">Clear length</button><button data-close="wallDialog">Cancel</button><button id="saveWall" class="primary">Save length</button></div></div></dialog>
+
+<dialog id="rectDialog"><div class="dialog-inner"><h2>Rectangular room</h2><p class="small">Use this for a simple rectangle. For alcoves or an irregular room, draw the actual corners and enter each wall separately.</p><div class="stack"><div><label for="rectUnit">Units</label><select id="rectUnit"></select></div><div><label for="rectLength">Inside length</label><input id="rectLength" inputmode="text" placeholder="For example: 12' 6&quot;"></div><div><label for="rectWidth">Inside width</label><input id="rectWidth" inputmode="text" placeholder="For example: 10' 3&quot;"></div><label class="checkline"><input type="checkbox" id="rectMeasured"><span>I measured these dimensions. Leave unchecked if they are estimates or listing figures.</span></label><p class="small" id="rectHint">For feet + inches, type 12' 6&quot; or 12 ft 6 in. A bare number means feet.</p><div class="note">This replaces the current wall outline and wall measurements. Items and freehand marks stay.</div></div><div id="rectError" class="error" role="alert"></div><div class="actions"><button data-close="rectDialog">Cancel</button><button id="saveRectangle" class="primary">Draw rectangle</button></div></div></dialog>
+
+<dialog id="itemDialog"><div class="dialog-inner"><h2 id="itemDialogTitle">Add a door, item or note</h2><p class="small">Add a symbol, then drag it with Move / edit. Symbol size is illustrative; record physical dimensions separately.</p><div class="stack"><div><label for="itemType">Type</label><select id="itemType"><option value="bed">Bed</option><option value="chair">Chair / stored equipment</option><option value="door">Door / doorway</option><option value="window">Window</option><option value="box">Other area / furniture</option><option value="note">Text note</option></select></div><div><label for="itemLabel">Label or note</label><textarea id="itemLabel" maxlength="500" placeholder="For example: desk or doorway"></textarea></div><div class="two"><div><label for="itemLength">Actual length (optional)</label><input id="itemLength" inputmode="text" placeholder="Same units as room"></div><div><label for="itemWidth">Actual width (optional)</label><input id="itemWidth" inputmode="text" placeholder="Same units as room"></div></div><div><label for="itemSource">Dimension source</label><select id="itemSource"><option value="measured">I measured it</option><option value="estimate">Approximate / estimate</option><option value="listing">Listing / specification</option></select></div><div><label for="symbolSize">Symbol size on drawing</label><input type="range" min="60" max="350" value="180" id="symbolSize"></div></div><div id="itemError" class="error" role="alert"></div><div class="actions"><button id="deleteItem" class="danger hidden">Delete item</button><button data-close="itemDialog">Cancel</button><button id="saveItem" class="primary">Place item</button></div></div></dialog>
+
+<dialog id="exportDialog"><div class="dialog-inner"><h2>Save your room project</h2><p class="small">Save a JSON project to reopen your work later. It preserves both room drawings, measurements, sources and notes.</p><div class="export-list"><button id="shareJSON" class="primary">Share / save project (.json)<small>Keep an editable backup or share it with someone.</small></button><button id="saveHTML">Save an editable HTML copy<small>Your drawings and entries are embedded in the new file.</small></button><button id="savePNG">Save both drawings as an image (.png)<small>Useful for reviewing or sharing a visual copy.</small></button><button id="summaryBtn">View / save measurement summary (.txt)</button><button id="importBtn">Open a previously saved JSON file</button></div><p class="small" id="exportMessage"></p><div class="actions"><button data-close="exportDialog">Close</button></div></div></dialog>
+<dialog id="summaryDialog"><div class="dialog-inner"><h2>Measurement summary</h2><textarea id="reportText" readonly aria-label="Room measurement summary"></textarea><div class="actions"><button data-close="summaryDialog">Close</button><button id="saveTXT" class="primary">Download text</button></div></div></dialog>
+<dialog id="helpDialog"><div class="dialog-inner"><h2>Measure two rooms</h2><ol class="help-list"><li><strong>Choose a room and units.</strong> Start with either blank room and name it under Room details.</li><li><strong>Draw its outline.</strong> Tap corners with Walls, then tap the first corner to close. Use Rectangle shortcut for a simple rectangular room.</li><li><strong>Record measured lengths.</strong> Choose Measure and tap each wall, or use the wall list. Fractions such as 6 1/2 inches are supported.</li><li><strong>Add doors, windows, bed, chair or notes.</strong> Move / edit lets you drag symbols or tap to edit. Freehand is for extra marks.</li><li><strong>Switch rooms and repeat.</strong> Then use Save / send to keep a project file, image, or editable HTML copy.</li></ol><p class="note">This is a manual recording tool, not a camera or laser measurement app. It does not infer distances from your finger movement.</p><p class="small">Use inside wall-to-wall measurements. For an irregular room, record every wall and label alcoves. Only a rectangular room with entered length and width gets a calculated area.</p><div class="actions"><button data-close="helpDialog" class="primary">Start drawing</button></div></div></dialog>
+<dialog id="clearDialog"><div class="dialog-inner"><h2 id="clearRoomTitle">Clear this drawing?</h2><p>This removes the selected room's wall outline, recorded wall lengths, items and freehand marks.</p><p class="note">The room name, floor, location and notes stay. The other room stays unchanged. You can use Undo immediately afterward to restore the drawing.</p><div class="actions"><button data-close="clearDialog">Keep drawing</button><button id="confirmClearDrawing" class="danger">Clear drawing</button></div></div></dialog>
+<input id="importFile" type="file" accept=".json,application/json" hidden>
+<script id="projectData" type="application/json">null</script>
+<script>
+(function (root) {
+  'use strict';
+
+  const UNITS = Object.freeze(['ft-in', 'ft', 'in', 'm', 'cm', 'mm']);
+  const MM_PER_UNIT = Object.freeze({ ft: 304.8, in: 25.4, m: 1000, cm: 10, mm: 1 });
+  const MAX_LENGTH_MM = 10000000;
+  const SOURCES = new Set(['measured', 'estimate', 'listing']);
+  const ITEM_TYPES = new Set(['bed', 'chair', 'door', 'window', 'note', 'box']);
+  const FRACTIONS = { '½': '1/2', '¼': '1/4', '¾': '3/4', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' };
+
+  function fail(message) { throw new Error(message); }
+  function unitIsValid(unit) {
+    if (!UNITS.includes(unit)) fail('Choose a supported measurement unit.');
+    return unit;
+  }
+  function decimalString(number, places) {
+    return Number(number.toFixed(places)).toLocaleString('en-US', { maximumFractionDigits: places });
+  }
+  function normalizeFractions(value) {
+    return value.replace(/(\d)([½¼¾⅛⅜⅝⅞])/g, '$1 $2').replace(/[½¼¾⅛⅜⅝⅞]/g, function (fraction) { return FRACTIONS[fraction]; });
+  }
+  function parseNumber(value, label, emptyIsZero) {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value) || value < 0) fail(label + ' must be a finite, non-negative number.');
+      return value;
+    }
+    if (value == null || (typeof value === 'string' && !value.trim())) {
+      if (emptyIsZero) return 0;
+      fail('Enter ' + label.toLowerCase() + '.');
+    }
+    if (typeof value !== 'string') fail(label + ' must be a number.');
+    const text = normalizeFractions(value.trim());
+    let result;
+    if (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) {
+      result = Number(text);
+    } else {
+      const fraction = text.match(/^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/);
+      if (!fraction) fail(label + ' must be a decimal or a fraction such as 1/2 or 6 1/2.');
+      const denominator = Number(fraction[3]);
+      if (denominator === 0) fail(label + ' has a zero fraction denominator.');
+      result = Number(fraction[1] || 0) + Number(fraction[2]) / denominator;
+    }
+    if (!Number.isFinite(result) || result < 0) fail(label + ' must be a finite, non-negative number.');
+    return result;
+  }
+  function validLength(mm, allowZero) {
+    if (typeof mm !== 'number' || !Number.isFinite(mm) || (allowZero ? mm < 0 : mm <= 0) || mm > MAX_LENGTH_MM) {
+      fail('Length must be ' + (allowZero ? 'non-negative' : 'greater than zero') + ' and no more than 10,000,000 mm.');
+    }
+    return mm;
+  }
+
+  function toMM(input) {
+    if (!input || typeof input !== 'object') fail('Enter a measurement.');
+    const unit = unitIsValid(input.unit);
+    let mm;
+    if (unit === 'ft-in') {
+      mm = parseNumber(input.major, 'Feet', true) * 304.8 + parseNumber(input.minor, 'Inches', true) * 25.4;
+    } else {
+      mm = parseNumber(input.major, 'Length', false) * MM_PER_UNIT[unit];
+    }
+    return validLength(mm, false);
+  }
+
+  // Returns editable major/minor values; ft-in splits feet and decimal inches.
+  function fromMM(mm, unit) {
+    unitIsValid(unit);
+    validLength(mm, true);
+    if (unit === 'ft-in') {
+      let feet = Math.floor(mm / 304.8);
+      let inches = (mm - feet * 304.8) / 25.4;
+      inches = Number(inches.toFixed(8));
+      if (inches >= 12) { feet += 1; inches = 0; }
+      return { unit: unit, major: feet, minor: inches };
+    }
+    return { unit: unit, major: Number((mm / MM_PER_UNIT[unit]).toFixed(8)), minor: 0 };
+  }
+
+  function formatLength(mm, unit) {
+    const value = fromMM(mm, unit);
+    if (unit === 'ft-in') {
+      let feet = value.major;
+      let inches = Number(value.minor.toFixed(2));
+      if (inches >= 12) { feet += 1; inches = 0; }
+      return feet.toLocaleString('en-US') + ' ft ' + decimalString(inches, 2) + ' in';
+    }
+    const places = unit === 'm' ? 3 : 2;
+    return decimalString(value.major, places) + ' ' + unit;
+  }
+
+  function rectangleArea(lengthMM, widthMM) {
+    validLength(lengthMM, false);
+    validLength(widthMM, false);
+    const area = lengthMM * widthMM;
+    if (!Number.isFinite(area)) fail('The area is too large.');
+    return area;
+  }
+
+  function formatArea(mm2, unit) {
+    unitIsValid(unit);
+    if (typeof mm2 !== 'number' || !Number.isFinite(mm2) || mm2 < 0 || mm2 > MAX_LENGTH_MM * MAX_LENGTH_MM) fail('Area must be finite and non-negative.');
+    const areaUnit = unit === 'ft-in' ? 'ft' : unit;
+    return decimalString(mm2 / (MM_PER_UNIT[areaUnit] * MM_PER_UNIT[areaUnit]), 2) + ' ' + areaUnit + '²';
+  }
+
+  function parseFlexibleLength(value, unit) {
+    unitIsValid(unit);
+    if (typeof value === 'number') return toMM({ unit: unit, major: value });
+    if (typeof value !== 'string' || !value.trim()) fail('Enter a length.');
+    if (value.length > 160) fail('The length entry is too long.');
+    let text = normalizeFractions(value.trim().toLowerCase())
+      .replace(/[′’‘]/g, "'").replace(/[″“”]/g, '"')
+      .replace(/\b(feet|foot)\b/g, 'ft').replace(/\b(inches|inch)\b/g, 'in')
+      .replace(/\b(metres?|meters?)\b/g, 'm').replace(/\b(centimetres?|centimeters?)\b/g, 'cm')
+      .replace(/\b(millimetres?|millimeters?)\b/g, 'mm').trim();
+    // Explicit mixed feet/inches override the selected display unit.
+    const feetMarker = text.match(/^(.*?)\s*(?:ft|')\s*(.*?)\s*$/);
+    if (feetMarker) {
+      const inches = feetMarker[2].replace(/\s*(?:in|")\s*$/, '').trim();
+      return toMM({ unit: 'ft-in', major: feetMarker[1], minor: inches });
+    }
+    const explicit = text.match(/^(.*?)\s*(mm|cm|ft|in|m|")\s*$/);
+    if (explicit) return toMM({ unit: explicit[2] === '"' ? 'in' : explicit[2], major: explicit[1] });
+    if (unit === 'ft-in') {
+      // A bare mixed fraction stays in the selected major unit (feet).
+      if (/^\d+\s+\d+\s*\/\s*\d+$/.test(text)) return toMM({ unit: unit, major: text });
+      // Optional shorthand: 8 6 or 8 6 1/2 means eight feet and six inches.
+      const pair = text.match(/^(\d+(?:\.\d+)?|\.\d+)\s+(\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+)?|\d+\s*\/\s*\d+)$/);
+      if (pair) return toMM({ unit: 'ft-in', major: pair[1], minor: pair[2] });
+    }
+    return toMM({ unit: unit, major: text });
+  }
+
+  function object(value, label) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail(label + ' must be an object.');
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) fail(label + ' must be a plain object.');
+    return value;
+  }
+  function own(value, key, fallback) { return Object.prototype.hasOwnProperty.call(value, key) ? value[key] : fallback; }
+  function array(value, label, max, fallback) {
+    if (value === undefined && fallback) return [];
+    if (!Array.isArray(value) || value.length > max) fail(label + ' must contain no more than ' + max + ' entries.');
+    return value;
+  }
+  function string(value, label, max, fallback) {
+    if (value === undefined) return fallback === undefined ? fail(label + ' is required.') : fallback;
+    if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) fail(label + ' must be plain text of no more than ' + max + ' characters.');
+    return value;
+  }
+  function id(value, label) {
+    const result = string(value, label, 80);
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(result)) fail(label + ' has an invalid identifier.');
+    return result;
+  }
+  function boolean(value, label, fallback) {
+    if (value === undefined) return fallback;
+    if (typeof value !== 'boolean') fail(label + ' must be true or false.');
+    return value;
+  }
+  function coordinate(value, label, strictlyPositive) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || (strictlyPositive ? value <= 0 : value < 0) || value > 1000) fail(label + ' must be ' + (strictlyPositive ? 'greater than zero' : 'at least zero') + ' and no more than 1000.');
+    return value;
+  }
+  function point(value, label) {
+    object(value, label);
+    return { x: coordinate(own(value, 'x'), label + ' x'), y: coordinate(own(value, 'y'), label + ' y') };
+  }
+  function nullableLength(value) { return value == null ? null : validLength(value, false); }
+
+  function validateProject(data) {
+    object(data, 'Project');
+    if (own(data, 'schema') !== 'fgs-room-measure' || own(data, 'version') !== 1) fail('This is not a supported room-measurement project.');
+    const unit = unitIsValid(own(data, 'unit'));
+    const inputRooms = array(own(data, 'rooms'), 'Rooms', 2);
+    if (!inputRooms.length) fail('The project needs at least one room.');
+    const roomIds = new Set();
+    const rooms = inputRooms.map(function (room, roomIndex) {
+      object(room, 'Room');
+      const roomId = id(own(room, 'id'), 'Room ID');
+      if (roomIds.has(roomId)) fail('Room IDs must be unique.');
+      roomIds.add(roomId);
+      const points = array(own(room, 'points'), 'Room points', 100, true).map(function (p) { return point(p, 'Room point'); });
+      const closed = boolean(own(room, 'closed'), 'Closed room', false);
+      if (closed && points.length < 3) fail('A closed room needs at least three points.');
+      const edges = closed ? points.length : Math.max(0, points.length - 1);
+      const usedEdges = new Set();
+      const measurements = array(own(room, 'measurements'), 'Wall measurements', 100, true).map(function (measurement) {
+        object(measurement, 'Wall measurement');
+        const edgeIndex = own(measurement, 'edgeIndex');
+        if (!Number.isInteger(edgeIndex) || edgeIndex < 0 || edgeIndex >= edges || usedEdges.has(edgeIndex)) fail('Wall measurements need a unique valid edge index.');
+        usedEdges.add(edgeIndex);
+        const source = own(measurement, 'source', 'measured');
+        if (!SOURCES.has(source)) fail('Choose measured, estimate or listing as the measurement source.');
+        return { edgeIndex: edgeIndex, lengthMM: nullableLength(own(measurement, 'lengthMM', null)), source: source, note: string(own(measurement, 'note'), 'Measurement note', 5000, '') };
+      });
+      const itemIds = new Set();
+      const items = array(own(room, 'items'), 'Room items', 200, true).map(function (item) {
+        object(item, 'Room item');
+        const itemId = id(own(item, 'id'), 'Item ID');
+        if (itemIds.has(itemId)) fail('Item IDs must be unique within a room.');
+        itemIds.add(itemId);
+        const type = own(item, 'type');
+        if (!ITEM_TYPES.has(type)) fail('The project contains an unsupported item type.');
+        const cleanItem = { id: itemId, type: type, x: coordinate(own(item, 'x'), 'Item x'), y: coordinate(own(item, 'y'), 'Item y'), w: coordinate(own(item, 'w'), 'Item width', true), h: coordinate(own(item, 'h'), 'Item height', true), label: string(own(item, 'label'), 'Item label', 5000, '') };
+        for (const dimension of ['lengthMM', 'widthMM']) {
+          if (Object.prototype.hasOwnProperty.call(item, dimension)) cleanItem[dimension] = nullableLength(own(item, dimension));
+        }
+        if (Object.prototype.hasOwnProperty.call(item, 'source')) {
+          const itemSource = own(item, 'source');
+          if (!SOURCES.has(itemSource)) fail('Choose measured, estimate or listing as the item measurement source.');
+          cleanItem.source = itemSource;
+        }
+        return cleanItem;
+      });
+      const strokes = array(own(room, 'strokes'), 'Drawing strokes', 200, true).map(function (stroke) {
+        return array(stroke, 'Stroke points', 500).map(function (p) { return point(p, 'Stroke point'); });
+      });
+      const rectangleInput = object(own(room, 'rectangle', {}), 'Room rectangle');
+      const rectangle = { lengthMM: nullableLength(own(rectangleInput, 'lengthMM', null)), widthMM: nullableLength(own(rectangleInput, 'widthMM', null)), confirmed: boolean(own(rectangleInput, 'confirmed'), 'Rectangle confirmation', false) };
+      if (rectangle.confirmed && (rectangle.lengthMM === null || rectangle.widthMM === null)) fail('Confirm both rectangle dimensions before marking the area confirmed.');
+      const cleanRoom = { id: roomId, name: string(own(room, 'name'), 'Room name', 5000, 'Room ' + (roomIndex + 1)), notes: string(own(room, 'notes'), 'Room notes', 5000, ''), points: points, closed: closed, measurements: measurements, items: items, strokes: strokes, rectangle: rectangle, wallNotes: string(own(room, 'wallNotes'), 'Wall notes', 5000, '') };
+      if (Object.prototype.hasOwnProperty.call(room, 'floor')) cleanRoom.floor = string(own(room, 'floor'), 'Room floor', 120, '');
+      if (Object.prototype.hasOwnProperty.call(room, 'location')) cleanRoom.location = string(own(room, 'location'), 'Room location', 500, '');
+      return cleanRoom;
+    });
+    const activeRoomId = own(data, 'activeRoomId', rooms[0].id);
+    if (typeof activeRoomId !== 'string' || !roomIds.has(activeRoomId)) fail('The active room must exist in this project.');
+    // Copy only recognized fields into new objects; imported __proto__/HTML keys
+    // are never assigned or interpreted. UI code must render strings as text.
+    const clean = { schema: 'fgs-room-measure', version: 1, unit: unit, activeRoomId: activeRoomId, rooms: rooms };
+    for (const key of ['title', 'projectId']) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) clean[key] = string(own(data, key), 'Project ' + key, key === 'title' ? 200 : 100, '');
+    }
+    for (const key of ['createdAt', 'updatedAt']) {
+      if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+      const timestamp = string(own(data, key), 'Project ' + key, 64);
+      const parts = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/);
+      if (!parts || !Number.isFinite(Date.parse(timestamp))) fail('Project ' + key + ' must be an ISO timestamp.');
+      const year = Number(parts[1]), month = Number(parts[2]), day = Number(parts[3]);
+      const days = month >= 1 && month <= 12 ? new Date(Date.UTC(year < 100 ? year + 400 : year, month, 0)).getUTCDate() : 0;
+      if (day < 1 || day > days || Number(parts[4]) > 23 || Number(parts[5]) > 59 || Number(parts[6]) > 59) fail('Project ' + key + ' must be a real ISO date and time.');
+      clean[key] = timestamp;
+    }
+    return clean;
+  }
+
+  const api = Object.freeze({ toMM: toMM, fromMM: fromMM, formatLength: formatLength, formatArea: formatArea, rectangleArea: rectangleArea, parseFlexibleLength: parseFlexibleLength, validateProject: validateProject });
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.RoomMeasureCore = api;
+}(typeof window !== 'undefined' ? window : null));
+
+</script>
+<script>
+(function(){
+'use strict';
+const C=window.RoomMeasureCore, $=id=>document.getElementById(id), SVGNS='http://www.w3.org/2000/svg', STORE='fgs-room-measure-public-v1';
+const unitNames={'ft-in':'Feet + inches',ft:'Decimal feet',in:'Inches',m:'Meters',cm:'Centimeters',mm:'Millimeters'};
+const sourceNames={measured:'Measured',estimate:'Estimate',listing:'Listing / record'};
+const escapeText=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone=v=>JSON.parse(JSON.stringify(v));
+const uid=()=>window.crypto&&crypto.randomUUID?crypto.randomUUID():'id-'+Date.now()+'-'+Math.random().toString(16).slice(2);
+function newRoom(id,name,notes,floor='',location=''){return{id,name,notes,floor,location,points:[],closed:false,measurements:[],items:[],strokes:[],rectangle:{lengthMM:null,widthMM:null,confirmed:false},wallNotes:''};}
+function newProject(){const now=new Date().toISOString();return{schema:'fgs-room-measure',version:1,projectId:uid(),title:'Room measurements',unit:'ft-in',activeRoomId:'room1',createdAt:now,updatedAt:now,rooms:[newRoom('room1','Room 1',''),newRoom('room2','Room 2','')]};}
+let project, tool='wall', view={x:0,y:0,w:1000,h:700}, gesture=null, pendingStroke=null, selectedItem=null, wallEditing=null, itemEditing=null, clearTarget=null, toastTimer=null, saveTimer=null, storageOK=true;
+const history={room1:{undo:[],redo:[]},room2:{undo:[],redo:[]}};
+function valid(raw){const clean=C.validateProject(raw);if(clean.rooms.length!==2||!clean.rooms.some(r=>r.id==='room1')||!clean.rooms.some(r=>r.id==='room2'))throw new Error('This tool expects Room 1 and Room 2 from an FGS Room Measure export.');return clean;}
+function readSaved(){let local=null,embedded=null;try{const raw=localStorage.getItem(STORE);if(raw)local=valid(JSON.parse(raw));}catch(e){storageOK=false;}try{const raw=JSON.parse($('projectData').textContent);if(raw)embedded=valid(raw);}catch(e){}if(embedded){return local&&local.projectId===embedded.projectId&&String(local.updatedAt||'')>String(embedded.updatedAt||'')?local:embedded;}return local||newProject();}
+project=readSaved();
+function room(){return project.rooms.find(r=>r.id===project.activeRoomId)||project.rooms[0];}
+function status(message,warn=false){$('saveStatus').textContent=message;$('saveStatus').classList.toggle('warn',warn);}
+function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.remove('hidden');toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),3800);}
+function save(){project.updatedAt=new Date().toISOString();clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(project));storageOK=true;status('Saved in this browser');}catch(e){storageOK=false;status('Browser autosave unavailable. Use Save / send.',true);}},220);}
+function pushBefore(before){const h=history[before.id]||(history[before.id]={undo:[],redo:[]});h.undo.push(before);if(h.undo.length>45)h.undo.shift();h.redo=[];}
+function change(fn){const before=clone(room());fn(room());pushBefore(before);save();render();}
+function restore(which){const r=room(),h=history[r.id],from=h[which],to=h[which==='undo'?'redo':'undo'];if(!from.length)return;to.push(clone(r));project.rooms[project.rooms.findIndex(x=>x.id===r.id)]=from.pop();save();render();}
+function edges(r){const n=r.points.length-(r.closed?0:1);return Array.from({length:Math.max(0,n)},(_,i)=>({a:r.points[i],b:r.points[(i+1)%r.points.length],i}));}
+function measurement(r,i){return r.measurements.find(m=>m.edgeIndex===i);}
+function pointFromEvent(e){const svg=$('drawing'),p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const matrix=svg.getScreenCTM();return matrix?p.matrixTransform(matrix.inverse()):{x:0,y:0};}
+function bounded(p){return{x:Math.max(12,Math.min(988,p.x)),y:Math.max(12,Math.min(688,p.y))};}
+function midpoint(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2};}
+function itemMarkup(item,selected=false){let out='',x=item.x,y=item.y,w=item.w,h=item.h;const color=selected?'#9a6a10':'#37694e',fill=item.type==='note'?'#fff4d9':'#e6f0e8';out+=`<g data-item-id="${escapeText(item.id)}" style="cursor:move"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${color}" stroke-width="${selected?4:2}"/>`;if(item.type==='bed')out+=`<rect x="${x+8}" y="${y+8}" width="${Math.max(15,w*.18)}" height="${Math.max(15,h-16)}" rx="5" fill="white" stroke="${color}"/>`;if(item.type==='door')out+=`<path d="M${x+8},${y+h-8} L${x+w-8},${y+h-8} A${w-16},${w-16} 0 0 0 ${x+8},${y+h-w+8}" fill="none" stroke="${color}" stroke-width="2"/>`;if(item.type==='window')out+=`<line x1="${x+8}" y1="${y+h/2}" x2="${x+w-8}" y2="${y+h/2}" stroke="${color}" stroke-width="4"/>`;const maxChars=Math.max(8,Math.floor(w/8)),lines=wrapText(item.label||item.type,maxChars).slice(0,4);lines.forEach((line,i)=>out+=`<text x="${x+w/2}" y="${y+h/2+(i-(lines.length-1)/2)*19}" font-size="15" text-anchor="middle" fill="#173d2b" pointer-events="none">${escapeText(line)}</text>`);if(item.lengthMM||item.widthMM){const s=[item.lengthMM?C.formatLength(item.lengthMM,project.unit):'?',item.widthMM?C.formatLength(item.widthMM,project.unit):'?'].join(' x ');out+=`<text x="${x+w/2}" y="${y+h+20}" font-size="14" text-anchor="middle" fill="#52685b">${escapeText(s)}</text>`;}return out+'</g>';}
+function wrapText(text,max){const words=String(text).split(/\s+/),lines=[];let line='';for(const word of words){if((line+' '+word).trim().length>max&&line){lines.push(line);line=word;}else line+=(line?' ':'')+word;}if(line)lines.push(line);return lines.length?lines:[''];}
+function roomMarkup(r,interactive=true){let out='',labels='';const center=r.points.length?{x:r.points.reduce((s,p)=>s+p.x,0)/r.points.length,y:r.points.reduce((s,p)=>s+p.y,0)/r.points.length}:{x:500,y:350};if(r.points.length>1){const pts=r.points.map(p=>p.x+','+p.y).join(' ');out+=`<${r.closed?'polygon':'polyline'} points="${pts}" fill="${r.closed?'#eaf2e833':'none'}" stroke="#173d2b" stroke-width="5" stroke-linejoin="round"/>`;}
+for(const {a,b,i} of edges(r)){const m=measurement(r,i),mid=midpoint(a,b),label='W'+(i+1)+(m&&m.lengthMM?'  '+C.formatLength(m.lengthMM,project.unit):'  + length'),note=m&&m.source!=='measured'?' ['+sourceNames[m.source]+']':'';out+=`<line data-edge-index="${i}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width="30" style="cursor:pointer"/>`;const textWidth=Math.min(310,Math.max(115,(label+note).length*8));let lx=mid.x,ly=mid.y;if(Math.abs(b.x-a.x)>=Math.abs(b.y-a.y))ly+=(mid.y<center.y?-1:1)*30;else lx+=(mid.x<center.x?-1:1)*(textWidth/2+18);lx=Math.max(textWidth/2+5,Math.min(995-textWidth/2,lx));ly=Math.max(23,Math.min(677,ly));labels+=`<g data-edge-index="${i}" style="cursor:pointer"><rect x="${lx-textWidth/2}" y="${ly-16}" width="${textWidth}" height="30" rx="8" fill="${m&&m.source==='measured'?'#173d2b':'#fff1ce'}" stroke="#c6d7ca"/><text x="${lx}" y="${ly+4}" text-anchor="middle" font-size="15" fill="${m&&m.source==='measured'?'white':'#624913'}">${escapeText(label+note)}</text></g>`;}
+for(const points of r.strokes)if(points.length)out+=`<polyline points="${points.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="#ba5d3a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>`;
+for(const item of r.items)out+=itemMarkup(item,interactive&&selectedItem===item.id);
+out+=labels;
+if(interactive)r.points.forEach((p,i)=>out+=`<circle data-point-index="${i}" cx="${p.x}" cy="${p.y}" r="${i===0&&!r.closed?10:7}" fill="${i===0?'#e4b64e':'white'}" stroke="#173d2b" stroke-width="3"/>`);
+if(interactive&&pendingStroke)out+=`<polyline points="${pendingStroke.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="#ba5d3a" stroke-width="3" stroke-linecap="round"/>`;
+return out;}
+function renderSVG(){const s=$('drawing');s.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);s.innerHTML=`<defs><pattern id="roomgrid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#dce6dc" stroke-width="1"/></pattern></defs><rect x="0" y="0" width="1000" height="700" fill="#fcfdf9"/><rect x="0" y="0" width="1000" height="700" fill="url(#roomgrid)"/>${roomMarkup(room(),true)}`;}
+function areaInfo(r){const rec=r.rectangle;if(rec&&rec.lengthMM>0&&rec.widthMM>0){return{value:C.formatArea(C.rectangleArea(rec.lengthMM,rec.widthMM),project.unit),note:(rec.confirmed?'Measured':'Estimated')+' rectangle, from your length and width. This is full-room area, not an approved business-use allocation.'};}return{value:'Not calculated',note:'Sketch only. Use Rectangle shortcut for a rectangular room; irregular sketches need measured geometry before calculating area.'};}
+function render(){const r=room();$('unit').value=project.unit;$('roomTitle').textContent=r.name;$('roomLocation').textContent=[r.floor,r.location].filter(Boolean).join(' | ')||'Add floor and location in Room details';$('room1Tab').classList.toggle('active',r.id==='room1');$('room2Tab').classList.toggle('active',r.id==='room2');$('roomName').value=r.name;$('floor').value=r.floor||'';$('location').value=r.location||'';$('roomNotes').value=r.notes||'';const h=history[r.id];$('undoBtn').disabled=!h.undo.length;$('redoBtn').disabled=!h.redo.length;$('closeBtn').disabled=r.closed||r.points.length<3;const ed=edges(r),recorded=ed.filter(e=>measurement(r,e.i)?.lengthMM).length;$('progressValue').textContent=recorded+' / '+ed.length+' walls';$('progressNote').textContent=ed.length?(r.closed?'Outline closed. Tap each wall to record or edit its length.':'Outline is open. Add corners or close it when finished.'):'Draw corners or use Rectangle shortcut.';const area=areaInfo(r);$('areaValue').textContent=area.value;$('areaNote').textContent=area.note;$('wallList').innerHTML=ed.length?ed.map(e=>{const m=measurement(r,e.i);return`<button class="wall" data-wall="${e.i}"><strong>Wall ${e.i+1}</strong><span>${m&&m.lengthMM?escapeText(C.formatLength(m.lengthMM,project.unit)):'Enter length'} <span class="pill ${m&&m.source==='measured'?'':'missing'}">${m?sourceNames[m.source]:'Missing'}</span></span></button>`;}).join(''):'<p class="small">No walls yet. Tap corners on the drawing to begin.</p>';renderSVG();setTool(tool,false);}
+function setTool(value,notify=true){tool=value;document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===tool);b.setAttribute('aria-pressed',String(b.dataset.tool===tool));});const hints={wall:room().closed?'Outline closed. Use Move / edit to adjust corners, or Measure to add lengths.':'Tap each corner. Tap the first corner to close.',measure:'Tap a wall label or use the Wall lengths list.',select:'Drag items or corner dots. Tap an item or wall to edit.',pen:'Draw with one finger. Use Undo to remove the last stroke.',pan:'Drag to move the view. Use + / - to zoom; Fit to reset.'};$('canvasHint').textContent=hints[tool];if(notify)selectedItem=null;}
+function closeOutline(){if(room().closed||room().points.length<3)return;change(r=>{r.closed=true;});toast('Outline closed. Tap Measure, then a wall.');}
+function screenDistance(e,g){return Math.hypot(e.clientX-g.sx,e.clientY-g.sy);}
+$('drawing').addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(gesture)return;e.preventDefault();const p=pointFromEvent(e),item=e.target.closest('[data-item-id]'),corner=e.target.closest('[data-point-index]');gesture={pointer:e.pointerId,start:p,last:p,sx:e.clientX,sy:e.clientY,before:clone(room()),view:clone(view),moved:false,edge:e.target.closest('[data-edge-index]')?.dataset.edgeIndex};if(tool==='pan')gesture.kind='pan';else if(tool==='pen'){gesture.kind='pen';pendingStroke=[bounded(p)];}else if(tool==='select'&&item){gesture.kind='item';gesture.itemId=item.dataset.itemId;const it=room().items.find(i=>i.id===gesture.itemId);gesture.itemStart={x:it.x,y:it.y};selectedItem=it.id;}else if(tool==='select'&&corner){gesture.kind='corner';gesture.corner=Number(corner.dataset.pointIndex);}else gesture.kind='tap';try{$('drawing').setPointerCapture(e.pointerId);}catch(err){} });
+$('drawing').addEventListener('pointermove',e=>{if(!gesture||gesture.pointer!==e.pointerId)return;e.preventDefault();const p=pointFromEvent(e);gesture.last=p;gesture.moved=gesture.moved||screenDistance(e,gesture)>7;if(gesture.kind==='pan'){view.x=gesture.view.x-(e.clientX-gesture.sx)*view.w/$('drawing').getBoundingClientRect().width;view.y=gesture.view.y-(e.clientY-gesture.sy)*view.h/$('drawing').getBoundingClientRect().height;renderSVG();}else if(gesture.kind==='pen'){const b=bounded(p),prev=pendingStroke[pendingStroke.length-1];if(pendingStroke.length<500&&Math.hypot(b.x-prev.x,b.y-prev.y)>3){pendingStroke.push(b);renderSVG();}}else if(gesture.kind==='item'&&gesture.moved){const it=room().items.find(i=>i.id===gesture.itemId);it.x=Math.max(0,Math.min(1000-it.w,gesture.itemStart.x+p.x-gesture.start.x));it.y=Math.max(0,Math.min(700-it.h,gesture.itemStart.y+p.y-gesture.start.y));renderSVG();}else if(gesture.kind==='corner'&&gesture.moved){room().points[gesture.corner]=bounded(p);room().rectangle={lengthMM:null,widthMM:null,confirmed:false};renderSVG();}});
+function endPointer(e,cancelled=false){if(!gesture||gesture.pointer!==e.pointerId)return;const g=gesture;gesture=null;try{$('drawing').releasePointerCapture(e.pointerId);}catch(err){}if(cancelled){if(g.kind==='item'||g.kind==='corner')project.rooms[project.rooms.findIndex(r=>r.id===g.before.id)]=g.before;pendingStroke=null;render();return;}if(g.kind==='pen'){if(pendingStroke&&pendingStroke.length>1){const stroke=pendingStroke;pendingStroke=null;change(r=>{if(r.strokes.length>=200)r.strokes.shift();r.strokes.push(stroke);});}else{pendingStroke=null;renderSVG();}return;}if((g.kind==='item'||g.kind==='corner')&&g.moved){pushBefore(g.before);save();render();return;}if(g.kind==='item'&&!g.moved){openItem(g.itemId);return;}if(g.kind==='pan')return;if(g.moved)return;const p=bounded(g.start);if(tool==='wall'){const r=room();if(r.closed){toast('Outline is closed. Choose Measure or Move / edit.');return;}if(r.points.length>=3&&Math.hypot(p.x-r.points[0].x,p.y-r.points[0].y)<22*view.w/1000){closeOutline();return;}if(r.points.length>=100){toast('Maximum 100 corners per room.');return;}if(r.points.length){const prev=r.points[r.points.length-1];if($('snap').checked){if(Math.abs(p.x-prev.x)>Math.abs(p.y-prev.y))p.y=prev.y;else p.x=prev.x;}if(Math.hypot(p.x-prev.x,p.y-prev.y)<12){toast('Choose a different corner.');return;}}change(rr=>rr.points.push(p));}else if((tool==='measure'||tool==='select')&&g.edge!==undefined){openWall(Number(g.edge));}else if(tool==='measure'){toast('Tap a wall label, or use the wall list below.');}else if(tool==='select'){selectedItem=null;renderSVG();}}
+$('drawing').addEventListener('pointerup',e=>endPointer(e));$('drawing').addEventListener('pointercancel',e=>endPointer(e,true));
+function showDialog(id){const el=$(id);if(typeof el.showModal==='function')el.showModal();else el.setAttribute('open','');}
+function hideDialog(id){const el=$(id);if(typeof el.close==='function')el.close();else el.removeAttribute('open');}
+function fillUnitOptions(id,value){$(id).innerHTML=Object.entries(unitNames).map(([v,label])=>`<option value="${v}">${label}</option>`).join('');$(id).value=value;}
+function unitsToInputs(mm,unit){if(!mm)return{major:'',minor:''};const r=C.fromMM(mm,unit);return{major:String(r.major),minor:unit==='ft-in'?String(r.minor):''};}
+function wallInputLayout(){const u=$('wallUnit').value,mixed=u==='ft-in';$('wallMinorWrap').classList.toggle('hidden',!mixed);$('wallInputs').classList.toggle('solo',!mixed);$('wallMajorLabel').textContent=mixed?'Feet':unitNames[u];}
+function openWall(index){wallEditing=index;const m=measurement(room(),index);$('wallDialogTitle').textContent='Wall '+(index+1)+' length';fillUnitOptions('wallUnit',project.unit);$('wallUnit').dataset.previous=project.unit;wallInputLayout();const r=unitsToInputs(m?.lengthMM,project.unit);$('wallMajor').value=r.major;$('wallMinor').value=r.minor;$('wallSource').value=m?.source||'measured';$('wallNote').value=m?.note||'';$('wallError').textContent='';$('removeWallMeasurement').disabled=!m;showDialog('wallDialog');}
+function readWallMM(unit=$('wallUnit').value){return C.toMM({unit,major:$('wallMajor').value,minor:$('wallMinor').value});}
+$('wallUnit').addEventListener('change',function(){const previous=this.dataset.previous||project.unit;let mm=null;try{mm=readWallMM(previous);}catch(e){}wallInputLayout();if(mm){const r=unitsToInputs(mm,this.value);$('wallMajor').value=r.major;$('wallMinor').value=r.minor;}this.dataset.previous=this.value;});
+$('saveWall').onclick=()=>{try{const mm=readWallMM();change(r=>{r.measurements=r.measurements.filter(m=>m.edgeIndex!==wallEditing);r.measurements.push({edgeIndex:wallEditing,lengthMM:mm,source:$('wallSource').value,note:$('wallNote').value.trim()});r.rectangle={lengthMM:null,widthMM:null,confirmed:false};});hideDialog('wallDialog');toast('Wall length saved.');}catch(e){$('wallError').textContent=e.message;}};
+$('removeWallMeasurement').onclick=()=>{change(r=>{r.measurements=r.measurements.filter(m=>m.edgeIndex!==wallEditing);r.rectangle={lengthMM:null,widthMM:null,confirmed:false};});hideDialog('wallDialog');};
+function openRectangle(){fillUnitOptions('rectUnit',project.unit);$('rectLength').value=room().rectangle.lengthMM?C.formatLength(room().rectangle.lengthMM,project.unit):'';$('rectWidth').value=room().rectangle.widthMM?C.formatLength(room().rectangle.widthMM,project.unit):'';$('rectMeasured').checked=!!room().rectangle.confirmed;$('rectError').textContent='';rectHint();showDialog('rectDialog');}
+function rectHint(){$('rectHint').textContent=$('rectUnit').value==='ft-in'?'Type 12\' 6" or 12 ft 6 in. A bare number means feet.':'Enter numbers in '+unitNames[$('rectUnit').value].toLowerCase()+'. Fractions are supported.';}
+$('rectUnit').onchange=rectHint;
+$('saveRectangle').onclick=()=>{try{const l=C.parseFlexibleLength($('rectLength').value,$('rectUnit').value),w=C.parseFlexibleLength($('rectWidth').value,$('rectUnit').value),confirmed=$('rectMeasured').checked;change(r=>{const scale=Math.min(720/l,430/w),pw=l*scale,ph=w*scale,x=(1000-pw)/2,y=(700-ph)/2;r.points=[{x,y},{x:x+pw,y},{x:x+pw,y:y+ph},{x,y:y+ph}];r.closed=true;r.measurements=[l,w,l,w].map((lengthMM,edgeIndex)=>({edgeIndex,lengthMM,source:confirmed?'measured':'estimate',note:'Rectangular room shortcut'}));r.rectangle={lengthMM:l,widthMM:w,confirmed};});hideDialog('rectDialog');view={x:0,y:0,w:1000,h:700};setTool('measure');render();toast('Rectangle and four wall lengths recorded.');}catch(e){$('rectError').textContent=e.message;}};
+function openItem(id=null){itemEditing=id;const it=id?room().items.find(i=>i.id===id):null;$('itemDialogTitle').textContent=it?'Edit item':'Add a door, item or note';$('itemType').value=it?.type||'bed';$('itemLabel').value=it?.label||'';$('itemLength').value=it?.lengthMM?C.formatLength(it.lengthMM,project.unit):'';$('itemWidth').value=it?.widthMM?C.formatLength(it.widthMM,project.unit):'';$('itemLength').placeholder='In '+unitNames[project.unit].toLowerCase();$('itemWidth').placeholder=$('itemLength').placeholder;$('itemSource').value=it?.source||'measured';$('symbolSize').value=it?.w||180;$('deleteItem').classList.toggle('hidden',!it);$('itemError').textContent='';showDialog('itemDialog');}
+$('saveItem').onclick=()=>{try{const type=$('itemType').value,label=$('itemLabel').value.trim()||type,w=Number($('symbolSize').value),h=type==='door'||type==='window'?45:type==='note'?85:type==='chair'?w*.8:w*.67;const lengthMM=$('itemLength').value.trim()?C.parseFlexibleLength($('itemLength').value,project.unit):null,widthMM=$('itemWidth').value.trim()?C.parseFlexibleLength($('itemWidth').value,project.unit):null;if(!itemEditing&&room().items.length>=200)throw new Error('Maximum 200 items per room.');change(r=>{let it=itemEditing?r.items.find(i=>i.id===itemEditing):null;if(!it){it={id:uid(),x:Math.min(1000-w,Math.max(0,view.x+view.w/2-w/2)),y:Math.min(700-h,Math.max(0,view.y+view.h/2-h/2))};r.items.push(it);}Object.assign(it,{type,label,w,h,lengthMM,widthMM,source:$('itemSource').value});it.x=Math.min(it.x,1000-w);it.y=Math.min(it.y,700-h);selectedItem=it.id;});hideDialog('itemDialog');setTool('select',false);render();toast('Drag the item to its location.');}catch(e){$('itemError').textContent=e.message;}};
+$('deleteItem').onclick=()=>{if(itemEditing)change(r=>r.items=r.items.filter(i=>i.id!==itemEditing));selectedItem=null;hideDialog('itemDialog');};
+function switchRoom(id){if(gesture)return;project.activeRoomId=id;selectedItem=null;view={x:0,y:0,w:1000,h:700};save();render();}
+function zoom(factor){const cx=view.x+view.w/2,cy=view.y+view.h/2,w=Math.max(260,Math.min(1500,view.w*factor));view={x:cx-w/2,y:cy-w*.7/2,w,h:w*.7};renderSVG();}
+function download(blob,name){const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+function filename(ext){return'FGS-Room-Measurements-'+new Date().toISOString().slice(0,10)+'.'+ext;}
+function exportProject(){const clean=valid(project);clean.updatedAt=new Date().toISOString();return clean;}
+function projectJSON(){return JSON.stringify(exportProject(),null,2);}
+async function shareJSON(){try{const text=projectJSON(),file=new File([text],filename('json'),{type:'application/json'});if(navigator.canShare&&navigator.share&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:'FGS room measurements'});$('exportMessage').textContent='Measurements shared. You can also keep an HTML copy.';return;}catch(e){if(e.name==='AbortError')return;}}download(file,file.name);$('exportMessage').textContent='Project saved. Keep this file to reopen or share your measurements.';}catch(e){$('exportMessage').textContent=e.message;}}
+function snapshotHTML(){const root=document.documentElement.cloneNode(true),payload=JSON.stringify(exportProject()).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');root.querySelector('#projectData').textContent=payload;root.querySelectorAll('dialog').forEach(d=>d.removeAttribute('open'));root.querySelector('body').classList.remove('large');root.querySelector('#toast').classList.add('hidden');return'<!doctype html>\n'+root.outerHTML;}
+function summary(p=project){let lines=['FGS ROOM MEASUREMENTS','Recorded: '+(p.updatedAt||''),'Display units: '+unitNames[p.unit],'Sketches are not to scale. Measurements are user-entered.',''];for(const r of p.rooms){lines.push(r.name,[r.floor,r.location].filter(Boolean).join(' | '));const a=areaInfo(r);lines.push('Area: '+a.value+' - '+a.note);for(const e of edges(r)){const m=measurement(r,e.i);lines.push('Wall '+(e.i+1)+': '+(m&&m.lengthMM?C.formatLength(m.lengthMM,p.unit)+' ['+sourceNames[m.source]+']':'NOT RECORDED')+(m?.note?' | '+m.note:''));}for(const it of r.items)lines.push('Item: '+it.label+(it.lengthMM||it.widthMM?' | '+(it.lengthMM?C.formatLength(it.lengthMM,p.unit):'?')+' x '+(it.widthMM?C.formatLength(it.widthMM,p.unit):'?')+' ['+sourceNames[it.source||'measured']+']':''));if(r.notes)lines.push('Notes: '+r.notes);lines.push('');}return lines.join('\n');}
+function reportSVG(p){let y=115,parts=[`<svg xmlns="${SVGNS}" width="1200" height="HEIGHT" viewBox="0 0 1200 HEIGHT"><rect width="1200" height="HEIGHT" fill="#fff"/><style>text{font-family:Arial,sans-serif}</style><text x="50" y="48" font-size="30" font-weight="700" fill="#173d2b">FGS Room Measurements</text><text x="50" y="80" font-size="17" fill="#53665b">User-entered measurements | Sketches not to scale | ${escapeText(new Date().toLocaleString())}</text>`];for(const r of p.rooms){parts.push(`<text x="50" y="${y}" font-size="25" font-weight="700" fill="#173d2b">${escapeText(r.name)}</text>`);y+=28;parts.push(`<text x="50" y="${y}" font-size="17" fill="#53665b">${escapeText([r.floor,r.location].filter(Boolean).join(' | '))}</text>`);y+=20;parts.push(`<g transform="translate(60 ${y}) scale(1.08)"><rect width="1000" height="700" fill="#f8faf6" stroke="#d2ddd3"/>${roomMarkup(r,false)}</g>`);y+=785;const a=areaInfo(r);parts.push(`<text x="50" y="${y}" font-size="19" font-weight="700" fill="#173d2b">${escapeText(a.value)}${r.rectangle?.lengthMM?' | '+(r.rectangle.confirmed?'Measured':'Estimated')+' rectangle':''}</text>`);y+=28;edges(r).forEach((e,i)=>{const m=measurement(r,e.i),x=i%2?620:50;parts.push(`<text x="${x}" y="${y}" font-size="17" fill="#22372d">${escapeText('Wall '+(e.i+1)+': '+(m&&m.lengthMM?C.formatLength(m.lengthMM,p.unit)+' ['+sourceNames[m.source]+']':'NOT RECORDED'))}</text>`);if(i%2||i===edges(r).length-1)y+=26;});for(const line of wrapText(r.notes||'',105).slice(0,12)){parts.push(`<text x="50" y="${y}" font-size="16" fill="#53665b">${escapeText(line)}</text>`);y+=23;}y+=55;}const height=y+30;return{svg:parts.join('').replaceAll('HEIGHT',String(height))+'</svg>',width:1200,height};}
+async function savePNG(){try{$('exportMessage').textContent='Preparing image...';const p=exportProject(),report=reportSVG(p),blob=new Blob([report.svg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob);await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=report.width;canvas.height=report.height;const ctx=canvas.getContext('2d');if(!ctx){URL.revokeObjectURL(url);reject(new Error('Image export is unavailable in this viewer. Save JSON instead.'));return;}ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(png=>{if(!png){reject(new Error('Image export failed. Save JSON instead.'));return;}download(png,filename('png'));resolve();},'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not render image. Save JSON instead.'));};img.src=url;});$('exportMessage').textContent='Drawing image saved. JSON retains the editable measurements.';}catch(e){$('exportMessage').textContent=e.message;}}
+async function importFile(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('Choose a JSON file smaller than 5 MB.');const incoming=valid(JSON.parse(await file.text()));if(!window.confirm('Replace both current rooms with this saved project? Save your current work first if needed.'))return;project=incoming;for(const id of ['room1','room2'])history[id]={undo:[],redo:[]};view={x:0,y:0,w:1000,h:700};selectedItem=null;save();render();hideDialog('exportDialog');toast('Both rooms restored from JSON.');}catch(e){$('exportMessage').textContent='Import failed: '+e.message;}finally{$('importFile').value='';}}
+$('room1Tab').onclick=()=>switchRoom('room1');$('room2Tab').onclick=()=>switchRoom('room2');$('unit').onchange=()=>{project.unit=$('unit').value;save();render();};document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hideDialog(b.dataset.close));$('wallList').onclick=e=>{const b=e.target.closest('[data-wall]');if(b)openWall(Number(b.dataset.wall));};$('rectangleBtn').onclick=openRectangle;$('objectBtn').onclick=()=>openItem();$('undoBtn').onclick=()=>restore('undo');$('redoBtn').onclick=()=>restore('redo');$('closeBtn').onclick=closeOutline;$('zoomIn').onclick=()=>zoom(.8);$('zoomOut').onclick=()=>zoom(1.25);$('fitBtn').onclick=()=>{view={x:0,y:0,w:1000,h:700};renderSVG();};$('expandBtn').onclick=()=>{document.body.classList.toggle('large');$('expandBtn').textContent=document.body.classList.contains('large')?'Done':'Expand';};$('helpBtn').onclick=()=>showDialog('helpDialog');$('exportBtn').onclick=()=>{$('exportMessage').textContent='';showDialog('exportDialog');};$('shareJSON').onclick=shareJSON;$('saveHTML').onclick=()=>{try{download(new Blob([snapshotHTML()],{type:'text/html;charset=utf-8'}),filename('html'));$('exportMessage').textContent='Editable HTML copy saved with both rooms embedded.';}catch(e){$('exportMessage').textContent=e.message;}};$('savePNG').onclick=savePNG;$('summaryBtn').onclick=()=>{$('reportText').value=summary();showDialog('summaryDialog');};$('saveTXT').onclick=()=>download(new Blob([summary()],{type:'text/plain;charset=utf-8'}),filename('txt'));$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=()=>importFile($('importFile').files[0]);
+for(const [id,key] of [['roomName','name'],['floor','floor'],['location','location'],['roomNotes','notes']])$(id).addEventListener('change',()=>change(r=>{r[key]=$(id).value.trim()||(key==='name'?'Room '+(r.id==='room1'?'1':'2'):'');}));
+function openClearDrawing(){clearTarget=room().id;$('clearRoomTitle').textContent='Clear '+room().name+'?';showDialog('clearDialog');}
+$('clearDrawingBtn').onclick=openClearDrawing;
+$('clearRoomBtn').onclick=openClearDrawing;
+$('confirmClearDrawing').onclick=()=>{if(room().id!==clearTarget){hideDialog('clearDialog');toast('Choose the room you want to clear, then tap Clear drawing again.');return;}change(r=>{r.points=[];r.closed=false;r.measurements=[];r.items=[];r.strokes=[];r.rectangle={lengthMM:null,widthMM:null,confirmed:false};});selectedItem=null;pendingStroke=null;gesture=null;view={x:0,y:0,w:1000,h:700};setTool('wall');render();hideDialog('clearDialog');toast('Drawing cleared. Tap Undo to restore it.');};
+window.addEventListener('pagehide',()=>{try{localStorage.setItem(STORE,JSON.stringify(project));}catch(e){}});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('large')){document.body.classList.remove('large');$('expandBtn').textContent='Expand';}});
+render();status(storageOK?'Ready. Save a file after measuring.':'Browser autosave unavailable. Use Save / send.',!storageOK);
+// Pure-function hooks for local verification, without connecting to a browser.
+window.FGSRoomMeasure={getProject:()=>clone(project),edges,areaInfo,summary,reportSVG,escapeText,wrapText,snapshotHTML,exportProject};
+})();
+</script>
+</body>
+</html>
