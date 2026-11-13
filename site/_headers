@@ -39,3 +39,8 @@ https://:project.pages.dev/*
 
 https://:version.:project.pages.dev/*
   X-Robots-Tag: noindex
+
+# The tools directory is available by direct URL and stays unlisted.
+/tools*
+  X-Robots-Tag: noindex, follow
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

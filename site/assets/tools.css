@@ -1,0 +1,226 @@
+.tools-main {
+  padding: clamp(42px, 6vw, 76px) 0 clamp(48px, 7vw, 88px);
+}
+
+.tools-intro {
+  max-width: 760px;
+  margin-bottom: 38px;
+}
+
+.tools-intro .eyebrow {
+  margin-bottom: 15px;
+}
+
+.tools-intro h1 {
+  margin-bottom: 16px;
+  font-size: clamp(2.6rem, 6vw, 4.7rem);
+  line-height: 1.04;
+}
+
+.tools-intro .lede {
+  max-width: 630px;
+  margin-bottom: 0;
+}
+
+.tools-list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
+  margin-bottom: 16px;
+}
+
+.tools-list-heading h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.tools-list-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+.tools-list {
+  display: grid;
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(250px, .7fr);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--white);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.tool-card:hover {
+  border-color: var(--blue);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-3px);
+}
+
+.tool-card:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 5px;
+}
+
+.tool-copy {
+  min-width: 0;
+  padding: clamp(24px, 4vw, 42px);
+}
+
+.tool-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 19px;
+}
+
+.tool-icon {
+  flex: 0 0 60px;
+  width: 60px;
+  height: 60px;
+  border-radius: 15px;
+}
+
+.tool-heading h3 {
+  margin: 0 0 6px;
+  font-size: clamp(1.55rem, 3vw, 2rem);
+}
+
+.tool-category {
+  display: block;
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.4;
+}
+
+.tool-description {
+  max-width: 510px;
+  margin-bottom: 19px;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.tool-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 26px;
+}
+
+.tool-features span {
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--warm);
+  color: var(--ink-soft);
+  font-size: .76rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.tool-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--blue-dark);
+  font-weight: 750;
+  font-size: .95rem;
+}
+
+.tool-open svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 180ms ease;
+}
+
+.tool-card:hover .tool-open svg {
+  transform: translateX(4px);
+}
+
+.tool-art {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 27px;
+  min-width: 0;
+  padding: clamp(28px, 4vw, 48px);
+  background: radial-gradient(ellipse at 85% 0%, #31583a 0%, transparent 70%), #102b1e;
+  color: #f4f7ef;
+}
+
+.tool-art-label {
+  color: #c9dfb8;
+  font-size: .73rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.tool-art-title {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 650;
+  line-height: 1.16;
+  letter-spacing: -.04em;
+}
+
+.tool-art-timeline {
+  position: relative;
+  height: 7px;
+  border-radius: 10px;
+  background: #4a6553;
+}
+
+.tool-art-timeline::before {
+  display: block;
+  width: 64%;
+  height: 100%;
+  border-radius: inherit;
+  background: #b6d68d;
+  content: '';
+}
+
+.tool-art-timeline::after {
+  position: absolute;
+  top: 50%;
+  left: 64%;
+  width: 17px;
+  height: 17px;
+  border: 3px solid #eaf3dc;
+  border-radius: 50%;
+  background: #b6d68d;
+  transform: translate(-50%, -50%);
+  content: '';
+}
+
+.tools-note {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+@media (max-width: 700px) {
+  .tool-card { grid-template-columns: minmax(0, 1fr); }
+  .tool-art { gap: 19px; padding: 25px 28px 30px; }
+  .tool-art-title { font-size: 1.8rem; }
+  .tool-art-title br { display: none; }
+  .tool-icon { flex-basis: 52px; width: 52px; height: 52px; }
+  .tools-main { padding-top: 35px; }
+  .tools-intro { margin-bottom: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-card, .tool-open svg { transition: none; }
+  .tool-card:hover, .tool-card:hover .tool-open svg { transform: none; }
+}
