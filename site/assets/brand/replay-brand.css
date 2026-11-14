@@ -1,0 +1,28 @@
+/* FGS brand v1.0; keep Replay Cam's media layout and native controls. */
+:root {--bg:var(--fgs-ink);--surface:var(--fgs-evergreen-hover);--surface-2:var(--fgs-evergreen);--border:var(--fgs-muted);--text:var(--fgs-white);--muted:var(--fgs-sage);--accent:var(--fgs-sage);--success:var(--fgs-sage);}
+html,body {background:var(--fgs-ink);}
+body {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
+:is(h1,h2,h3) {font-weight:800;}
+.app-header,.app-shell,.app-footer {max-width:1168px;padding-inline:24px;}
+.app-header {align-items:center;}
+.fgs-link {display:inline-block;width:auto;min-height:44px;margin:0 0 12px;color:var(--fgs-white);}
+.fgs-link img {display:block;width:200px;height:auto;max-width:100%;object-fit:contain;background:none;border-radius:0;}
+:is(.viewer-panel,.card,.review-controls,.delay-control) {border-radius:12px;background:var(--fgs-evergreen-hover);}
+.review-controls,.delay-control {background:var(--fgs-ink);}
+.badge,.delay-badge,.beta-label {background:var(--fgs-ink);color:var(--fgs-sage);border-color:var(--fgs-muted);}
+.viewer {border-color:var(--fgs-muted);border-radius:12px;}
+.viewer-message {background:var(--fgs-ink);}
+.viewer-overlay span {color:var(--fgs-white);}
+:is(.button,.preset,.review-button,.review-speed,select) {min-height:44px;border-radius:8px;font-family:var(--fgs-font);font-weight:700;}
+:is(.button-primary,.button-success) {background:var(--fgs-evergreen);border-color:var(--fgs-sage);color:var(--fgs-white);}
+:is(.button-primary,.button-success):hover:not(:disabled) {background:var(--fgs-evergreen-hover);filter:none;}
+.button-secondary,.review-button,.review-speed,select {background:var(--fgs-ink);border-color:var(--fgs-muted);color:var(--fgs-white);}
+.button-secondary:hover:not(:disabled),.review-button:hover:not(:disabled),.review-speed:hover:not(:disabled) {background:var(--fgs-evergreen);filter:none;}
+.preset {border-color:var(--fgs-muted);color:var(--fgs-white);}
+.preset[aria-pressed=true],.review-speed[aria-pressed=true] {background:var(--fgs-sage);border-color:var(--fgs-sage);color:var(--fgs-ink);}
+a {color:var(--fgs-white);text-underline-offset:.2em;}
+a:hover {color:var(--fgs-sage);}
+:focus-visible {outline:3px solid var(--fgs-white);outline-offset:4px;}
+.toast {background:var(--fgs-evergreen);border-color:var(--fgs-sage);color:var(--fgs-white);}
+.skip-link {background:var(--fgs-white);color:var(--fgs-ink);}
+@media(max-width:610px) {.app-header,.app-shell,.app-footer{padding-inline:20px}.fgs-link img{width:40px;height:40px}.app-header{align-items:flex-start}.header-actions{max-width:45%}.app-identity{min-width:0}}
