@@ -1,5 +1,5 @@
 {
-  "name": "Replay Cam \u2014 Fernandez Growth Systems",
+  "name": "Replay Cam — Fernandez Growth Systems",
   "short_name": "Replay Cam",
   "description": "Private, on-device delayed camera replay for coaching and skill review.",
   "id": "./",
@@ -7,8 +7,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#10251c",
-  "theme_color": "#10251c",
+  "background_color": "#14241D",
+  "theme_color": "#1F563B",
   "categories": [
     "sports",
     "utilities",
@@ -28,9 +28,9 @@
       "purpose": "any"
     },
     {
-      "src": "icons/icon-maskable-512.png",
+      "src": "icons/icon-maskable-512.svg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "maskable"
     }
   ]
