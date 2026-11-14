@@ -60,7 +60,6 @@
 .fgs-site .case-header {background:var(--fgs-evergreen);}
 .fgs-site .case-header :is(h3,.case-kicker,span,strong) {color:var(--fgs-white);}
 .fgs-site .deliverable :is(strong,p) {color:var(--fgs-ink);}
-.fgs-site .section-dark .deliverable :is(h3,strong,p) {color:var(--fgs-ink);}
 .fgs-site .portrait-caption {background:var(--fgs-evergreen);border-color:var(--fgs-border);border-radius:12px;}
 .fgs-site .portrait-caption strong {color:var(--fgs-white);}
 .fgs-site .portrait-caption span {color:var(--fgs-sage);}
@@ -68,6 +67,7 @@
 .fgs-site :is(.offer-stage,.check,.system-step-number,.plate-icon,.detail-card-number,.trust-point-number,.journey-status) {color:var(--fgs-evergreen);background:var(--fgs-sage);}
 .fgs-site :is(.contact-shell,.section-dark) {background:var(--fgs-evergreen);color:var(--fgs-white);border-radius:12px;}
 .fgs-site :is(.contact-shell,.section-dark) :is(h2,h3,h4,.lede,.eyebrow,.contact-trust-line,.next-steps,.next-steps li) {color:var(--fgs-white);}
+.fgs-site .section-dark .deliverable :is(h3,strong,p) {color:var(--fgs-ink);}
 .fgs-site .contact-shell::before {content:none;}
 .fgs-site .contact-shell a {color:var(--fgs-white);}
 .fgs-site .contact-shell a:hover {color:var(--fgs-sage);}
