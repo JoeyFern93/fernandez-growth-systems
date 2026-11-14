@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "date": "2026-11-13",
+  "color": {
+    "evergreen": "#1F563B",
+    "evergreenHover": "#123D2B",
+    "ink": "#14241D",
+    "white": "#FFFFFF",
+    "ivory": "#F5F7F2",
+    "sage": "#DCE8DF",
+    "muted": "#52675B",
+    "border": "#C8D5CC"
+  },
+  "font": {
+    "family": "Nunito",
+    "logoName": 800,
+    "logoSubline": 500,
+    "heading": 800,
+    "body": 400,
+    "navigation": 700
+  },
+  "layout": {
+    "contentMaxWidth": 1120,
+    "desktopGutter": 24,
+    "mobileGutter": 20,
+    "logoPreferredWidth": 240,
+    "logoMinimumWidth": 200,
+    "iconMinimumSize": 24,
+    "buttonMinimumHeight": 44
+  },
+  "contrastRatios": {
+    "White on evergreen": 8.56,
+    "Ink on white": 16.16,
+    "Evergreen on ivory": 7.94,
+    "Muted on white": 6.09,
+    "Muted on ivory": 5.64
+  }
+}
