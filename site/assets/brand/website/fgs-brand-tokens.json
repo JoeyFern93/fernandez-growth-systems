@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "date": "2026-11-13",
+  "version": "2.0",
+  "date": "2026-11-14",
   "color": {
     "evergreen": "#1F563B",
     "evergreenHover": "#123D2B",
@@ -23,8 +23,8 @@
     "contentMaxWidth": 1120,
     "desktopGutter": 24,
     "mobileGutter": 20,
-    "logoPreferredWidth": 240,
-    "logoMinimumWidth": 200,
+    "logoPreferredWidth": 280,
+    "logoMinimumWidth": 220,
     "iconMinimumSize": 24,
     "buttonMinimumHeight": 44
   },

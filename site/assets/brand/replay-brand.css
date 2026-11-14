@@ -1,4 +1,4 @@
-/* FGS brand v1.0; keep Replay Cam's media layout and native controls. */
+/* FGS brand v2.0; keep Replay Cam's media layout and native controls. */
 :root {--bg:var(--fgs-ink);--surface:var(--fgs-evergreen-hover);--surface-2:var(--fgs-evergreen);--border:var(--fgs-muted);--text:var(--fgs-white);--muted:var(--fgs-sage);--accent:var(--fgs-sage);--success:var(--fgs-sage);}
 html,body {background:var(--fgs-ink);}
 body {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
@@ -6,7 +6,7 @@ body {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
 .app-header,.app-shell,.app-footer {max-width:1168px;padding-inline:24px;}
 .app-header {align-items:center;}
 .fgs-link {display:inline-block;width:auto;min-height:44px;margin:0 0 12px;color:var(--fgs-white);}
-.fgs-link img {display:block;width:200px;height:auto;max-width:100%;object-fit:contain;background:none;border-radius:0;}
+.fgs-link img {display:block;width:240px;height:auto;max-width:100%;object-fit:contain;background:none;border-radius:0;}
 :is(.viewer-panel,.card,.review-controls,.delay-control) {border-radius:12px;background:var(--fgs-evergreen-hover);}
 .review-controls,.delay-control {background:var(--fgs-ink);}
 .badge,.delay-badge,.beta-label {background:var(--fgs-ink);color:var(--fgs-sage);border-color:var(--fgs-muted);}

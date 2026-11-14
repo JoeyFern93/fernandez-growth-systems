@@ -1,4 +1,4 @@
-/* Brand v1.0 applied to the existing FGS layout. The supplied stylesheet
+/* Brand v2.0 applied to the existing FGS layout. The supplied stylesheet
    owns the palette/font; these rules map the site's existing components. */
 :root {
   --ink: var(--fgs-ink); --ink-soft: var(--fgs-muted);
@@ -10,7 +10,7 @@
   --line: var(--fgs-border); --line-warm: var(--fgs-border); --success: var(--fgs-evergreen);
   --max: var(--fgs-max-width); --radius-sm: 8px; --radius: 12px; --radius-lg: 12px;
   --shadow-sm: 0 4px 18px rgb(20 36 29 / 5%);
-  --shadow-lg: 0 12px 32px rgb(20 36 29 / 10%); --header-height: 148px;
+  --shadow-lg: 0 12px 32px rgb(20 36 29 / 10%); --header-height: 116px;
 }
 .fgs-site {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
 .fgs-site :is(h1,h2,h3,h4) {font-family:var(--fgs-font);font-weight:800;color:var(--fgs-ink);}
@@ -30,7 +30,7 @@
 .fgs-site .header-inner {gap:20px;min-height:var(--header-height);}
 .fgs-site .brand {min-width:0;flex:0 0 auto;gap:0;padding-block:8px;}
 .fgs-site .brand picture {display:block;}
-.fgs-site .brand .brand-logo {display:block;width:240px;height:auto;max-width:none;object-fit:contain;}
+.fgs-site .brand .brand-logo {display:block;width:280px;height:auto;max-width:none;object-fit:contain;}
 .fgs-site .site-nav {gap:2px;}
 .fgs-site .nav-link {display:inline-flex;align-items:center;min-height:44px;padding:10px 8px;color:var(--fgs-ink);font-size:16px;font-weight:700;border-radius:8px;text-decoration:none;}
 .fgs-site .nav-link:hover {color:var(--fgs-evergreen-hover);background:var(--fgs-ivory);text-decoration:underline;text-underline-offset:.25em;}
@@ -91,7 +91,7 @@
 .fgs-site .review-form :focus-visible,.fgs-site .review-form .form-status:focus {outline-color:var(--fgs-ink);}
 .fgs-site .site-footer {background:var(--fgs-ink);color:var(--fgs-sage);font-size:16px;padding-block:40px;}
 .fgs-site .footer-brand {display:block;line-height:0;margin-bottom:16px;}
-.fgs-site .footer-brand img {width:240px;height:auto;max-width:100%;filter:none;opacity:1;object-fit:contain;}
+.fgs-site .footer-brand img {width:280px;height:auto;max-width:100%;filter:none;opacity:1;object-fit:contain;}
 .fgs-site .site-footer :is(a,.footer-links a,.footer-service-links a) {color:var(--fgs-white);}
 .fgs-site .site-footer a:hover {color:var(--fgs-sage);}
 .fgs-site .tool-card {color:var(--fgs-ink);}
@@ -103,10 +103,10 @@
 @media(max-width:1100px) and (min-width:1041px) {.fgs-site .nav-link{padding-inline:5px;font-size:15px}.fgs-site .header-inner{gap:12px}.fgs-site .header-cta{font-size:15px;padding-inline:10px}}
 @media(max-width:1040px) {.fgs-site .site-nav{background:var(--fgs-white);border-color:var(--fgs-border)}.fgs-site .nav-link{width:100%;padding:12px 16px}.fgs-site .site-nav .header-cta{margin-left:0}}
 @media(max-width:600px) {
-  :root{--header-height:126px;}
+  :root{--header-height:104px;}
   .fgs-site :is(.container,#faq .narrow){width:min(calc(100% - 40px),var(--fgs-max-width));}
   .fgs-site .narrow{width:min(calc(100% - 40px),820px);}
-  .fgs-site .brand .brand-logo{width:200px;height:auto;}
+  .fgs-site .brand .brand-logo{width:240px;height:auto;}
   .fgs-site .header-inner{gap:16px;}
   .fgs-site :is(.lede,.hero-copy .lede){font-size:18px;}
   .fgs-site .contact-shell{padding:24px 16px;}

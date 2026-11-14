@@ -1,9 +1,9 @@
-/* Fernandez Growth Systems - Brand v1.0. Preserve the logo SVG proportions. */
+/* Fernandez Growth Systems - Brand v2.0. Preserve the logo SVG proportions. */
 @font-face {font-family:Nunito;src:url('../fonts/Nunito-Variable.woff2') format('woff2');font-weight:200 1000;font-style:normal;font-display:swap;}
 :root {--fgs-evergreen:#1F563B;--fgs-evergreen-hover:#123D2B;--fgs-ink:#14241D;--fgs-white:#FFFFFF;--fgs-ivory:#F5F7F2;--fgs-sage:#DCE8DF;--fgs-muted:#52675B;--fgs-border:#C8D5CC;--fgs-font:'Nunito',Arial,sans-serif;--fgs-radius:8px;--fgs-max-width:1120px;}
 .fgs-site {font-family:var(--fgs-font);font-size:18px;line-height:1.6;color:var(--fgs-ink);background:var(--fgs-white);}
 .fgs-container {width:min(var(--fgs-max-width),calc(100% - 48px));margin-inline:auto;}
-.fgs-logo {display:block;width:240px;height:auto;max-width:100%;}
+.fgs-logo {display:block;width:280px;height:auto;max-width:100%;}
 .fgs-section {padding-block:clamp(48px,7vw,88px);}
 .fgs-site h1 {font-size:clamp(36px,5vw,56px);font-weight:800;line-height:1.1;letter-spacing:-.025em;}
 .fgs-site h2 {font-size:clamp(28px,3.5vw,40px);font-weight:800;line-height:1.2;letter-spacing:-.02em;}
@@ -13,6 +13,6 @@
 .fgs-button--secondary {background:transparent;color:var(--fgs-evergreen);}
 .fgs-site :focus-visible {outline:3px solid var(--fgs-ink);outline-offset:4px;}
 .fgs-card {padding:24px;background:var(--fgs-white);border:1px solid var(--fgs-border);border-radius:12px;}
-@media(max-width:600px) {.fgs-container{width:calc(100% - 40px)}.fgs-logo{width:200px}.fgs-site{font-size:18px;}}
+@media(max-width:600px) {.fgs-container{width:calc(100% - 40px)}.fgs-logo{width:240px}.fgs-site{font-size:18px;}}
 /* Use a white outline for focus on evergreen sections. Check the actual background. */
 .fgs-dark :focus-visible {outline-color:#FFFFFF;}
