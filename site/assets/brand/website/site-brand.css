@@ -49,6 +49,18 @@
 .fgs-site :is(.offer-card,.problem-card,.plate-card,.journey-card,.fit-card,.about-principle,.trust-point,.faq-item,.detail-summary,.detail-card,.deliverable,.utility-card,.tool-card,.comparison-table,.case-study) {border-radius:12px;border-color:var(--fgs-border);box-shadow:var(--shadow-sm);}
 .fgs-site :is(.journey-card,.offer-card,.problem-card,.plate-card,.fit-card,.about-principle,.trust-point,.faq-item,.detail-summary,.detail-card,.deliverable,.utility-card) {background:var(--fgs-white);}
 .fgs-site .offer-card-primary {border:2px solid var(--fgs-evergreen);background:var(--fgs-ivory);}
+.fgs-site .offer-card-primary :is(.offer-summary,.offer-list li) {color:var(--fgs-ink);}
+.fgs-site .offer-card-primary .service-detail-link a {color:var(--fgs-evergreen);}
+.fgs-site .journey-card {color:var(--fgs-ink);}
+.fgs-site .journey-card-label,.fgs-site .journey-card .status-dot,.fgs-site .journey-state {color:var(--fgs-evergreen);}
+.fgs-site .journey-list li {color:var(--fgs-ink);background:var(--fgs-ivory);border-color:var(--fgs-border);}
+.fgs-site .journey-list .journey-number {color:var(--fgs-evergreen);background:var(--fgs-sage);}
+.fgs-site .fit-card :is(.fit-label,.fit-list li) {color:var(--fgs-ink);}
+.fgs-site .fit-card .fit-label {color:var(--fgs-evergreen);}
+.fgs-site .case-header {background:var(--fgs-evergreen);}
+.fgs-site .case-header :is(h3,.case-kicker,span,strong) {color:var(--fgs-white);}
+.fgs-site .deliverable :is(strong,p) {color:var(--fgs-ink);}
+.fgs-site .comparison-before {background:var(--fgs-ivory);color:#99453d;}
 .fgs-site :is(.offer-stage,.check,.system-step-number,.plate-icon,.detail-card-number,.trust-point-number,.journey-status) {color:var(--fgs-evergreen);background:var(--fgs-sage);}
 .fgs-site :is(.contact-shell,.section-dark) {background:var(--fgs-evergreen);color:var(--fgs-white);border-radius:12px;}
 .fgs-site :is(.contact-shell,.section-dark) :is(h2,h3,h4,.lede,.eyebrow,.contact-trust-line,.next-steps,.next-steps li) {color:var(--fgs-white);}
