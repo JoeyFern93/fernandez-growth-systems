@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "3.0",
   "date": "2026-11-14",
   "color": {
     "evergreen": "#1F563B",
@@ -34,5 +34,13 @@
     "Evergreen on ivory": 7.94,
     "Muted on white": 6.09,
     "Muted on ivory": 5.64
+  },
+  "logo": {
+    "source": "logos/FGS-Logo-Green-Transparent.png",
+    "width": 1839,
+    "height": 855,
+    "sha256": "be1fdf6d0f0cf5572cc0db51e734d9cf3acea66ff56a2e4d564fed57b6d56f39",
+    "placement": "Use this artwork unchanged; resize uniformly.",
+    "svgFormat": "Original PNG embedded in SVG. Not vector paths."
   }
 }

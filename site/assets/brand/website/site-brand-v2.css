@@ -1,4 +1,4 @@
-/* Brand v2.0 applied to the existing FGS layout. The supplied stylesheet
+/* Brand v3.0 applied to the existing FGS layout. The supplied stylesheet
    owns the palette/font; these rules map the site's existing components. */
 :root {
   --ink: var(--fgs-ink); --ink-soft: var(--fgs-muted);
@@ -10,7 +10,7 @@
   --line: var(--fgs-border); --line-warm: var(--fgs-border); --success: var(--fgs-evergreen);
   --max: var(--fgs-max-width); --radius-sm: 8px; --radius: 12px; --radius-lg: 12px;
   --shadow-sm: 0 4px 18px rgb(20 36 29 / 5%);
-  --shadow-lg: 0 12px 32px rgb(20 36 29 / 10%); --header-height: 116px;
+  --shadow-lg: 0 12px 32px rgb(20 36 29 / 10%); --header-height: 148px;
 }
 .fgs-site {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
 .fgs-site :is(h1,h2,h3,h4) {font-family:var(--fgs-font);font-weight:800;color:var(--fgs-ink);}
@@ -103,7 +103,7 @@
 @media(max-width:1100px) and (min-width:1041px) {.fgs-site .nav-link{padding-inline:5px;font-size:15px}.fgs-site .header-inner{gap:12px}.fgs-site .header-cta{font-size:15px;padding-inline:10px}}
 @media(max-width:1040px) {.fgs-site .site-nav{background:var(--fgs-white);border-color:var(--fgs-border)}.fgs-site .nav-link{width:100%;padding:12px 16px}.fgs-site .site-nav .header-cta{margin-left:0}}
 @media(max-width:600px) {
-  :root{--header-height:104px;}
+  :root{--header-height:132px;}
   .fgs-site :is(.container,#faq .narrow){width:min(calc(100% - 40px),var(--fgs-max-width));}
   .fgs-site .narrow{width:min(calc(100% - 40px),820px);}
   .fgs-site .brand .brand-logo{width:240px;height:auto;}
@@ -120,3 +120,5 @@
 }
 @media(forced-colors:active) {.fgs-site :focus-visible{outline-color:Highlight}.fgs-site .button{border-color:ButtonText}}
 @media print {.fgs-site{font-size:11pt}.fgs-site :is(.contact-shell,.section-dark){background:white;color:black}}
+
+.fgs-site .footer-brand{width:304px;max-width:100%;padding:12px;background:#fff;border-radius:8px;box-sizing:border-box;}

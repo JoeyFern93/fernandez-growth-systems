@@ -1,4 +1,4 @@
-/* FGS brand v2.0; keep Replay Cam's media layout and native controls. */
+/* FGS brand v3.0; keep Replay Cam's media layout and native controls. */
 :root {--bg:var(--fgs-ink);--surface:var(--fgs-evergreen-hover);--surface-2:var(--fgs-evergreen);--border:var(--fgs-muted);--text:var(--fgs-white);--muted:var(--fgs-sage);--accent:var(--fgs-sage);--success:var(--fgs-sage);}
 html,body {background:var(--fgs-ink);}
 body {font-family:var(--fgs-font);font-size:18px;line-height:1.6;}
@@ -26,3 +26,5 @@ a:hover {color:var(--fgs-sage);}
 .toast {background:var(--fgs-evergreen);border-color:var(--fgs-sage);color:var(--fgs-white);}
 .skip-link {background:var(--fgs-white);color:var(--fgs-ink);}
 @media(max-width:610px) {.app-header,.app-shell,.app-footer{padding-inline:20px}.fgs-link img{width:40px;height:40px}.app-header{align-items:flex-start}.header-actions{max-width:45%}.app-identity{min-width:0}}
+
+.fgs-link{padding:8px;background:#fff;border-radius:8px;line-height:0;}

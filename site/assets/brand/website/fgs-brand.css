@@ -1,4 +1,4 @@
-/* Fernandez Growth Systems - Brand v2.0. Preserve the logo SVG proportions. */
+/* Fernandez Growth Systems - Brand v3.0. Preserve the supplied artwork and its original proportions. */
 @font-face {font-family:Nunito;src:url('../fonts/Nunito-Variable.woff2') format('woff2');font-weight:200 1000;font-style:normal;font-display:swap;}
 :root {--fgs-evergreen:#1F563B;--fgs-evergreen-hover:#123D2B;--fgs-ink:#14241D;--fgs-white:#FFFFFF;--fgs-ivory:#F5F7F2;--fgs-sage:#DCE8DF;--fgs-muted:#52675B;--fgs-border:#C8D5CC;--fgs-font:'Nunito',Arial,sans-serif;--fgs-radius:8px;--fgs-max-width:1120px;}
 .fgs-site {font-family:var(--fgs-font);font-size:18px;line-height:1.6;color:var(--fgs-ink);background:var(--fgs-white);}

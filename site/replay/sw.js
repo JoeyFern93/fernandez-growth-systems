@@ -1,7 +1,7 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-14-brand-v2.0-r2';
-const APP_SHELL = ["./", "./index.html", "./css/app.css", "./js/app.js", "./js/replay-ui.js", "./manifest-v2.webmanifest", "./icons/icon-v2.svg", "./icons/icon-192-v2.png", "./icons/icon-512-v2.png", "./icons/icon-maskable-512.png", "./icons/icon-maskable-512-v2.svg", "../favicon-v2.ico", "../assets/brand/website/fgs-brand-v2.css", "../assets/brand/replay-brand-v2.css", "../assets/brand/fonts/Nunito-Variable.woff2", "../assets/brand/logos/FGS-Logo-White-v2.svg", "../assets/brand/icons/FGS-JF-Leaf-White-v2.svg", "../assets/brand/icons/FGS-JF-Leaf-Green-v2.svg"];
+const CACHE_NAME = CACHE_PREFIX + '2026-11-15-approved-artwork-v3.0';
+const APP_SHELL = ["./", "./index.html", "./css/app.css", "./js/app.js", "./js/replay-ui.js", "./manifest-v3.webmanifest", "./icons/icon-v3.svg", "./icons/icon-192-v3.png", "./icons/icon-512-v3.png", "./icons/icon-maskable-512.png", "./icons/icon-maskable-512-v3.svg", "../favicon-v3.ico", "../assets/brand/website/fgs-brand-v3.css", "../assets/brand/replay-brand-v3.css", "../assets/brand/fonts/Nunito-Variable.woff2", "../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png", "../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"];
 const scope = new URL(self.registration.scope);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
