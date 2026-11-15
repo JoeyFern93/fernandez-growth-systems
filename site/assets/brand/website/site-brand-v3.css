@@ -121,4 +121,19 @@
 @media(forced-colors:active) {.fgs-site :focus-visible{outline-color:Highlight}.fgs-site .button{border-color:ButtonText}}
 @media print {.fgs-site{font-size:11pt}.fgs-site :is(.contact-shell,.section-dark){background:white;color:black}}
 
-.fgs-site .footer-brand{width:304px;max-width:100%;padding:12px;background:#fff;border-radius:8px;box-sizing:border-box;}
+
+/* Footer v4: white artwork on ink, grouped links and a shared copyright row. */
+.fgs-site .site-footer{padding-block:32px 20px;}
+.fgs-site .footer-grid{display:grid;grid-template-columns:minmax(240px,1fr) minmax(400px,1fr);gap:40px;align-items:start;}
+.fgs-site .footer-identity{min-width:0;}
+.fgs-site .footer-brand{display:block;width:240px;max-width:100%;margin:0 0 12px;padding:0;background:none;border:0;border-radius:0;box-sizing:border-box;line-height:0;}
+.fgs-site .footer-brand img{display:block;width:240px;max-width:100%;height:auto;filter:none;opacity:1;}
+.fgs-site .footer-sub{max-width:36ch;margin:0;color:var(--fgs-sage);font-size:14px;line-height:1.6;}
+.fgs-site .footer-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-content:start;min-width:0;}
+.fgs-site .site-footer .footer-heading{margin:0 0 8px;color:var(--fgs-sage);font-size:14px;font-weight:700;line-height:1.4;letter-spacing:.02em;}
+.fgs-site .footer-links,.fgs-site .footer-service-links{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:2px;margin:0;}
+.fgs-site .footer-links a,.fgs-site .footer-service-links a{display:block;width:fit-content;max-width:100%;min-height:32px;padding:5px 0;color:var(--fgs-white);font-size:15px;line-height:1.4;}
+.fgs-site .footer-bottom{margin-top:24px;padding-top:16px;border-top:1px solid rgb(220 232 223 / 22%);}
+.fgs-site .footer-bottom p{margin:0;color:var(--fgs-sage);font-size:13px;line-height:1.5;}
+@media(max-width:800px){.fgs-site .footer-grid{grid-template-columns:minmax(0,1fr);gap:24px;}.fgs-site .footer-brand,.fgs-site .footer-brand img{width:220px;}.fgs-site .footer-nav{max-width:600px;}.fgs-site .footer-bottom{margin-top:24px;}}
+@media(max-width:420px){.fgs-site .footer-nav{gap:20px;}.fgs-site .footer-links a,.fgs-site .footer-service-links a{min-height:44px;padding-block:8px;font-size:14px;}}
