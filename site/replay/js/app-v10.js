@@ -362,8 +362,42 @@
     if (ui.live.requestVideoFrameCallback) state.frameCallback = ui.live.requestVideoFrameCallback(draw);
     else state.frameTimer = setInterval(() => draw(now()), 1000 / state.replayFps);
   }
+  function clearRecordingFlush(recording) {
+    if (recording.flushFrame != null) cancelAnimationFrame(recording.flushFrame);
+    clearTimeout(recording.flushPaintTimer); clearTimeout(recording.flushTimer);
+    recording.flushFrame = null; recording.flushPaintTimer = null; recording.flushTimer = null;
+  }
+  function requestCanvasFrame(recording) {
+    // requestFrame requests capture on the next canvas paint. It does not make
+    // recorder.stop() in this same callback safe: the encoder still needs that paint.
+    try { recording.stream?.getVideoTracks?.()[0]?.requestFrame?.(); } catch { /* Automatic capture remains available. */ }
+  }
+  function flushCanvasRecording(recording, complete) {
+    clearRecordingFlush(recording);
+    requestCanvasFrame(recording);
+    let presented = false;
+    const afterPaint = () => {
+      if (presented || recording.finished || recording.cancelled) return;
+      presented = true;
+      if (recording.flushFrame != null) cancelAnimationFrame(recording.flushFrame);
+      clearTimeout(recording.flushPaintTimer);
+      recording.flushFrame = null; recording.flushPaintTimer = null;
+      // Keep the final pixels unchanged while the captured frame is delivered.
+      // Drawing again here would give the same endpoint a later timestamp.
+      try { if (recording.recorder.state === 'recording') recording.recorder.requestData(); } catch { /* onstop still supplies the final data. */ }
+      recording.flushTimer = setTimeout(() => {
+        recording.flushTimer = null;
+        if (!recording.finished && !recording.cancelled) complete();
+      }, 100);
+    };
+    recording.flushFrame = requestAnimationFrame(afterPaint);
+    // A hidden/occluded tab may suspend animation frames. Cancellation remains
+    // immediate, and ordinary completion has a bounded drain in that case.
+    recording.flushPaintTimer = setTimeout(afterPaint, 250);
+  }
   function disposeClip(clip) {
     clearInterval(clip.countdown); clearTimeout(clip.timer); clearTimeout(clip.stopTimer);
+    clearRecordingFlush(clip);
     clip.cancelSeek?.(); clip.cancelSeek = null;
     if (clip.frame !== null) cancelAnimationFrame(clip.frame);
     clip.frame = null;
@@ -406,6 +440,7 @@
   function finishClip(clip, cancelled = false, error = false) {
     if (!clip || clip.stopping || clip.finished) return;
     clip.stopping = true; clip.cancelled = cancelled; clip.error = error;
+    clearRecordingFlush(clip);
     clearInterval(clip.countdown); clearTimeout(clip.timer);
     if (clip.frame !== null) cancelAnimationFrame(clip.frame);
     clip.frame = null;
@@ -420,6 +455,9 @@
   function cancelClip() {
     const clip = state.clip;
     if (!clip) return;
+    // onstop is asynchronous, so cancellation must also win after stop() was
+    // requested but before its final data event has arrived.
+    clip.cancelled = true;
     finishClip(clip, true);
     disposeClip(clip);
     if (state.clip === clip) state.clip = null;
@@ -1187,11 +1225,16 @@
       clip.recorder.onstop = () => finalizeClip(clip);
       clip.recorder.onerror = () => finishClip(clip, false, true);
       clip.recorder.start(500);
+      // Paint after recording starts as well as before captureStream is created.
+      // This makes the selected first frame available to the first capture.
+      if (trim.engine === 'fallback') drawTrimFrame(trim, clip.start, ui.clipCanvas);
+      else drawContained(source, ui.clipCanvas, clip.mirrored);
+      requestCanvasFrame(clip);
       state.reviewing = true; state.reviewPaused = false; state.reviewSpeed = 1;
       if (trim.engine !== 'fallback') { source.playbackRate = 1; await source.play(); }
       const started = now(); let lastPosition = clip.start, lastAdvance = started;
       const draw = () => {
-        if (state.clip !== clip || clip.stopping || clip.finished) return;
+        if (state.clip !== clip || clip.stopping || clip.finishing || clip.finished) return;
         if (clip.generation !== state.generation || state.trim !== trim) { finishClip(clip, true); return; }
         if (trim.engine === 'compressed' && !validateTrimHistory()) return;
         const position = trim.engine === 'fallback' ? Math.min(clip.end, clip.start + (now() - started) / 1000) : source.currentTime;
@@ -1204,7 +1247,14 @@
         ui.trimProgress.value = progress;
         ui.trimStatus.textContent = `Exporting selected clip… ${Math.round(progress)}%. Keep this page open.`;
         updateTrimControls();
-        if (position >= clip.end - 0.025) { source.pause(); state.reviewPaused = true; finishClip(clip); return; }
+        if (position >= clip.end - 0.025) {
+          source.pause(); state.reviewPaused = true; clip.finishing = true; clip.frame = null;
+          ui.trimStatus.textContent = 'Finalizing selected clip. Keep this page open.';
+          // The endpoint was just drawn. Stop only after its paint and a short
+          // encoder drain, without drawing any footage outside the selection.
+          flushCanvasRecording(clip, () => finishClip(clip));
+          return;
+        }
         clip.frame = requestAnimationFrame(draw);
       };
       clip.frame = requestAnimationFrame(draw);
@@ -1221,13 +1271,25 @@
     clearTimeout(session.timer); clearInterval(session.clock);
     if (session.frame !== null) cancelAnimationFrame(session.frame);
     session.frame = null;
-    try { if (session.recorder.state !== 'inactive') session.recorder.stop(); else finalizeSession(session); }
-    catch { session.error = true; finalizeSession(session); }
+    const stop = () => {
+      clearRecordingFlush(session);
+      try {
+        if (session.recorder.state !== 'inactive') {
+          session.recorder.stop();
+          session.stopTimer = setTimeout(() => { session.error = true; finalizeSession(session); }, 3000);
+        } else finalizeSession(session);
+      } catch { session.error = true; finalizeSession(session); }
+    };
+    if (!error && drawContained(ui.live, session.canvas, session.mirrored)) {
+      ui.sessionStatus.textContent = 'Finishing session recording. The final frame is being saved.';
+      flushCanvasRecording(session, stop);
+    } else stop();
     updateControls();
   }
   function finalizeSession(session) {
     if (session.finished) return;
-    session.finished = true; clearTimeout(session.timer); clearInterval(session.clock);
+    session.finished = true; clearTimeout(session.timer); clearTimeout(session.stopTimer); clearInterval(session.clock);
+    clearRecordingFlush(session);
     if (session.frame !== null) cancelAnimationFrame(session.frame);
     session.stream?.getTracks().forEach(track => track.stop());
     session.canvas.width = 0; session.canvas.height = 0;
@@ -1273,6 +1335,8 @@
       session.recorder.onstop = () => finalizeSession(session);
       session.recorder.onerror = () => finishSessionRecording(true);
       state.session = session; session.recorder.start(1000);
+      drawContained(ui.live, session.canvas, session.mirrored);
+      requestCanvasFrame(session);
       const draw = timestamp => {
         if (state.session !== session || session.stopping) return;
         if (!state.running || !state.stream) { finishSessionRecording(); return; }
