@@ -110,6 +110,17 @@ details summary { min-height: 44px; align-content: center; }
 .fgs-replay .trim-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; }
 .fgs-replay .trim-heading h3 { margin: 0; font-size: 1.1rem; line-height: 1.25; }
 .fgs-replay .trim-duration { color: var(--accent); font-size: .84rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fgs-replay .trim-preview { min-width: 0; margin-top: 14px; }
+.fgs-replay .trim-preview-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; margin-bottom: 8px; }
+.fgs-replay .trim-preview-heading h4 { margin: 0; color: var(--text); font-size: .9rem; line-height: 1.3; }
+.fgs-replay #trimPreviewPosition { color: var(--accent); font-size: .8rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fgs-replay .trim-preview-frame { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 100px; max-height: 320px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: #091a12; }
+.fgs-replay #trimPreviewCanvas { display: block; flex: 0 1 auto; width: auto; height: auto; max-width: 100%; max-height: 320px; object-fit: contain; }
+.fgs-replay .trim-preview-seek { display: block; width: 100%; margin: 4px 0 0; accent-color: #c4dfaa; }
+.fgs-replay .trim-preview-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.fgs-replay .trim-preview-controls .button { flex: 0 1 auto; min-width: 155px; min-height: 44px; }
+.fgs-replay #trimPreviewState { flex: 1 1 100px; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+.fgs-replay #trimPreviewHelp { margin: 8px 0 0; }
 .fgs-replay .trim-track { height: 96px; border-color: #698b72; overflow: visible; }
 .fgs-replay .trim-track canvas { border-radius: 7px; }
 .fgs-replay .trim-track::before,.fgs-replay .trim-track::after { content: ""; position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: none; background: rgb(0 0 0 / 58%); }
@@ -173,6 +184,8 @@ details summary { min-height: 44px; align-content: center; }
   .fgs-replay .review-speed { gap: 8px; }
   .fgs-replay .review-speed select { flex-basis: 138px; font-size: .85rem; }
   .fgs-replay .trim-panel { padding: 10px; }
+  .fgs-replay .trim-preview-frame,.fgs-replay #trimPreviewCanvas { max-height: 260px; }
+  .fgs-replay .trim-preview-controls .button { flex: 1 1 145px; }
   .fgs-replay .trim-actions .button { flex-basis: 100%; }
   .fgs-replay .trim-actions #trimCancelBtn { flex-basis: 100%; }
   .fgs-replay .session-recording-heading { align-items: start; }

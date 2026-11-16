@@ -86,8 +86,15 @@
           <p id="reviewHelp" class="help-text review-help">Drag the playhead to pause and rewatch. <strong>Save clip</strong> lets you trim footage that is already in this timeline. You do not need to start a session recording first. <strong>Back to delay</strong> follows your practice again.</p>
 
           <section id="trimPanel" class="trim-panel" aria-labelledby="trimTitle" hidden>
-            <div class="trim-heading"><div><p class="eyebrow">SAVE AN EARLIER MOMENT</p><h3 id="trimTitle">Choose your clip</h3></div><output id="trimDuration" class="trim-duration">0:00 selected</output></div>
+            <div class="trim-heading"><div><p class="eyebrow">SAVE AN EARLIER MOMENT</p><h3 id="trimTitle" tabindex="-1">Choose your clip</h3></div><output id="trimDuration" class="trim-duration">0:00 selected</output></div>
             <p id="trimHelp" class="help-text">Drag the left and right handles to choose the start and end. Use the arrow keys when a handle is focused.</p>
+            <section class="trim-preview" aria-labelledby="trimPreviewTitle">
+              <div class="trim-preview-heading"><h4 id="trimPreviewTitle">Selected clip preview</h4><output id="trimPreviewPosition" aria-live="off">0:00 / 0:00</output></div>
+              <div id="trimPreviewFrame" class="trim-preview-frame"><canvas id="trimPreviewCanvas" width="854" height="480" role="img" aria-label="Selected clip preview">Your selected video appears here.</canvas></div>
+              <input id="trimPreviewSeek" class="trim-preview-seek" type="range" min="0" max="1" value="0" step="0.05" aria-label="Clip preview position" aria-describedby="trimPreviewHelp" disabled>
+              <div class="trim-preview-controls"><button id="trimPreviewBtn" class="button button-secondary" type="button" disabled>Preview selection</button><span id="trimPreviewState" aria-live="off">Ready to preview</span></div>
+              <p id="trimPreviewHelp" class="help-text">Drag the edges below, then play your selection here before saving.</p>
+            </section>
             <div class="trim-track">
               <canvas id="trimTimelineCanvas" width="1200" height="112" aria-hidden="true"></canvas>
               <div id="trimSelection" class="trim-selection" aria-hidden="true"></div>
@@ -95,7 +102,7 @@
               <input id="trimEndRange" class="trim-range trim-end" type="range" min="0" max="1" value="1" step="0.05" aria-label="Clip end time" aria-describedby="trimHelp trimEndTime" disabled>
             </div>
             <div class="trim-time-labels"><span>Start <output id="trimStartTime" for="trimStartRange">0:00</output></span><span>End <output id="trimEndTime" for="trimEndRange">0:00</output></span></div>
-            <div class="trim-actions"><button id="trimPreviewBtn" class="button button-secondary" type="button" disabled>Preview selection</button><button id="trimExportBtn" class="button button-success" type="button" disabled>Save selected clip</button><button id="trimCancelBtn" class="button button-secondary" type="button">Cancel</button></div>
+            <div class="trim-actions"><button id="trimExportBtn" class="button button-success" type="button" disabled>Save selected clip</button><button id="trimCancelBtn" class="button button-secondary" type="button">Cancel</button></div>
             <progress id="trimProgress" max="100" value="0" aria-label="Creating selected clip" hidden></progress>
             <p id="trimStatus" class="help-text" role="status" aria-live="polite">Preview your selection, then save it to this device.</p>
             <button id="trimCancelExportBtn" class="button button-secondary" type="button" hidden>Cancel clip export</button>

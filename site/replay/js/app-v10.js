@@ -23,6 +23,8 @@
     trimHelp: $('trimHelp'), trimStatus: $('trimStatus'), trimPreview: $('trimPreviewBtn'),
     trimExport: $('trimExportBtn'), trimCancel: $('trimCancelBtn'),
     trimCancelExport: $('trimCancelExportBtn'), trimProgress: $('trimProgress'),
+    trimPreviewCanvas: $('trimPreviewCanvas'), trimPreviewFrame: $('trimPreviewFrame'),
+    trimPreviewPosition: $('trimPreviewPosition'), trimPreviewSeek: $('trimPreviewSeek'), trimPreviewState: $('trimPreviewState'),
     sessionRecord: $('sessionRecordBtn'), sessionStatus: $('sessionStatus'),
     sessionDownload: $('sessionDownloadLink'), reviewSession: $('reviewSessionBtn'),
     returnRecent: $('returnRecentBtn'), sessionVideo: $('sessionVideo')
@@ -41,7 +43,8 @@
     scrubbing: false, scrubWindow: null, reviewExpired: false,
     trim: null, thumbnails: [], lastThumbnailAt: 0,
     session: null, sessionBlob: null, sessionUrl: '', sessionReview: false,
-    sessionDuration: 0, sessionThumbnails: [], encoderStartedAt: 0, fallbackStartedAt: 0
+    sessionDuration: 0, sessionThumbnails: [], encoderStartedAt: 0, fallbackStartedAt: 0,
+    replayContentAspect: 0, sessionContentAspect: 0
   };
   const MAX_QUEUED_BYTES = 32 * 1024 * 1024;
   const MIN_CLIP_SECONDS = 0.25;
@@ -189,7 +192,7 @@
     }
     ui.replayStatus.textContent = state.sessionReview ? 'Recorded session'
       : state.reviewing ? (state.reviewPaused ? 'Paused review' : `${state.reviewSpeed}x review`) : 'Delayed playback';
-    renderTimeline(ui.timeline, range, state.sessionReview ? state.sessionThumbnails : state.thumbnails);
+    renderTimeline(ui.timeline, range, state.sessionReview ? state.sessionThumbnails : state.thumbnails, state.sessionReview ? false : state.mirrored);
     if (ui.timelineTrack) ui.timelineTrack.style.setProperty('--playhead', `${100 * Math.max(0, Math.min(1, (reviewPosition() - range.start) / (range.end - range.start)))}%`);
   }
   function drawFallbackAt(seconds) {
@@ -749,6 +752,7 @@
   }
   function startReplayEngine() {
     state.delaySeconds = Number(ui.delay.value);
+    state.replayContentAspect = ui.live.videoWidth / ui.live.videoHeight || 0;
     const replay = parseResolution(ui.replayResolution.value);
     ui.processingCanvas.width = replay.width;
     ui.processingCanvas.height = replay.height;
@@ -987,6 +991,35 @@
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     return drawContained(source, canvas) ? canvas : null;
   }
+  function sourceContentRect(source, aspect = 0) {
+    const width = source.videoWidth || source.width, height = source.videoHeight || source.height;
+    if (!width || !height || ('readyState' in source && source.readyState < 2)) return null;
+    // The replay/session encoder preserves portrait video inside a landscape
+    // canvas. Remove only that known padding, never crop the full-frame video.
+    let contentWidth = width, contentHeight = height;
+    if (Number.isFinite(aspect) && aspect > 0) {
+      if (width / height > aspect) contentWidth = height * aspect;
+      else contentHeight = width / aspect;
+    }
+    return { x: (width - contentWidth) / 2, y: (height - contentHeight) / 2, width: contentWidth, height: contentHeight };
+  }
+  function copyThumbnail(source, contentAspect = 0, mirrored = false) {
+    const content = sourceContentRect(source, contentAspect);
+    if (!content) return null;
+    // Keep each sample's real scene aspect. The strip's CSS size changes between
+    // phone and desktop, so crop to cover each actual tile at paint time.
+    const scale = Math.min(1, 150 / Math.max(content.width, content.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(content.width * scale));
+    canvas.height = Math.max(1, Math.round(content.height * scale));
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) return null;
+    context.save();
+    if (mirrored) { context.translate(canvas.width, 0); context.scale(-1, 1); }
+    context.drawImage(source, content.x, content.y, content.width, content.height, 0, 0, canvas.width, canvas.height);
+    context.restore();
+    return canvas;
+  }
   function clearThumbnailFrames(frames) {
     for (const item of frames || []) { item.canvas.width = 0; item.canvas.height = 0; }
   }
@@ -994,10 +1027,26 @@
     if (timestamp - state.lastThumbnailAt < 1000 || !state.running) return;
     const range = getRecentWindow();
     if (!range) return;
-    const canvas = copyFrame(state.engine === 'fallback' ? ui.live : ui.processingCanvas);
+    const compressed = state.engine === 'compressed';
+    const source = compressed ? ui.delayedVideo : ui.live;
+    // Encoder buffering can put the live canvas seconds ahead of MSE time.
+    // Sample decoded replay pixels at their actual media position instead of
+    // assigning a live frame to buffered.end. Unsampled tail tiles use the
+    // nearest known replay sample until those frames have been played.
+    const at = compressed ? source.currentTime : range.end;
+    if (!Number.isFinite(at) || at < range.start || at > range.end
+      || (compressed && (source.seeking || source.readyState < 2))) return;
+    const canvas = copyThumbnail(source, compressed ? state.replayContentAspect : 0);
     if (!canvas) return;
     state.lastThumbnailAt = timestamp;
-    state.thumbnails.push({ at: range.end, canvas });
+    const previous = state.thumbnails.findIndex(frame => Math.abs(frame.at - at) < 0.25);
+    if (previous >= 0) {
+      state.thumbnails[previous].canvas.width = 0; state.thumbnails[previous].canvas.height = 0;
+      state.thumbnails.splice(previous, 1);
+    }
+    state.thumbnails.push({ at, canvas });
+    // Reviewing can seek backwards, so keep cleanup ordered by media time.
+    state.thumbnails.sort((first, second) => first.at - second.at);
     while (state.thumbnails.length > 150 || state.thumbnails[0]?.at < range.start - 2) {
       const old = state.thumbnails.shift(); old.canvas.width = 0; old.canvas.height = 0;
     }
@@ -1009,21 +1058,36 @@
     state.sessionReview = sessionReview;
     return range;
   }
-  function renderTimeline(canvas, range, frames) {
+  function renderTimeline(canvas, range, frames, mirrored = false) {
     if (!canvas || !range) return;
+    const bounds = canvas.getBoundingClientRect?.();
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    const width = bounds?.width > 0 ? Math.round(bounds.width * pixelRatio) : canvas.width || 960;
+    const height = bounds?.height > 0 ? Math.round(bounds.height * pixelRatio) : canvas.height || 96;
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) return;
-    const width = canvas.width || 960, height = canvas.height || 96;
     context.fillStyle = '#14261f'; context.fillRect(0, 0, width, height);
-    const count = 8, tile = width / count;
+    const count = 8, labelHeight = Math.round(17 * pixelRatio), fontSize = Math.round(10 * pixelRatio);
     for (let index = 0; index < count; index++) {
+      const left = Math.round(index * width / count), tile = Math.round((index + 1) * width / count) - left;
       const time = range.start + (range.end - range.start) * (index + 0.5) / count;
       let nearest = null;
       for (const frame of frames || []) if (!nearest || Math.abs(frame.at - time) < Math.abs(nearest.at - time)) nearest = frame;
-      if (nearest?.canvas.width) context.drawImage(nearest.canvas, index * tile, 0, tile - 1, height);
-      context.fillStyle = 'rgba(0,0,0,.64)'; context.fillRect(index * tile, height - 20, tile, 20);
-      context.fillStyle = '#fff'; context.font = '13px system-ui, sans-serif';
-      context.fillText(formatTime(time), index * tile + 5, height - 5);
+      if (nearest?.canvas.width) {
+        const sample = nearest.canvas;
+        let cropWidth = sample.width, cropHeight = sample.height;
+        if (cropWidth / cropHeight > tile / height) cropWidth = cropHeight * tile / height;
+        else cropHeight = cropWidth * height / tile;
+        context.save();
+        if (mirrored) { context.translate(left + tile, 0); context.scale(-1, 1); }
+        context.drawImage(sample, (sample.width - cropWidth) / 2, (sample.height - cropHeight) / 2,
+          cropWidth, cropHeight, mirrored ? 0 : left, 0, tile, height);
+        context.restore();
+      }
+      context.fillStyle = 'rgba(0,0,0,.64)'; context.fillRect(left, height - labelHeight, tile, labelHeight);
+      context.fillStyle = '#fff'; context.font = `${fontSize}px system-ui, sans-serif`;
+      context.fillText(formatTime(time), left + 3 * pixelRatio, height - 4 * pixelRatio);
     }
   }
   function playbackSnapshot() {
@@ -1064,9 +1128,11 @@
     state.trim = { sourceType, engine: state.sessionReview ? 'session' : state.engine,
       range: { ...range }, start, end, restore: playbackSnapshot(), mirrored: sourceType === 'session' ? false : state.mirrored,
       frames: sourceType === 'recent' && state.engine === 'fallback' ? snapshotFallback(range) : [],
-      thumbnails: (state.sessionReview ? state.sessionThumbnails : state.thumbnails).map(frame => ({ at: frame.at, canvas: copyFrame(frame.canvas) })).filter(frame => frame.canvas),
-      previewing: false, previewFrame: null, timer: null, expiresAt: now() + TRIM_HOLD_MS };
-    seekReplayTo(end);
+      thumbnails: (state.sessionReview ? state.sessionThumbnails : state.thumbnails).map(frame => ({ at: frame.at, canvas: copyFrame(frame.canvas, frame.canvas.width, frame.canvas.height) })).filter(frame => frame.canvas),
+      contentAspect: sourceType === 'session' ? state.sessionContentAspect : state.replayContentAspect,
+      previewing: false, previewFrame: null, previewSeek: null, previewTime: start, previewVersion: 0,
+      previewStartupTimer: null, timer: null, expiresAt: now() + TRIM_HOLD_MS };
+    seekReplayTo(start);
     ui.trimPanel.hidden = false;
     ui.trimProgress.hidden = true; ui.trimProgress.value = 0;
     ui.trimStatus.textContent = 'Drag the two edge handles to choose footage that is already available. Nothing new is being recorded by Save clip.';
@@ -1084,7 +1150,73 @@
     };
     heldTrim.timer = setTimeout(expireHeldHistory, TRIM_HOLD_MS);
     updateControls();
-    ui.trimStart.focus();
+    seekTrimPreview(start);
+    // Open at the editor's preview, not at handles farther down the phone page.
+    // Keep subsequent handle drags and preview scrubbing free of scroll jumps.
+    ui.trimPanel.scrollIntoView?.({ block: 'start', behavior: 'auto' });
+    $('trimTitle').focus({ preventScroll: true });
+  }
+  function updateTrimPreviewControls() {
+    const trim = state.trim;
+    if (!trim) return;
+    const time = Math.max(trim.start, Math.min(trim.end, Number.isFinite(trim.previewTime) ? trim.previewTime : trim.start));
+    if (ui.trimPreviewSeek) {
+      ui.trimPreviewSeek.min = String(trim.start); ui.trimPreviewSeek.max = String(trim.end);
+      ui.trimPreviewSeek.value = String(time); ui.trimPreviewSeek.disabled = !!state.clip;
+      ui.trimPreviewSeek.setAttribute('aria-valuetext', `${formatPrecise(time - trim.start)} of ${formatPrecise(trim.end - trim.start)} selected`);
+    }
+    if (ui.trimPreviewPosition) ui.trimPreviewPosition.textContent = `${formatPrecise(time - trim.start)} / ${formatPrecise(trim.end - trim.start)}`;
+    if (ui.trimPreviewState) ui.trimPreviewState.textContent = trim.previewError || (state.clip ? 'Creating clip'
+      : trim.previewLoading ? 'Loading selected frame' : trim.previewing ? 'Playing selection' : 'Paused');
+  }
+  function drawTrimPreview(trim, seconds) {
+    if (!ui.trimPreviewCanvas || state.trim !== trim || ui.trimPanel.hidden) return false;
+    let source = trim.sourceType === 'session' ? ui.sessionVideo : ui.delayedVideo;
+    if (trim.engine === 'fallback') {
+      let frame = trim.frames[0];
+      for (const item of trim.frames) if (item.at <= seconds + 0.001) frame = item;
+      source = frame?.canvas;
+    }
+    if (!source) return false;
+    const content = sourceContentRect(source, trim.contentAspect);
+    if (!content) return false;
+    const scale = Math.min(1, 640 / Math.max(content.width, content.height));
+    const width = Math.max(1, Math.round(content.width * scale)), height = Math.max(1, Math.round(content.height * scale));
+    const canvas = ui.trimPreviewCanvas;
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+    ui.trimPreviewFrame?.style.setProperty('--clip-preview-aspect', `${width} / ${height}`);
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) return false;
+    context.save();
+    if (trim.mirrored) { context.translate(width, 0); context.scale(-1, 1); }
+    // Unlike thumbnails, the inline player preserves the complete camera scene.
+    context.drawImage(source, content.x, content.y, content.width, content.height, 0, 0, width, height);
+    context.restore();
+    trim.previewTime = Math.max(trim.start, Math.min(trim.end, seconds));
+    trim.previewLoading = false; trim.previewError = '';
+    updateTrimPreviewControls();
+    return true;
+  }
+  async function seekTrimPreview(seconds) {
+    const trim = state.trim;
+    if (!trim || state.clip || !Number.isFinite(Number(seconds))) return;
+    const time = Math.max(trim.start, Math.min(trim.end, Number(seconds)));
+    trim.previewSeek?.cancelSeek?.();
+    const request = { cancelSeek: null }; trim.previewSeek = request;
+    trim.previewTime = time; trim.previewLoading = true; trim.previewError = '';
+    state.reviewing = true; state.reviewPaused = true; state.reviewTime = time;
+    updateTrimPreviewControls();
+    try {
+      if (trim.engine === 'fallback') drawTrimFrame(trim, time, ui.delayedCanvas);
+      else await seekVideo(trim.sourceType === 'session' ? ui.sessionVideo : ui.delayedVideo, time, request);
+      if (state.trim !== trim || trim.previewSeek !== request || state.clip || trim.previewing) return;
+      drawTrimPreview(trim, time);
+    } catch {
+      if (state.trim === trim && trim.previewSeek === request) {
+        trim.previewLoading = false; trim.previewError = 'Could not show this frame. Try another point.';
+        updateTrimPreviewControls();
+      }
+    } finally { if (trim.previewSeek === request) trim.previewSeek = null; }
   }
   function updateTrimControls() {
     const trim = state.trim;
@@ -1109,16 +1241,22 @@
     track.style.setProperty('--trim-start', `${100 * (trim.start - trim.range.start) / span}%`);
     track.style.setProperty('--trim-end', `${100 * (trim.end - trim.range.start) / span}%`);
     track.style.setProperty('--playhead', `${100 * Math.max(0, Math.min(1, (reviewPosition() - trim.range.start) / span))}%`);
-    renderTimeline(ui.trimTimeline, trim.range, trim.thumbnails);
+    renderTimeline(ui.trimTimeline, trim.range, trim.thumbnails, trim.mirrored);
+    updateTrimPreviewControls();
   }
   function stopTrimPreview() {
     const trim = state.trim;
     if (!trim) return;
     trim.previewing = false;
+    trim.previewLoading = false;
+    trim.previewVersion = (trim.previewVersion || 0) + 1;
+    clearTimeout(trim.previewStartupTimer); trim.previewStartupTimer = null;
+    trim.previewSeek?.cancelSeek?.(); trim.previewSeek = null;
     if (trim.previewFrame !== null) cancelAnimationFrame(trim.previewFrame);
     trim.previewFrame = null;
     (trim.sourceType === 'session' ? ui.sessionVideo : ui.delayedVideo).pause();
     state.reviewPaused = true;
+    updateTrimPreviewControls();
   }
   function closeTrim(restore = true) {
     const trim = state.trim;
@@ -1127,6 +1265,7 @@
     if (state.clip) cancelClip();
     state.trim = null;
     clearThumbnailFrames(trim.frames); clearThumbnailFrames(trim.thumbnails);
+    if (ui.trimPreviewCanvas) { ui.trimPreviewCanvas.width = 0; ui.trimPreviewCanvas.height = 0; }
     if (ui.trimPanel) ui.trimPanel.hidden = true;
     if (restore) restorePlayback(trim.restore);
     updateControls();
@@ -1165,22 +1304,51 @@
     if (!trim || state.clip) return;
     if (trim.previewing) { stopTrimPreview(); updateControls(); return; }
     if (!validateTrimHistory()) return;
-    trim.previewing = true;
+    stopTrimPreview();
+    const version = ++trim.previewVersion;
+    const request = { cancelSeek: null }; trim.previewSeek = request;
+    trim.previewing = true; trim.previewLoading = true; trim.previewError = ''; trim.previewTime = trim.start;
     state.reviewing = true; state.reviewPaused = false; state.reviewSpeed = 1;
     const video = trim.sourceType === 'session' ? ui.sessionVideo : ui.delayedVideo;
+    const current = () => state.trim === trim && trim.previewVersion === version && trim.previewing && !state.clip;
+    trim.previewStartupTimer = setTimeout(() => {
+      if (!current()) return;
+      stopTrimPreview(); trim.previewLoading = false; trim.previewError = 'Preview could not start. Try again.';
+      updateControls();
+    }, 10000);
+    updateControls();
     try {
-      if (trim.engine !== 'fallback') { await seekVideo(video, trim.start); if (state.trim !== trim || !trim.previewing) return; video.playbackRate = 1; await video.play(); }
-      const started = now();
+      if (trim.engine !== 'fallback') {
+        await seekVideo(video, trim.start, request);
+        if (!current()) return;
+        trim.previewSeek = null; drawTrimPreview(trim, trim.start);
+        video.playbackRate = 1; await video.play();
+        if (!current()) {
+          // A delayed play promise must not restart a cancelled, paused editor.
+          // A new preview/export or resumed delayed playback owns the video now.
+          if (!state.clip && !state.trim?.previewing && (video.hidden || state.reviewPaused)) video.pause();
+          return;
+        }
+      } else { trim.previewSeek = null; drawTrimPreview(trim, trim.start); }
+      clearTimeout(trim.previewStartupTimer); trim.previewStartupTimer = null;
+      const started = now(); let lastPosition = trim.start, lastAdvance = started;
       const draw = () => {
-        if (state.trim !== trim || !trim.previewing) return;
-        const time = trim.engine === 'fallback' ? Math.min(trim.end, trim.start + (now() - started) / 1000) : video.currentTime;
+        if (!current()) return;
+        const time = trim.engine === 'fallback' ? Math.min(trim.end, trim.start + (now() - started) / 1000) : Math.min(trim.end, video.currentTime);
         state.reviewTime = time;
+        if (time > lastPosition + 0.005) { lastPosition = time; lastAdvance = now(); }
+        if (now() - lastAdvance > 8000) { stopTrimPreview(); trim.previewError = 'Preview paused because the video stopped. Try again.'; updateControls(); return; }
         if (trim.engine === 'fallback') drawTrimFrame(trim, time, ui.delayedCanvas);
-        if (time >= trim.end - 0.025) { stopTrimPreview(); updateControls(); return; }
+        drawTrimPreview(trim, time);
+        if (time >= trim.end - 0.025) { stopTrimPreview(); trim.previewTime = trim.end; updateControls(); return; }
         updateTrimControls(); trim.previewFrame = requestAnimationFrame(draw);
       };
       trim.previewFrame = requestAnimationFrame(draw); updateControls();
-    } catch { stopTrimPreview(); ui.trimStatus.textContent = 'Could not preview that selection. Try a smaller section.'; updateControls(); }
+    } catch {
+      if (!current()) return;
+      stopTrimPreview(); trim.previewLoading = false; trim.previewError = 'Could not preview that selection. Try another point.';
+      ui.trimStatus.textContent = 'Could not preview that selection. Try a smaller section.'; updateControls();
+    }
   }
   function changeTrim(which, value) {
     const trim = state.trim;
@@ -1189,8 +1357,7 @@
     if (which === 'start') trim.start = Math.max(trim.range.start, trim.end - MAX_CLIP_SECONDS, Math.min(trim.end - MIN_CLIP_SECONDS, Number(value)));
     else trim.end = Math.min(trim.range.end, trim.start + MAX_CLIP_SECONDS, Math.max(trim.start + MIN_CLIP_SECONDS, Number(value)));
     const selected = which === 'start' ? trim.start : trim.end;
-    if (trim.engine === 'fallback') { drawTrimFrame(trim, selected, ui.delayedCanvas); state.reviewTime = selected; }
-    else seekReplayTo(selected);
+    seekTrimPreview(selected);
     ui.trimStatus.textContent = 'Selection updated. Preview it, then export the selected clip.';
     updateControls();
   }
@@ -1219,6 +1386,7 @@
       if (state.clip !== clip || clip.cancelled || clip.generation !== state.generation) return;
       const first = trim.engine === 'fallback' ? drawTrimFrame(trim, clip.start, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored);
       if (!first) throw new Error('No selected frame');
+      drawTrimPreview(trim, clip.start);
       clip.stream = ui.clipCanvas.captureStream(state.replayFps || 30);
       clip.recorder = clip.mimeType ? new MediaRecorder(clip.stream, { mimeType: clip.mimeType, videoBitsPerSecond: 2_000_000 }) : new MediaRecorder(clip.stream);
       clip.recorder.ondataavailable = event => { if (event.data?.size) clip.chunks.push(event.data); };
@@ -1242,6 +1410,7 @@
         if (position < clip.start - 0.12 || position > clip.end + 0.3 || now() - lastAdvance > 3000) { finishClip(clip, false, true); return; }
         const drawn = trim.engine === 'fallback' ? drawTrimFrame(trim, position, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored);
         if (!drawn) { finishClip(clip, false, true); return; }
+        drawTrimPreview(trim, Math.min(clip.end, position));
         state.reviewTime = position;
         const progress = Math.max(0, Math.min(100, 100 * (position - clip.start) / (clip.end - clip.start)));
         ui.trimProgress.value = progress;
@@ -1307,6 +1476,7 @@
     clearThumbnailFrames(state.sessionThumbnails);
     state.sessionBlob = blob; state.sessionUrl = URL.createObjectURL(blob);
     state.sessionDuration = Math.max(0.25, ((session.endedAt || now()) - session.started) / 1000);
+    state.sessionContentAspect = session.contentAspect;
     state.sessionThumbnails = session.thumbnails;
     ui.sessionVideo.src = state.sessionUrl; ui.sessionVideo.load();
     ui.sessionDownload.href = state.sessionUrl;
@@ -1322,7 +1492,8 @@
     if (state.sessionReview) returnToDelay();
     const session = { chunks: [], bytes: 0, canvas: document.createElement('canvas'), stream: null,
       recorder: null, mimeType: pickClipMime(), started: now(), frame: null, timer: null, clock: null,
-      stopping: false, finished: false, error: false, mirrored: state.mirrored, thumbnails: [], lastThumbnailAt: -Infinity, lastDrawAt: -Infinity };
+      stopping: false, finished: false, error: false, mirrored: state.mirrored,
+      contentAspect: ui.live.videoWidth / ui.live.videoHeight || 0, thumbnails: [], lastThumbnailAt: -Infinity, lastDrawAt: -Infinity };
     session.canvas.width = ui.processingCanvas.width || 854; session.canvas.height = ui.processingCanvas.height || 480;
     try {
       if (!drawContained(ui.live, session.canvas, session.mirrored)) throw new Error('Camera not ready');
@@ -1345,7 +1516,7 @@
           session.lastDrawAt = timestamp;
         }
         if (timestamp - session.lastThumbnailAt >= 5000) {
-          const canvas = copyFrame(session.canvas);
+          const canvas = copyThumbnail(ui.live, 0, session.mirrored);
           if (canvas) session.thumbnails.push({ at: (timestamp - session.started) / 1000, canvas });
           session.lastThumbnailAt = timestamp;
         }
@@ -1406,6 +1577,11 @@
   ui.trimStart?.addEventListener('input', () => changeTrim('start', ui.trimStart.value));
   ui.trimEnd?.addEventListener('input', () => changeTrim('end', ui.trimEnd.value));
   ui.trimPreview?.addEventListener('click', previewSelection);
+  ui.trimPreviewSeek?.addEventListener('input', () => {
+    if (!state.trim || state.clip) return;
+    const seconds = Number(ui.trimPreviewSeek.value);
+    stopTrimPreview(); seekTrimPreview(seconds);
+  });
   ui.trimExport?.addEventListener('click', exportSelection);
   ui.trimCancel?.addEventListener('click', () => { closeTrim(); ui.recordClip.focus(); });
   ui.trimCancelExport?.addEventListener('click', cancelClip);
