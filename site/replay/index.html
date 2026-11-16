@@ -13,18 +13,19 @@
   <link rel="icon" href="/favicon-v5.ico" sizes="any">
   <link rel="icon" href="/favicon-v5.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app-v10.css">
   <link rel="preload" href="../assets/brand/fonts/Nunito-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css">
   <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css">
+  <link rel="stylesheet" href="/assets/tool-install-v1.css">
 </head>
-<body class="fgs-replay">
+<body class="fgs-replay" data-tool-name="Replay Cam">
   <a class="skip-link" href="#main">Skip to replay controls</a>
   <header class="app-header">
     <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><picture><source media="(max-width: 610px)" srcset="../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"><img class="replay-brand-logo" src="../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png" width="1839" height="855" alt="Fernandez Growth Systems" decoding="async"></picture></a><h1>Replay Cam<span class="beta-label">BETA</span></h1><p>Practice. Step back. Watch it again.</p></div>
     <div class="header-actions">
       <span id="connectionBadge" class="badge">Ready</span>
-      <button id="installBtn" class="button button-secondary" hidden>Install</button>
+      <button id="installBtn" class="button button-secondary" type="button" data-tool-install>Add as app</button>
       <button id="fullscreenBtn" class="button button-secondary">Full screen</button>
     </div>
   </header>
@@ -32,14 +33,24 @@
   <main class="app-shell" id="main" tabindex="-1">
     <section class="viewer-panel" aria-labelledby="viewerTitle">
       <div class="section-heading">
-        <div><p class="eyebrow">DELAYED VIEW</p><h2 id="viewerTitle">Athlete replay</h2></div>
+        <div><p class="eyebrow">PRACTICE &amp; REVIEW</p><h2 id="viewerTitle">Athlete replay</h2></div>
         <output id="delayBadge" class="delay-badge">10 seconds behind</output>
       </div>
+
+      <div class="primary-controls">
+        <button id="startBtn" class="button button-primary">Start camera</button>
+        <button id="startDemoBtn" class="button button-secondary" type="button" aria-describedby="demoHelp">Try demo</button>
+        <button id="stopBtn" class="button button-danger" disabled>Stop</button>
+        <button id="flipBtn" class="button button-secondary" disabled>Switch camera</button>
+        <button id="mirrorBtn" class="button button-secondary" aria-pressed="false">Mirror: off</button>
+      </div>
+      <p id="demoHelp" class="help-text demo-help">No camera needed. Demo uses a moving timer and colored bar to try the same recording, delay, timeline, and clip controls. Press Stop before starting your camera.</p>
 
       <div id="replayStage" class="replay-stage">
         <div class="stage-toolbar"><button id="exitFullscreenBtn" class="button button-secondary" type="button" hidden>Exit full screen</button></div>
         <div id="viewer" class="viewer" tabindex="0" aria-label="Camera replay">
           <video id="delayedVideo" autoplay playsinline muted></video>
+          <video id="sessionVideo" playsinline muted hidden></video>
           <canvas id="delayedCanvas" hidden></canvas>
           <div id="viewerMessage" class="viewer-message">
             <strong>Ready to replay</strong><span>Start your camera, or try a moving demo without camera access.</span>
@@ -49,8 +60,12 @@
 
         <section class="review-controls" aria-labelledby="reviewLabel">
           <div class="review-heading">
-            <label id="reviewLabel" for="reviewRange">Review recent footage</label>
+            <label id="reviewLabel" for="reviewRange">Video timeline</label>
             <output id="reviewPosition" for="reviewRange">Start camera to build history</output>
+          </div>
+          <div id="timelineTrack" class="timeline-track" aria-hidden="true">
+            <canvas id="timelineCanvas" width="1200" height="112"></canvas>
+            <div id="timelinePlayhead" class="timeline-playhead"></div>
           </div>
           <input id="reviewRange" type="range" min="0" max="1" value="0" step="0.05" disabled aria-label="Review recorded video" aria-describedby="reviewHelp">
           <div class="range-labels review-time-labels"><span id="historyStart">Oldest</span><span id="historyEnd">Newest</span></div>
@@ -64,18 +79,45 @@
             <label for="playbackSpeed">Review speed</label>
             <select id="playbackSpeed" disabled><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1× — normal</option></select>
           </div>
-          <p id="reviewHelp" class="help-text review-help">Drag the timeline to pause and rewatch. The camera keeps recording; older footage clears as the rolling buffer fills. Compatibility mode keeps a shorter history. Choose <strong>Back to delay</strong> to follow your practice again.</p>
+          <div class="save-clip-controls">
+            <div class="clip-length-field"><label for="clipLength">Initial clip length</label><select id="clipLength"><option value="5">5 seconds</option><option value="8" selected>8 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option></select></div>
+            <button id="recordClipBtn" class="button button-success" type="button" disabled>Save clip</button>
+          </div>
+          <p id="reviewHelp" class="help-text review-help">Drag the playhead to pause and rewatch. <strong>Save clip</strong> lets you trim footage that is already in this timeline. You do not need to start a session recording first. <strong>Back to delay</strong> follows your practice again.</p>
+
+          <section id="trimPanel" class="trim-panel" aria-labelledby="trimTitle" hidden>
+            <div class="trim-heading"><div><p class="eyebrow">SAVE AN EARLIER MOMENT</p><h3 id="trimTitle" tabindex="-1">Choose your clip</h3></div><output id="trimDuration" class="trim-duration">0:00 selected</output></div>
+            <p id="trimHelp" class="help-text">Drag the left and right handles to choose the start and end. Use the arrow keys when a handle is focused.</p>
+            <section class="trim-preview" aria-labelledby="trimPreviewTitle">
+              <div class="trim-preview-heading"><h4 id="trimPreviewTitle">Selected clip preview</h4><output id="trimPreviewPosition" aria-live="off">0:00 / 0:00</output></div>
+              <div id="trimPreviewFrame" class="trim-preview-frame"><canvas id="trimPreviewCanvas" width="854" height="480" role="img" aria-label="Selected clip preview">Your selected video appears here.</canvas></div>
+              <input id="trimPreviewSeek" class="trim-preview-seek" type="range" min="0" max="1" value="0" step="0.05" aria-label="Clip preview position" aria-describedby="trimPreviewHelp" disabled>
+              <div class="trim-preview-controls"><button id="trimPreviewBtn" class="button button-secondary" type="button" disabled>Preview selection</button><span id="trimPreviewState" aria-live="off">Ready to preview</span></div>
+              <p id="trimPreviewHelp" class="help-text">Drag the edges below, then play your selection here before saving.</p>
+            </section>
+            <div class="trim-track">
+              <canvas id="trimTimelineCanvas" width="1200" height="112" aria-hidden="true"></canvas>
+              <div id="trimSelection" class="trim-selection" aria-hidden="true"></div>
+              <input id="trimStartRange" class="trim-range trim-start" type="range" min="0" max="1" value="0" step="0.05" aria-label="Clip start time" aria-describedby="trimHelp trimStartTime" disabled>
+              <input id="trimEndRange" class="trim-range trim-end" type="range" min="0" max="1" value="1" step="0.05" aria-label="Clip end time" aria-describedby="trimHelp trimEndTime" disabled>
+            </div>
+            <div class="trim-time-labels"><span>Start <output id="trimStartTime" for="trimStartRange">0:00</output></span><span>End <output id="trimEndTime" for="trimEndRange">0:00</output></span></div>
+            <div class="trim-actions"><button id="trimExportBtn" class="button button-success" type="button" disabled>Save selected clip</button><button id="trimCancelBtn" class="button button-secondary" type="button">Cancel</button></div>
+            <progress id="trimProgress" max="100" value="0" aria-label="Creating selected clip" hidden></progress>
+            <p id="trimStatus" class="help-text" role="status" aria-live="polite">Preview your selection, then save it to this device.</p>
+            <button id="trimCancelExportBtn" class="button button-secondary" type="button" hidden>Cancel clip export</button>
+          </section>
+          <a id="downloadLink" class="button button-success button-block" hidden>Download clip</a>
         </section>
       </div>
 
-      <div class="primary-controls">
-        <button id="startBtn" class="button button-primary">Start camera</button>
-        <button id="startDemoBtn" class="button button-secondary" type="button" aria-describedby="demoHelp">Try demo</button>
-        <button id="stopBtn" class="button button-danger" disabled>Stop</button>
-        <button id="flipBtn" class="button button-secondary" disabled>Switch camera</button>
-        <button id="mirrorBtn" class="button button-secondary" aria-pressed="false">Mirror: off</button>
-      </div>
-      <p id="demoHelp" class="help-text demo-help">No camera needed. Demo uses a moving timer and colored bar to try the same recording, delay, timeline, and clip controls. Press Stop before starting your camera.</p>
+
+
+      <section class="session-recording" aria-labelledby="sessionRecordingTitle">
+        <div class="session-recording-heading"><div><h3 id="sessionRecordingTitle">Keep a longer session</h3><p id="sessionStatus" class="help-text" role="status" aria-live="polite">Not recording a session</p></div><button id="sessionRecordBtn" class="button button-secondary" type="button" disabled>Start recording</button></div>
+        <p class="help-text session-recording-help">Optional. Records from the moment you start, up to 10 minutes or 128 MB. Recent replay footage is kept automatically while the camera is on.</p>
+        <div class="session-file-actions"><a id="sessionDownloadLink" class="button button-secondary" hidden>Download session</a><button id="reviewSessionBtn" class="button button-secondary" type="button" hidden>Review recorded session</button><button id="returnRecentBtn" class="button button-secondary" type="button" hidden>Back to recent footage</button></div>
+      </section>
 
       <div class="delay-control">
         <label for="delayRange">Replay delay <strong id="delayValue">10 seconds</strong></label>
@@ -89,29 +131,22 @@
         </div>
         <p id="restartNote" class="inline-note" hidden>Release the slider to apply the new delay.</p>
       </div>
-      <p class="session-hint">Set your device down, start the camera, and wait for the buffer to fill. Keep this page open while practicing.</p>
+      <p class="session-hint">Keep this page open while practicing. Save a clip before the moment leaves the recent-history buffer; older footage cannot be recovered afterward.</p>
     </section>
 
     <aside class="side-panel">
-      <section class="card" aria-labelledby="clipTitle">
-        <div class="section-heading compact"><div><p class="eyebrow">CLIP</p><h2 id="clipTitle">Record the replay</h2></div></div>
-        <label for="clipLength">Length</label>
-        <select id="clipLength">
-          <option value="5">5 seconds</option><option value="8" selected>8 seconds</option>
-          <option value="10">10 seconds</option><option value="15">15 seconds</option>
-          <option value="20">20 seconds</option><option value="30">30 seconds</option>
-        </select>
-        <button id="recordClipBtn" class="button button-success button-block" disabled>Record next 8 seconds</button>
-        <a id="downloadLink" class="button button-secondary button-block" hidden>Download clip</a>
-        <p class="help-text">Recording begins when you press the button and saves the next part of the current view, including its mirror setting and review speed. Seek to the moment you want and play it before recording. Review controls lock while a clip records.</p>
+      <section class="card quick-guide" aria-labelledby="quickGuideTitle">
+        <p class="eyebrow">TWO WAYS TO SAVE</p><h2 id="quickGuideTitle">Catch the moment</h2>
+        <ol><li><strong>Save clip:</strong> choose an earlier moment in the available timeline, drag both trim handles, preview, then save.</li><li><strong>Start recording:</strong> keep a longer video from now on. Stop recording to download it or trim a clip from it.</li></ol>
+        <p class="help-text">The timeline shows only footage still available on this device. Exporting a trimmed clip may take as long as the selected clip; keep the app visible until it is ready.</p>
       </section>
 
       <details class="card guide-card">
         <summary>Setup and device help</summary>
-        <ol><li>Place your device where it can see the whole skill.</li><li>Choose a delay that gives you time to return to the screen.</li><li>Tap <strong>Start camera</strong> and allow camera access when your browser asks.</li><li>Wait for the replay to appear, then practice and watch.</li><li>Drag <strong>Review recent footage</strong> backward, then use play or slow playback to inspect a skill. Tap <strong>Back to delay</strong> when you are ready to practice again.</li></ol>
+        <ol><li>Place your device where it can see the whole skill.</li><li>Choose a delay that gives you time to return to the screen.</li><li>Tap <strong>Start camera</strong> and allow camera access when your browser asks.</li><li>Wait for the replay to appear, then practice and watch.</li><li>Drag the <strong>Video timeline</strong> backward to pause and inspect a skill. Tap <strong>Save clip</strong> to trim that available footage, or <strong>Back to delay</strong> to practice again.</li></ol>
         <p class="help-text">If the camera is blocked, check this site's camera permission in your browser. Open Replay Cam directly in Safari or Chrome.</p>
         <p class="help-text">Use the timeline with a finger, mouse, or arrow keys. Full screen keeps the review controls beside or below the video. Available delay, history, full screen, and clip recording depend on your device and browser. Compatibility mode uses a shorter history at lower quality. Switching apps or locking your screen stops the session and clears the rolling history; start again when you return.</p>
-        <p class="help-text">To add a shortcut on iPhone or iPad: Safari → Share → Add to Home Screen. Where supported, the Install button does this for you.</p>
+        <p class="help-text">Use <strong>Add as app</strong> for device-specific install instructions. On supported browsers it opens the install prompt; iPhone and iPad use the browser's Share menu.</p>
       </details>
 
       <details class="card settings-card">
@@ -131,7 +166,7 @@
 
       <section class="card privacy-card" aria-labelledby="privacyTitle">
         <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Video stays on this device</h2>
-        <p>Replay Cam does not upload camera video or record audio. The rolling replay clears when you stop; a downloaded clip stays on your device. Downloaded clips become normal files on this device, so follow your organization’s recording, consent, and deletion policies.</p>
+        <p>Replay Cam does not upload camera video or record audio. Recent replay clears when you stop. Download clips and completed session recordings before closing or refreshing this page. Downloaded videos become normal files on this device, so follow your organization's recording, consent, and deletion policies.</p>
       </section>
 
       <section class="card diagnostics-card" aria-labelledby="statusTitle">
@@ -148,7 +183,8 @@
   <canvas id="processingCanvas" hidden></canvas>
   <canvas id="clipCanvas" hidden></canvas>
   <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
-  <script src="js/app.js" defer></script>
+  <script src="js/app-v10.js" defer></script>
   <script src="js/replay-ui.js" defer></script>
+  <script src="/assets/tool-install-v1.js" defer></script>
 </body>
 </html>

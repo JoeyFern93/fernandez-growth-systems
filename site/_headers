@@ -33,6 +33,12 @@
 /replay/sw.js
   Cache-Control: no-cache
 
+/tools-directory-sw.js
+  Cache-Control: no-cache
+
+/tools/room-measure-sw.js
+  Cache-Control: no-cache
+
 # Keep Cloudflare provider URLs out of search; retain indexing on the business domain.
 https://:project.pages.dev/*
   X-Robots-Tag: noindex

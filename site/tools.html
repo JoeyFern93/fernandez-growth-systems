@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1F563B">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'">
   <title>Free Tools | Fernandez Growth Systems</title>
   <meta name="description" content="Free browser tools built by Joe Fernandez. Sketch rooms and record measurements with Room Measure, or review practice footage with Replay Cam.">
   <meta name="robots" content="noindex, follow">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="canonical" href="https://www.fernandezgrowthsystems.com/tools">
+  <link rel="manifest" href="/tools-directory.webmanifest" data-tool-install-resource>
+  <link rel="stylesheet" href="/assets/tool-install-v1.css" data-tool-install-resource>
   <link rel="icon" href="/favicon-v5.ico" sizes="any">
   <link rel="icon" type="image/svg+xml" href="/favicon-v5.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-v5-32.png">
@@ -35,7 +37,7 @@
   <link rel="stylesheet" href="assets/brand/website/fgs-brand-v3.css">
   <link rel="stylesheet" href="assets/brand/website/site-brand-v4.css">
 </head>
-<body class="fgs-site" id="top">
+<body class="fgs-site" id="top" data-tool-name="FGS Tools">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="container header-inner">
@@ -63,6 +65,7 @@
         <span class="eyebrow">The FGS toolbox</span>
         <h1 id="tools-title">Free tools.<br>Useful by design.</h1>
         <p class="lede">Small tools that make everyday tasks easier. Built by Joe Fernandez, ready to use in your browser.</p>
+        <button type="button" class="button" data-tool-install data-tool-install-ui>Add as app</button>
       </section>
 
       <section aria-labelledby="browse-tools-title">
@@ -165,5 +168,6 @@
     </div>
   </footer>
   <script src="/assets/service.js" defer></script>
+  <script src="/assets/tool-install-v1.js" defer data-tool-install-script></script>
 </body>
 </html>
