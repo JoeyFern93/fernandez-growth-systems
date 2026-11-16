@@ -679,7 +679,7 @@
         }
         ui.bufferStatus.textContent = `${Math.min(6.2, (timestamp - started) / 1000).toFixed(1)} seconds available`;
         captureTimelineThumbnail(timestamp);
-        if (state.sessionReview || state.clip?.engine === 'fallback' || state.trim?.previewing) { updateControls(); return; }
+        if (state.sessionReview || state.clip?.engine === 'fallback' || state.trim) { updateControls(); return; }
         if (state.reviewing) {
           const range = getReplayWindow();
           if (!range) return;
@@ -743,6 +743,9 @@
   }
   async function startDemo() {
     stopCamera();
+    state.sessionReview = false;
+    ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
+    state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
     const request = ++state.cameraRequest;
     if (!window.isSecureContext || !ui.processingCanvas.captureStream) {
       showViewerMessage('Demo unavailable', 'This browser needs secure canvas video capture. Open Replay Cam over HTTPS in a current browser.');
@@ -828,6 +831,9 @@
   }
   async function startCamera() {
     stopCamera();
+    state.sessionReview = false;
+    ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
+    state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
     const request = ++state.cameraRequest;
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
       showViewerMessage('Camera unavailable', 'Open this page over HTTPS in Safari, Chrome, or Edge.');
@@ -1029,9 +1035,16 @@
     ui.trimHelp.textContent = sourceType === 'session'
       ? 'Choose up to 2 minutes from your completed session recording. The clip exports at normal speed.'
       : `Recent history is held for up to 3 minutes while you choose. Select up to 2 minutes. ${state.engine === 'fallback' ? 'Compatibility mode only has about 6 seconds of low-resolution history.' : 'Older footage outside this strip has already cleared.'}`;
-    state.trim.timer = setTimeout(() => {
-      if (!state.clip && state.trim) { closeTrim(); showToast('The clip picker closed to release its held history. Choose a fresh section.'); }
-    }, TRIM_HOLD_MS);
+    const heldTrim = state.trim;
+    const expireHeldHistory = () => {
+      if (state.trim !== heldTrim) return;
+      // An active export has its own bounded watchdog. Recheck after it exits so
+      // success, cancellation, decode errors and empty output all release the pin.
+      if (state.clip) { heldTrim.timer = setTimeout(expireHeldHistory, 1000); return; }
+      closeTrim();
+      showToast('The clip picker closed to release its held history. Choose a fresh section.');
+    };
+    heldTrim.timer = setTimeout(expireHeldHistory, TRIM_HOLD_MS);
     updateControls();
     ui.trimStart.focus();
   }
@@ -1153,6 +1166,9 @@
       end: trim.end, sourceType: trim.sourceType, engine: trim.engine, restore: playbackSnapshot(), cancelSeek: null,
       previousDownloadVisible: !ui.download.hidden };
     state.clip = clip;
+    // Cover decoding and play() as well as rendering; a stalled play promise
+    // must not leave the held source pinned indefinitely.
+    clip.timer = setTimeout(() => finishClip(clip, false, true), (clip.end - clip.start + 25) * 1000);
     ui.trimProgress.hidden = false; ui.trimProgress.value = 0;
     ui.trimStatus.textContent = `Preparing ${formatPrecise(clip.end - clip.start)} of selected footage. Keep this page open; export takes about the clip length.`;
     ui.download.hidden = true;
@@ -1192,7 +1208,6 @@
         clip.frame = requestAnimationFrame(draw);
       };
       clip.frame = requestAnimationFrame(draw);
-      clip.timer = setTimeout(() => finishClip(clip, false, true), (clip.end - clip.start + 15) * 1000);
       updateControls();
     } catch {
       if (state.clip === clip && !clip.cancelled) finishClip(clip, false, true);
@@ -1245,7 +1260,7 @@
     if (state.sessionReview) returnToDelay();
     const session = { chunks: [], bytes: 0, canvas: document.createElement('canvas'), stream: null,
       recorder: null, mimeType: pickClipMime(), started: now(), frame: null, timer: null, clock: null,
-      stopping: false, finished: false, error: false, mirrored: state.mirrored, thumbnails: [], lastThumbnailAt: -Infinity };
+      stopping: false, finished: false, error: false, mirrored: state.mirrored, thumbnails: [], lastThumbnailAt: -Infinity, lastDrawAt: -Infinity };
     session.canvas.width = ui.processingCanvas.width || 854; session.canvas.height = ui.processingCanvas.height || 480;
     try {
       if (!drawContained(ui.live, session.canvas, session.mirrored)) throw new Error('Camera not ready');
@@ -1261,7 +1276,10 @@
       const draw = timestamp => {
         if (state.session !== session || session.stopping) return;
         if (!state.running || !state.stream) { finishSessionRecording(); return; }
-        drawContained(ui.live, session.canvas, session.mirrored);
+        if (timestamp - session.lastDrawAt >= 1000 / (state.replayFps || 30) - 1) {
+          drawContained(ui.live, session.canvas, session.mirrored);
+          session.lastDrawAt = timestamp;
+        }
         if (timestamp - session.lastThumbnailAt >= 5000) {
           const canvas = copyFrame(session.canvas);
           if (canvas) session.thumbnails.push({ at: (timestamp - session.started) / 1000, canvas });

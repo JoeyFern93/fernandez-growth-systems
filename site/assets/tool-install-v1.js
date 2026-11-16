@@ -69,8 +69,8 @@
 
   const instructions = {
     ios: { title: 'iPhone or iPad', steps: ['Open this tool in Safari.', 'Tap Share (the square with the upward arrow).', 'Choose Add to Home Screen, then tap Add. Keep Open as Web App on if it is shown.'] },
-    android: { title: 'Android', steps: ['Open this tool in Chrome or your preferred browser.', 'Open the browser menu (⋮).', 'Choose Add to Home screen or Install app, then confirm. The wording depends on your browser.'] },
-    desktop: { title: 'Computer', steps: ['In Chrome or Edge, look for an install icon in the address bar or an Install option in the browser menu.', 'On a Mac using Safari, choose File → Add to Dock.', 'If your browser does not offer installation, bookmark this page for quick access.'] }
+    android: { title: 'Android', steps: ['Open this tool in Chrome or your preferred browser.', 'Open the browser menu (three dots).', 'Choose Add to Home screen or Install app, then confirm. The wording depends on your browser.'] },
+    desktop: { title: 'Computer', steps: ['In Chrome or Edge, look for an install icon in the address bar or an Install option in the browser menu.', 'On a Mac using Safari, choose File, then Add to Dock.', 'If your browser does not offer installation, bookmark this page for quick access.'] }
   };
   const ua = navigator.userAgent || '';
   const ios = /iPad|iPhone|iPod/.test(ua) || (/Mac/.test(navigator.platform || '') && navigator.maxTouchPoints > 1);
