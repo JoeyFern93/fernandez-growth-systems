@@ -185,7 +185,7 @@ details summary { min-height: 44px; align-content: center; }
   .fgs-replay .review-speed select { flex-basis: 138px; font-size: .85rem; }
   .fgs-replay .trim-panel { padding: 10px; }
   .fgs-replay .trim-preview-frame,.fgs-replay #trimPreviewCanvas { max-height: 260px; }
-  .fgs-replay .trim-preview-controls .button { flex: 1 1 145px; }
+  .fgs-replay .trim-preview-controls .button { flex: 1 1 100%; }
   .fgs-replay .trim-actions .button { flex-basis: 100%; }
   .fgs-replay .trim-actions #trimCancelBtn { flex-basis: 100%; }
   .fgs-replay .session-recording-heading { align-items: start; }
