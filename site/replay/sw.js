@@ -1,7 +1,7 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-15-approved-artwork-v3.0-rounded-favicon';
-const APP_SHELL = ["./", "./index.html", "./css/app.css", "./js/app.js", "./js/replay-ui.js", "./manifest-v3.webmanifest", "./icons/icon-v3.svg", "./icons/icon-192-v3.png", "./icons/icon-512-v3.png", "./icons/icon-maskable-512.png", "./icons/icon-maskable-512-v3.svg", "../favicon-v5.ico", "../favicon-v5.svg", "../favicon-v5-32.png", "../assets/brand/website/fgs-brand-v3.css", "../assets/brand/replay-brand-v3.css", "../assets/brand/fonts/Nunito-Variable.woff2", "../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png", "../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"];
+const CACHE_NAME = CACHE_PREFIX + '2026-11-16-timeline-trim-v10';
+const APP_SHELL = ["./", "./index.html", "./css/app-v10.css", "./js/app-v10.js", "./js/replay-ui.js", "./manifest-v3.webmanifest", "./icons/icon-v3.svg", "./icons/icon-192-v3.png", "./icons/icon-512-v3.png", "./icons/icon-maskable-512.png", "./icons/icon-maskable-512-v3.svg", "../favicon-v5.ico", "../favicon-v5.svg", "../favicon-v5-32.png", "../assets/tool-install-v1.css", "../assets/tool-install-v1.js", "../assets/brand/website/fgs-brand-v3.css", "../assets/brand/replay-brand-v3.css", "../assets/brand/fonts/Nunito-Variable.woff2", "../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png", "../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"];
 const scope = new URL(self.registration.scope);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
