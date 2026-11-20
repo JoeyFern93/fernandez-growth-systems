@@ -250,6 +250,7 @@
           btn.disabled = true;
           try {
             const res = await api(apiRoot + '/notes/' + encodeURIComponent(note.id),'PATCH',{resolved:!note.resolved});
+            refreshSequence++;
             const old = data.notes.findIndex(n => n.id === note.id);
             if (old !== -1) data.notes[old] = res.note;
             drawNotes(); announce(res.note.resolved ? 'Note resolved.' : 'Note reopened.');
@@ -291,6 +292,7 @@
   };
   registerForm('add-page', async form => {
     const result = await api(apiRoot + '/pages','POST',{url:website(form.elements.url.value)});
+    refreshSequence++;
     if (!data.pages.some(p => p.id === result.page.id)) data.pages.push(result.page);
     switchPage(result.page.id); form.reset(); announce('Page added.'); el('page-select').focus();
   });
@@ -300,6 +302,7 @@
     statusBusy = true; el('close-round').disabled = true;
     try {
       const res = await api(apiRoot,'PATCH',{closed:!data.review.closed});
+      refreshSequence++;
       data.review = {...data.review, ...res.review}; render();
       announce(data.review.closed ? 'Review closed.' : 'Review reopened.');
     } catch(error) { announce(error.message); }
@@ -323,12 +326,14 @@
     const context = {...reviewerContext(),mode:target?.mode || 'page',pageUrl:target?.pageUrl || currentFrameUrl || page.url};
     if (target?.mode === 'live') {
       context.elementLabel=target.label; context.selector=target.selector; context.liveViewport=target.viewport;
+      context.scrollX=target.scrollX; context.scrollY=target.scrollY;
     }
     const body = {clientId,pageId:page.id,name,text,context};
     if (target?.mode === 'screenshot') Object.assign(body,{captureId:target.captureId,x:target.x,y:target.y});
     el('feedback').readOnly=true; el('reviewer-name').readOnly=true;
     try {
       const result = await api(apiRoot + '/notes','POST',body);
+      refreshSequence++;
       if (!data.notes.some(n => n.id === result.note.id)) data.notes.push(result.note);
       storage('set','fgs-reviewer-name',name,true); storage('remove',draftKey());
       el('feedback').value=''; target=null; clientId=crypto.randomUUID();
@@ -363,6 +368,11 @@
     try { await refresh(false); } catch(error) { announce(error.message); }
     finally { el('refresh-notes').disabled=false; }
   };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState==='visible' && data && !isSending && !statusBusy) {
+      refresh(true).catch(() => { /* Manual refresh displays any connection error. */ });
+    }
+  });
 
   function frameStop() {
     clearTimeout(frameTimer); frameReady=false; frameOrigin=null; currentFrameUrl=null; frame=null;
@@ -439,6 +449,7 @@
     if (url.origin!==frameOrigin || typeof msg.element?.label!=='string') return;
     url.hash=''; liveMode(false);
     setTarget({mode:'live',pageUrl:url.href,label:msg.element.label.slice(0,160),selector:String(msg.element.selector||'').slice(0,250),
+      scrollX:Number(msg.scrollX)||0,scrollY:Number(msg.scrollY)||0,
       viewport:{width:Number(msg.viewport?.width)||0,height:Number(msg.viewport?.height)||0}},true);
   });
   function readImage(file) {
@@ -476,6 +487,7 @@
     throw Error('Use a smaller screenshot or crop it before uploading.');
   }
   function gotCapture(value) {
+    refreshSequence++;
     if (!data.captures.some(c=>c.id===value.id)) data.captures.push(value);
     if (value.pageId===page.id) {
       setTarget(null); drawCapture(value.id); drawNotes(); el('capture-tools').open=false;
@@ -517,8 +529,10 @@
   registerForm('upload',async form => {
     if (!stagedImage) throw Error('Choose a screenshot and preview it first.');
     const pageId=page.id, label=form.elements.label.value.trim() || stagedFilename;
-    const res=await api(apiRoot+'/captures','POST',{pageId,label,...stagedImage});
-    gotCapture(res.capture); discardImage();
+    const image=stagedImage;
+    const res=await api(apiRoot+'/captures','POST',{pageId,label,...image});
+    gotCapture(res.capture);
+    if (page.id===pageId && image===stagedImage) discardImage();
   });
   el('auto-capture').onclick=async () => {
     const btn=el('auto-capture'); btn.disabled=true; btn.textContent='Capturing…';
