@@ -1,6 +1,6 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-room-measure-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-16-install-v1';
+const CACHE_NAME = CACHE_PREFIX + '2026-11-20-mobile-canvas-v2';
 const NAVIGATION_PATHS = new Set(['/tools/room-measure', '/tools/room-measure.html']);
 const SHELL = ['/tools/room-measure', '/tools/room-measure.webmanifest',
   '/assets/tool-install-v1.js', '/assets/tool-install-v1.css',

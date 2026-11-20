@@ -1812,11 +1812,13 @@
         left: 0;
         display: none;
         max-height: calc(100vh - var(--header-height));
+        max-height: calc(100dvh - var(--header-height));
         align-items: stretch;
         flex-direction: column;
         gap: 3px;
-        padding: 18px 20px 26px;
+        padding: 16px 20px calc(18px + env(safe-area-inset-bottom));
         overflow-y: auto;
+        overscroll-behavior-y: contain;
         border-bottom: 1px solid var(--line);
         background: var(--paper);
         box-shadow: 0 20px 45px rgba(23, 61, 43, 0.1);
@@ -2082,13 +2084,6 @@
         padding: 21px;
       }
 
-      .back-to-top {
-        right: 16px;
-        bottom: calc(82px + env(safe-area-inset-bottom));
-        width: 43px;
-        height: 43px;
-      }
-
       .mobile-cta-bar {
         position: fixed;
         right: 12px;
@@ -2244,7 +2239,7 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
 .preview-fields :disabled { cursor: not-allowed; opacity: .65; }
 .form-actions button:disabled { cursor: not-allowed; transform: none; box-shadow: none; }
 
-/* Keep the main action visible sooner and clear of the hosting badge. */
+/* Keep the main action visible sooner. */
 @media (min-width: 1041px) {
   .hero { padding-block: clamp(52px, 4.5vw, 72px) 88px; }
   .hero h1 { font-size: clamp(3rem, 5.2vw, 5rem); }
@@ -2252,8 +2247,6 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
 }
 @media (max-width: 760px) {
   .hero h1 { font-size: clamp(2.4rem, 11vw, 3.6rem); }
-  .mobile-cta-bar { bottom: calc(68px + env(safe-area-inset-bottom)); }
-  .site-footer { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 430px) {
   .header-inner { gap: 12px; }
@@ -2287,9 +2280,7 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
 .utility-card { padding: clamp(28px, 6vw, 64px); border: 1px solid var(--line-warm); border-radius: var(--radius-lg); background: var(--white); }
 .utility-steps, .recovery-links { display: grid; gap: 16px; padding-left: 24px; margin-top: 32px; }
 .recovery-links a { color: var(--blue-dark); text-underline-offset: 4px; font-weight: 700; }
-.back-to-top { bottom: calc(76px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) {
-  .back-to-top { bottom: calc(144px + env(safe-area-inset-bottom)); }
   .form-actions .button { width: 100%; }
   .inquiry-intro { font-size: .9rem; }
 }

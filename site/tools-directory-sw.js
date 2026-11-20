@@ -1,12 +1,12 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-tools-directory-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-16-install-v1';
+const CACHE_NAME = CACHE_PREFIX + '2026-11-20-mobile-v2';
 const NAVIGATION_PATHS = new Set(['/tools', '/tools.html']);
 const SHELL = ['/tools', '/assets/site.css', '/assets/tools.css', '/assets/service.js',
   '/assets/tool-install-v1.js', '/assets/tool-install-v1.css', '/tools-directory.webmanifest',
   '/assets/brand/website/fgs-brand-v3.css', '/assets/brand/website/site-brand-v4.css',
   '/assets/brand/fonts/Nunito-Variable.woff2',
-  '/assets/brand/logos/FGS-Logo-Green-Transparent-v3.png', '/assets/brand/logos/FGS-Logo-White-Transparent-v4.png',
+  '/assets/brand/logos/FGS-Logo-Green-Mobile-613.webp', '/assets/brand/logos/FGS-Logo-Green-Transparent-v3.png', '/assets/brand/logos/FGS-Logo-White-Transparent-v4.png',
   '/assets/brand/icons/FGS-JF-Leaf-Green-v3.svg', '/assets/brand/icons/FGS-JF-Leaf-192-v3.png', '/assets/brand/icons/FGS-JF-Leaf-512-v3.png',
   '/favicon-v5.ico', '/favicon-v5.svg', '/favicon-v5-32.png', '/replay/icons/icon.svg', '/assets/room-measure.svg'];
 const ALLOWED = new Set(SHELL);

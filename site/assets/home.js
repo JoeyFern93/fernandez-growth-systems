@@ -24,7 +24,7 @@
         navigation.classList.remove('open');
         document.body.classList.remove('nav-open');
         if (returnFocus) {
-          menuButton.focus();
+          menuButton.focus({ preventScroll: true });
         }
       }
 
@@ -36,7 +36,8 @@
         window.requestAnimationFrame(function () {
           if (menuButton.getAttribute('aria-expanded') !== 'true') return;
           const firstLink = navigation.querySelector('a');
-          if (firstLink) firstLink.focus();
+          navigation.scrollTop = 0;
+          if (firstLink) firstLink.focus({ preventScroll: true });
         });
       }
 
@@ -49,8 +50,10 @@
         const reviewRect = reviewSection.getBoundingClientRect();
 
         progressBar.style.transform = 'scaleX(' + progress + ')';
-        backToTop.classList.toggle('is-visible', scrollTop > 700);
-        backToTop.inert = scrollTop <= 700;
+        const mobileLayout = window.innerWidth <= 760;
+        const showBackToTop = mobileLayout || scrollTop > 700;
+        backToTop.classList.toggle('is-visible', showBackToTop);
+        backToTop.inert = !showBackToTop;
 
         let nearestSectionTop = -Infinity;
         trackedSections.forEach(function (item) {
@@ -79,7 +82,7 @@
           reviewLink.removeAttribute('aria-current');
         }
 
-        const showMobileCta = window.innerWidth <= 760 &&
+        const showMobileCta = mobileLayout &&
           scrollTop > 620 &&
           reviewRect.top > window.innerHeight * 0.72;
         mobileCta.classList.toggle('is-visible', showMobileCta);
@@ -147,6 +150,12 @@
         if (window.innerWidth > 1040) {
           closeMenu(false);
         }
+        requestScrollUpdate();
+      });
+
+      window.addEventListener('pageshow', function (event) {
+        if (!event.persisted) return;
+        closeMenu(window.innerWidth <= 1040 && navigation.contains(document.activeElement));
         requestScrollUpdate();
       });
 
