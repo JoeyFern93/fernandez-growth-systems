@@ -1,8 +1,8 @@
 # FGS Site Review
 
-Create an account-free review at https://sitereview.fernandezgrowthsystems.com/. Enter a website address and an optional round title. Copy the reviewer link for clients. Keep the private owner link to manage the round from another browser.
+Visit https://sitereview.fernandezgrowthsystems.com/, enter a website address, and open it. The reviewer link opens the website with a feedback button in the corner. Use Share to invite a client. Keep the private owner link to manage the round from another browser.
 
-Guests can open the live site, leave page notes, and upload or annotate screenshots. A screenshot stays with its original pin when the design changes. The owner can add pages, resolve notes, close the round, or replace its invitation. Everyone holding the current reviewer link can see its screenshots and notes.
+On a connected website, browse to the issue, choose Leave feedback, select the item, and save a note. The real Fernandez Growth Systems website is connected. On other sites that allow embedding, guests can browse and leave a page note. If a website blocks the preview, reviewers can open the original site, use a floating note window in supported desktop browsers, or annotate a screenshot. Everyone holding the current reviewer link can see the round's screenshots and feedback.
 
 ## Live element feedback
 
@@ -12,7 +12,7 @@ On a preview you control, include this tag on each page:
 <script defer src="https://sitereview.fernandezgrowthsystems.com/live.js"></script>
 ```
 
-The preview must allow the review service to frame it and load the script. Keep this configuration on the intended preview. Open the preview URL as a review, choose live review, and select an element. Review credentials stay on the review service. See `public/demo/fgs/` for a working preview of the FGS site.
+The preview must allow the review service to frame it and load the script. For a site with a same-origin script policy, host `public/live.js` on that site and set the script tag's `data-review-origin` attribute to `https://sitereview.fernandezgrowthsystems.com`. The bridge waits for the trusted review window. Direct visits use the normal website, and review credentials stay on the review service.
 
 ## Deployment
 

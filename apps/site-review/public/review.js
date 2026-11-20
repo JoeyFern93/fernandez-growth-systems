@@ -4,13 +4,11 @@
   const parts = location.pathname.split('/').filter(Boolean);
   const invite = parts.length === 2 ? parts[1] : '';
   const owner = new URLSearchParams(location.hash.slice(1)).get('owner');
-  const root = '/api/reviews';
-  const apiRoot = root + '/' + encodeURIComponent(invite);
+  const apiRoot = '/api/reviews/' + encodeURIComponent(invite);
   const channel = 'fgs-site-review-v1';
-  let data, page, capture, target, frame, frameOrigin, frameReady, currentFrameUrl, frameTimer, toastTimer;
-  let clientId, isSending = false, statusBusy = false, refreshSequence = 0;
-  let stagedImage, stagedFilename, imageSequence=0;
-
+  let data, page, capture, target, frame, frameOrigin, frameReady, currentFrameUrl;
+  let toastTimer, frameTimer, clientId, notePageId, stagedImage, stagedFilename;
+  let imageSequence=0, refreshSequence=0, view='website', picking=false, isSending=false, statusBusy=false;
   function storage(action, key, value, persistent = false) {
     try {
       const store = persistent ? localStorage : sessionStorage;
@@ -76,40 +74,57 @@
     if (items.some(item => item.id === selected)) select.value = selected;
   }
   function pageLabel(p) { return p.label || new URL(p.url).pathname || p.url; }
-  function inviteUrl() {
-    return location.origin + data.review.reviewerPath + (frameReady && !el('live-view').hidden ? '#live' : '');
+  function modal(id) {
+    const wanted=el(id);
+    if(wanted.open)return;
+    for(const d of document.querySelectorAll('dialog[open]')) d.close();
+    wanted.showModal();
   }
+  function closeDialogs() {
+    for(const d of document.querySelectorAll('dialog[open]')) d.close();
+  }
+  for(const btn of document.querySelectorAll('[data-close]')) btn.onclick=()=>btn.closest('dialog').close();
+  for(const d of document.querySelectorAll('dialog.drawer')) d.addEventListener('click', e=>{
+    if(e.target!==d || isSending)return;
+    const r=d.getBoundingClientRect();
+    if(e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom)d.close();
+  });
+  function inviteUrl() { return location.origin + data.review.reviewerPath; }
   function ownerUrl() { return location.origin + '/' + encodeURIComponent(data.review.host) + '/' + encodeURIComponent(data.review.id) + '#owner=' + encodeURIComponent(owner); }
   async function copy(value, caption) {
-    try { await navigator.clipboard.writeText(value); announce(caption + ' copied.'); }
-    catch {
-      el('copy-title').textContent = caption; el('copy-value').value = value;
-      el('copy-dialog').showModal(); el('copy-value').select();
-    }
+    try { await navigator.clipboard.writeText(value);
+      const button=document.activeElement;
+      if (button?.tagName==='BUTTON' && button.closest('dialog')) {
+        if (!button.dataset.original)button.dataset.original=button.textContent;
+        button.textContent='Copied';
+        setTimeout(()=>{ if(button.textContent==='Copied')button.textContent=button.dataset.original; },1800);
+      }
+      announce(caption + ' copied.'); }
+    catch { el('copy-title').textContent=caption; el('copy-value').value=value; modal('copy-dialog'); el('copy-value').select(); }
   }
-  async function createReview(url,title,sample) {
-    const result = await api(root, 'POST', {url,title}, false);
-    const destination = new URL(result.ownerPath, location.origin);
-    if (destination.origin !== location.origin || !destination.hash.startsWith('#owner='))
-      throw Error('The owner link could not be opened. Please try again.');
-    storage('set', sample ? 'fgs-sample' : 'fgs-first-owner', destination.pathname);
+  async function createReview(url) {
+    const r = await api('/api/reviews', 'POST', {url},false);
+    const destination=new URL(r.ownerPath,location.origin);
+    if (destination.origin!==location.origin || !destination.hash.startsWith('#owner=')) throw Error('The new review could not be opened.');
     location.assign(destination.href);
   }
-  registerForm('create', async form => {
-    await createReview(website(form.elements.url.value),form.elements.title.value.trim(),false);
+  registerForm('create',async form=>{
+    const button=form.querySelector('[type=submit]'); button.textContent='Opening website…';
+    try { await createReview(website(form.elements.url.value)); } finally { button.textContent='Open website →'; }
   });
-  el('start-demo').onclick=async () => {
-    const btn=el('start-demo'); btn.disabled=true; btn.textContent='Opening sample…';
-    el('demo-error').textContent='';
-    try { await createReview(new URL('/demo/fgs/',location.origin).href,'FGS mobile preview',true); }
+  el('start-demo').onclick=async ()=>{
+    const btn=el('start-demo'); btn.disabled=true; el('demo-error').textContent='';
+    try { await createReview('https://www.fernandezgrowthsystems.com/'); }
     catch(error) { el('demo-error').textContent=error.message; }
-    finally { btn.disabled=false; btn.textContent='Try a sample review'; }
+    finally { btn.disabled=false; }
   };
-  el('share').onclick = () => copy(inviteUrl(), 'Reviewer link');
-  el('copy-owner').onclick = () => copy(ownerUrl(), 'Private owner link');
-  el('copy-snippet').onclick = () => copy(el('snippet').textContent, 'Preview script');
-  el('reload').onclick = () => location.reload();
-
+  el('reload').onclick=()=>location.reload();
+  el('notes-open').onclick=()=>{ drawNotes(); modal('notes-dialog'); refresh(true).catch(()=>{}); };
+  el('options').onclick=()=>modal('menu-dialog');
+  el('share').onclick=()=>{ el('reviewer-link').value=inviteUrl(); modal('share-dialog'); };
+  el('copy-review').onclick=()=>copy(inviteUrl(),'Reviewer link');
+  el('copy-owner').onclick=()=>copy(ownerUrl(),'Private owner link');
+  el('copy-snippet').onclick=()=>copy(el('snippet').textContent,'Preview script');
   function reviewerContext() {
     const ua = navigator.userAgent;
     const browser = /Edg(?:A|iOS)?\//.test(ua) ? 'Edge' : /(?:Firefox|FxiOS)\//.test(ua) ? 'Firefox'
@@ -123,58 +138,86 @@
     return {browser, device, os, viewport:{width:innerWidth,height:innerHeight},
       screen:{width:screen.width,height:screen.height}, language:navigator.language};
   }
-  function draftKey() { return 'fgs-note:' + invite + ':' + page.id; }
+  function draftKey() { return 'fgs-note:' + invite + ':' + (notePageId || page.id); }
   function saveDraft() {
-    if (!page || !clientId) return;
-    const draft = {text:el('feedback').value, name:el('reviewer-name').value, target, clientId};
-    storage('set', draftKey(), JSON.stringify(draft));
+    if(!page || !clientId)return;
+    storage('set',draftKey(),JSON.stringify({clientId,text:el('feedback').value,name:el('reviewer-name').value,target, url:el('note-url').value}));
   }
   function restoreDraft() {
+    notePageId=page.id;
     let draft;
-    try { draft = JSON.parse(storage('get', draftKey())); } catch { /* Invalid local draft. */ }
-    el('feedback').value = draft?.text || '';
-    el('reviewer-name').value = draft?.name || storage('get','fgs-reviewer-name',null,true) || '';
-    clientId = draft?.clientId || crypto.randomUUID();
-    target = draft?.target || null;
-    if (target?.mode === 'screenshot' && target.captureId !== capture?.id) {
-      const original = data.captures.find(c => c.id === target.captureId && c.pageId === page.id);
-      if (original) drawCapture(original.id);
-      else target=null;
+    try { draft=JSON.parse(storage('get',draftKey())); } catch { /* Optional local draft. */ }
+    el('feedback').value=draft?.text || '';
+    el('reviewer-name').value=draft?.name || storage('get','fgs-reviewer-name',null,true) || '';
+    el('note-url').value=draft?.url || '';
+    clientId=draft?.clientId || crypto.randomUUID();
+    target=draft?.target || null;
+    if(target?.captureId && !data.captures.some(c=>c.id===target.captureId))target=null;
+    el('note-form').querySelector('.form-error').textContent='';
+  }
+  for(const id of ['feedback','reviewer-name','note-url'])el(id).addEventListener('input',saveDraft);
+  function openComposer(nextTarget) {
+    if(!page || data.review.closed || isSending)return;
+    setPicking(false);
+    if(nextTarget!==undefined)target=nextTarget;
+    else if(!target || !el('feedback').value)target={mode:'page',pageUrl:currentFrameUrl || page.url};
+    notePageId=page.id;
+    el('note-target').textContent=target?.mode==='screenshot' ? 'Pinned to ' + target.label : target?.mode==='live' ? 'On this page · ' + target.label : 'Page note · ' + (target?.pageUrl || currentFrameUrl || page.url);
+    el('generalize-note').hidden=!target || target.mode==='page';
+    el('note-location').hidden=frameReady || target?.mode==='screenshot';
+    el('note-form').querySelector('.form-error').textContent='';
+    saveDraft(); drawMarkers(); modal('composer'); el('feedback').focus({preventScroll:true});
+  }
+  let navigatedWithoutBridge=false;
+  function pageNote() {
+    const url=currentFrameUrl || page.url;
+    openComposer({mode:'page',pageUrl:url});
+    if(!frameReady && navigatedWithoutBridge) {
+      el('note-target').textContent='Opened from ' + page.url;
+      el('note-location').open=true;
     }
-    if (target?.mode === 'live') target = null;
-    el('note-form').querySelector('.form-error').textContent = '';
   }
-  el('feedback').addEventListener('input', saveDraft);
-  el('reviewer-name').addEventListener('input', saveDraft);
-  function drawTarget() {
-    let text = 'Page note';
-    if (target?.mode === 'screenshot') text = 'Screenshot pin · ' + target.label;
-    if (target?.mode === 'live') text = 'Live element · ' + target.label;
-    el('note-target').textContent = text;
-    el('clear-target').hidden = !target;
-    drawMarkers();
+  function beginFeedback(keyboard=false) {
+    if(isSending || data.review.closed)return;
+    if(el('feedback').value.trim()) { openComposer(); return; }
+    if((view==='website'&&frameReady)||(view==='screenshot'&&capture))setPicking(true,keyboard);
+    else pageNote();
   }
-  function setTarget(value, moveFocus = false) {
-    if (isSending) return;
-    target = value;
-    drawTarget(); saveDraft();
-    if (moveFocus) el(el('reviewer-name').value ? 'feedback' : 'reviewer-name').focus();
+  el('leave-feedback').onclick=e=>beginFeedback(e.detail===0);
+  for(const name of ['pointerdown','mousedown'])el('leave-feedback').addEventListener(name,e=>e.preventDefault());
+  el('cancel-pick').onclick=()=>{setPicking(false); el('leave-feedback').focus();};
+  el('whole-note').onclick=pageNote;
+  el('composer').addEventListener('cancel',e=>{if(isSending)e.preventDefault();});
+  el('composer').addEventListener('close',()=>{if(!isSending && data)saveDraft();});
+  el('help-note').onclick=pageNote;
+  el('generalize-note').onclick=pageNote;
+  function setPicking(on,keyboard=false) {
+    picking=on;
+    el('pick-actions').hidden=!on; el('leave-feedback').hidden=on || !!data?.review.closed;
+    el('page-help').hidden=on || view!=='website' || !frameHelpAvailable;
+    el('keyboard-pin').hidden=!on || view!=='screenshot';
+    el('shot-stage').classList.toggle('picking',on && view==='screenshot');
+    if(frameReady)postFrame('mode',on?'pick':'browse',keyboard);
+    if(on && keyboard) {
+      if(view==='website')frame?.focus();
+      else { el('keyboard-pin').open=true; el('pin-x').focus(); }
+    }
+    if(on)el('pick-label').textContent=view==='screenshot'?'Tap a spot on the screenshot.':'Tap the part you want to discuss.';
   }
-  el('clear-target').onclick = () => setTarget(null);
-  function pick(x, y) {
-    if (!capture || data.review.closed || isSending) return;
-    const clamp = n => Math.max(0, Math.min(1, n));
-    setTarget({mode:'screenshot',captureId:capture.id,label:capture.label,x:clamp(x),y:clamp(y)}, true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape' && picking){setPicking(false);el('leave-feedback').focus();}});
+  function pick(x,y) {
+    if(!capture || data.review.closed || isSending)return;
+    const clamp=n=>Math.max(0,Math.min(1,n));
+    openComposer({mode:'screenshot',pageUrl:page.url,captureId:capture.id,label:capture.label,x:clamp(x),y:clamp(y)});
   }
-  el('shot-stage').addEventListener('click', event => {
-    if (event.target.closest('button') || !el('capture-image').naturalWidth) return;
-    const bounds = el('capture-image').getBoundingClientRect();
-    pick((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
+  el('shot-stage').addEventListener('click',e=>{
+    if(e.target.closest('button') || !el('capture-image').naturalWidth)return;
+    const r=el('capture-image').getBoundingClientRect();
+    pick((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height);
   });
-  el('set-pin').onclick = () => {
-    const x = el('pin-x'), y = el('pin-y');
-    if (x.value !== '' && y.value !== '' && x.reportValidity() && y.reportValidity())
-      pick(Number(x.value)/100, Number(y.value)/100);
+  el('set-pin').onclick=()=>{
+    const x=el('pin-x'), y=el('pin-y');
+    if(x.value!=='' && y.value!=='' && x.reportValidity() && y.reportValidity())pick(+x.value/100,+y.value/100);
   };
   function place(marker, x, y) {
     marker.style.left = (x*100) + '%'; marker.style.top = (y*100) + '%';
@@ -190,7 +233,7 @@
       pin.append(node('span',String(i+1)));
       pin.onclick = () => {
         const item = el('note-' + note.id);
-        if (item) { item.focus(); item.scrollIntoView({block:'center'}); }
+        if (item) { modal('notes-dialog'); item.focus(); item.scrollIntoView({block:'center'}); }
       };
       markers.append(place(pin,note.x,note.y));
     }
@@ -199,17 +242,14 @@
       markers.append(place(marker,target.x,target.y));
     }
   }
-  function drawCapture(desiredId) {
-    const items = data.captures.filter(c => c.pageId === page.id);
-    capture = items.find(c => c.id === desiredId) || items[items.length-1] || null;
-    el('has-capture').hidden = !capture;
-    el('empty-capture').hidden = !!capture;
-    el('keyboard-pin').hidden = data.review.closed;
-    el('pin-help').hidden = data.review.closed;
-    if (capture) {
-      setOptions(el('capture-select'),items,capture.id,c => c.label + ' · ' + c.width + ' × ' + c.height);
-      if (el('capture-image').getAttribute('src') !== capture.imageUrl) el('capture-image').src = capture.imageUrl;
-      el('capture-image').alt = capture.label + ' screenshot of ' + page.url + ', ' + capture.width + ' by ' + capture.height + ' pixels.';
+  function drawCapture(id) {
+    const items=data.captures.filter(c=>c.pageId===page.id);
+    capture=items.find(c=>c.id===id) || items[items.length-1] || null;
+    setOptions(el('capture-select'),items,capture?.id,c=>c.label + ' · ' + c.width + ' × ' + c.height);
+    el('existing-shot').hidden=!items.length;
+    if(capture){
+      if(el('capture-image').getAttribute('src')!==capture.imageUrl)el('capture-image').src=capture.imageUrl;
+      el('capture-image').alt='Screenshot of ' + page.url + ', ' + capture.width + ' by ' + capture.height + ' pixels.';
     } else el('capture-image').removeAttribute('src');
     drawMarkers();
   }
@@ -217,7 +257,7 @@
     el('scope-control').hidden = data.pages.length < 2;
     const list = el('note-list'); list.replaceChildren();
     const notes = data.notes.filter(n => el('scope').value === 'all' || n.pageId === page.id);
-    el('note-count').textContent = '(' + notes.length + ')';
+    el('bar-count').textContent = data.notes.length;
     if (!notes.length) { list.append(node('li','No feedback yet.','helper')); return; }
     const byDate = notes.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt));
     for (const note of byDate) {
@@ -228,20 +268,20 @@
       const shot = data.captures.find(c => c.id === note.captureId);
       const original = data.pages.find(p => p.id === note.pageId);
       const ctx = note.context || {};
-      const where = shot ? shot.label + ' (' + shot.width + ' × ' + shot.height + ')'
+      const where = shot ? shot.label + ' (' + shot.width + ' x ' + shot.height + ')'
         : ctx.elementLabel || ctx.element?.label || 'Page note';
       const info = [where, original && pageLabel(original), new Date(note.createdAt).toLocaleString()];
       item.append(node('div', info.filter(Boolean).join(' · '),'notes-meta'));
       const width = ctx.viewport?.width || ctx.viewportWidth, height = ctx.viewport?.height || ctx.viewportHeight;
-      const deviceInfo = [ctx.browser, ctx.device, width && height ? width + ' × ' + height : ''].filter(Boolean);
+      const deviceInfo = [ctx.browser, ctx.device, width && height ? width + ' x ' + height : ''].filter(Boolean);
       if (deviceInfo.length) item.append(node('div','Reviewer: ' + deviceInfo.join(' · '),'notes-meta'));
       if (ctx.liveViewport?.width && ctx.liveViewport?.height && (ctx.liveViewport.width!==width || ctx.liveViewport.height!==height))
-        item.append(node('div','Live preview: ' + ctx.liveViewport.width + ' × ' + ctx.liveViewport.height,'notes-meta'));
+        item.append(node('div','Live preview: ' + ctx.liveViewport.width + ' x ' + ctx.liveViewport.height,'notes-meta'));
       if (ctx.pageUrl && ctx.pageUrl !== original?.url) item.append(node('div',ctx.pageUrl,'notes-meta'));
-      if (shot && (shot.id !== capture?.id || !el('live-view').hidden)) {
+      if (shot && (shot.id !== capture?.id || view==='website')) {
         const look = node('button','View screenshot');
         look.onclick = () => {
-          switchPage(note.pageId); showMode(false); drawCapture(shot.id); el('capture-select').focus();
+          switchPage(note.pageId,false); showCapture(shot.id); closeDialogs(); el('capture-select').focus();
         }; item.append(look);
       }
       if (isOwner()) {
@@ -262,40 +302,58 @@
     }
   }
   el('scope').onchange = drawNotes;
+
+  function renderView() {
+    const live = view==='website', still = view==='screenshot';
+    el('frame-slot').hidden=!live; el('snapshot').hidden=!still; el('fallback').hidden=live || still;
+    el('page-help').hidden=picking || !live || !frameHelpAvailable;
+    el('view-label').textContent=data.review.closed ? 'Closed review' : still ? 'Screenshot review' : frameReady ? 'Live website' : 'Website review';
+    const address=currentFrameUrl || page.url;
+    for(const id of ['open-page','help-open','fallback-open'])el(id).href=address;
+    el('return-live').hidden=live || new URL(page.url).protocol!=='https:';
+    el('leave-feedback').hidden=picking || data.review.closed;
+  }
   function render() {
-    const r=data.review;
-    el('workspace').hidden = false; el('loading').hidden = true;
-    document.title = r.host + ' · Site Review';
-    el('host').textContent = r.host; el('round').textContent = r.title;
-    el('owner-panel').hidden = !isOwner(); el('capture-tools').hidden = r.closed;
-    el('auto-controls').hidden = !isOwner() || r.closed || !page.autoCaptureAvailable;
-    el('closed-message').hidden = !r.closed; el('closed-badge').hidden = !r.closed;
-    el('note-form').hidden = r.closed; el('add-page').hidden = r.closed;
-    el('close-round').textContent = r.closed ? 'Reopen review' : 'Close review';
-    el('snippet').textContent = '<script defer src="' + location.origin + '/live.js"></script>';
-    el('page-url').textContent = currentFrameUrl || page.url; el('open-page').href = currentFrameUrl || page.url;
+    el('mast').hidden=true; el('loading').hidden=true; el('workspace').hidden=false;
+    el('host').textContent=data.review.host; document.title=data.review.host+' · Site Review';
+    el('round').textContent=data.review.title; el('owner-panel').hidden=!isOwner(); el('owner-link-panel').hidden=!isOwner();
+    el('add-page').hidden=data.review.closed; el('close-round').textContent=data.review.closed?'Reopen review':'Close review';
+    el('page-list').hidden=data.pages.length<2;
     setOptions(el('page-select'),data.pages,page.id,pageLabel);
-    drawCapture(capture?.id); drawTarget(); drawNotes();
-    if (frameReady) el('live-controls').hidden = r.closed;
+    el('snippet').textContent='<script defer src="https://sitereview.fernandezgrowthsystems.com/live.js"></script>';
+    el('auto-controls').hidden=data.review.closed || !page.autoCaptureAvailable; el('upload').hidden=data.review.closed;
+    const float=el('floating-notes');
+    if(float)float.hidden=data.review.closed || !window.FGSReviewCompanion?.available();
+    drawCapture(capture?.id); drawNotes(); renderView();
   }
-  function switchPage(id) {
-    if (isSending) { el('page-select').value = page.id; return; }
-    saveDraft(); frameStop(); showMode(false); discardImage();
-    page = data.pages.find(p => p.id === id) || data.pages[0];
-    target = null; capture = null;
-    render(); restoreDraft(); drawTarget(); drawNotes();
+  function openWebsite() {
+    closeDialogs(); setPicking(false); frameStop();
+    if(new URL(page.url).protocol!=='https:') {
+      view='fallback';
+      el('fallback-title').textContent='Open this website in a new tab';
+      el('fallback-detail').textContent='This site uses HTTP. Open the original to browse, then return here to leave a note or review a screenshot.';
+      renderView();
+    } else {view='website'; renderView(); frameStart();}
   }
-  el('page-select').onchange = () => switchPage(el('page-select').value);
-  el('capture-select').onchange = () => {
-    if (isSending) { el('capture-select').value=capture.id; return; }
-    setTarget(null); drawCapture(el('capture-select').value); drawNotes();
-  };
-  registerForm('add-page', async form => {
-    const result = await api(apiRoot + '/pages','POST',{url:website(form.elements.url.value)});
+  function switchPage(id,open=true) {
+    if(isSending) { el('page-select').value=page.id; return; }
+    saveDraft(); frameStop(); setPicking(false); discardImage();
+    page=data.pages.find(p=>p.id===id) || data.pages[0]; capture=null;
+    restoreDraft(); render(); if(open)openWebsite();
+  }
+  el('page-select').onchange=()=>switchPage(el('page-select').value);
+  el('return-live').onclick=openWebsite;
+  el('page-help').onclick=()=>modal('help-dialog');
+  el('help-screenshot').onclick=()=>openImages({automatic:true});
+  el('fallback-screenshot').onclick=()=>openImages({automatic:true});
+  el('open-images').onclick=()=>openImages();
+  registerForm('add-page',async form=>{
+    const r=await api(apiRoot+'/pages','POST',{url:website(form.elements.url.value)});
     refreshSequence++;
-    if (!data.pages.some(p => p.id === result.page.id)) data.pages.push(result.page);
-    switchPage(result.page.id); form.reset(); announce('Page added.'); el('page-select').focus();
+    if(!data.pages.some(p=>p.id===r.page.id))data.pages.push(r.page);
+    switchPage(r.page.id); form.reset(); announce('Page opened.');
   });
+
   async function confirmChange(action, detail) {
     const dialog = el('confirm-dialog');
     if (dialog.open) return false;
@@ -315,7 +373,7 @@
     try {
       const res = await api(apiRoot,'PATCH',{closed:!data.review.closed});
       refreshSequence++;
-      data.review = {...data.review, ...res.review}; render();
+      data.review = {...data.review, ...res.review}; if(data.review.closed)setPicking(false); render();
       announce(data.review.closed ? 'Review closed.' : 'Review reopened.');
     } catch(error) { announce(error.message); }
     finally { statusBusy=false; el('close-round').disabled=false; }
@@ -331,141 +389,172 @@
     } catch(error) { announce(error.message); }
     finally { statusBusy=false; el('rotate-link').disabled=false; }
   };
-  registerForm('note-form', async () => {
-    const name = el('reviewer-name').value.trim(), text = el('feedback').value.trim();
-    if (!name || !text) throw Error('Enter your first name and feedback.');
-    isSending = true; saveDraft();
-    const context = {...reviewerContext(),mode:target?.mode || 'page',pageUrl:target?.pageUrl || currentFrameUrl || page.url};
-    if (target?.mode === 'live') {
-      context.elementLabel=target.label; context.selector=target.selector; context.liveViewport=target.viewport;
-      context.scrollX=target.scrollX; context.scrollY=target.scrollY;
-    }
-    const body = {clientId,pageId:page.id,name,text,context};
-    if (target?.mode === 'screenshot') Object.assign(body,{captureId:target.captureId,x:target.x,y:target.y});
-    el('feedback').readOnly=true; el('reviewer-name').readOnly=true;
+
+  async function sendNote(body) {
+    const result=await api(apiRoot+'/notes','POST',body);
+    refreshSequence++;
+    if(result.page && !data.pages.some(p=>p.id===result.page.id)) data.pages.push(result.page);
+    if(!data.notes.some(n=>n.id===result.note.id))data.notes.push(result.note);
+    render();
+    return result.note;
+  }
+  function exactAddress(value) {
+    const url=new URL(website(value));
+    if(url.hostname!==new URL(page.url).hostname)throw Error('Use a page address from '+new URL(page.url).hostname+'.');
+    url.hash=''; return url.href;
+  }
+  registerForm('note-form',async ()=>{
+    const name=el('reviewer-name').value.trim(),text=el('feedback').value.trim();
+    if(!text)throw Error('Write your feedback before sending.');
+    const override=!el('note-location').hidden && el('note-url').value.trim();
+    const address=override ? exactAddress(override) : target?.pageUrl || currentFrameUrl || page.url;
+    const context={...reviewerContext(),pageUrl:address,mode:target?.mode || 'page'};
+    if(view==='website'&&!frameReady&&!override)context.source='opening-page';
+    if(target?.mode==='live')Object.assign(context,{elementLabel:target.label,selector:target.selector,scrollX:target.scrollX,scrollY:target.scrollY,liveViewport:target.viewport});
+    const body={clientId,pageId:notePageId || page.id,name:name || 'Guest',text,context};
+    if(target?.mode==='screenshot')Object.assign(body,{captureId:target.captureId,x:target.x,y:target.y});
+    isSending=true; saveDraft(); el('feedback').readOnly=true; el('reviewer-name').readOnly=true;
     try {
-      const result = await api(apiRoot + '/notes','POST',body);
-      refreshSequence++;
-      if (!data.notes.some(n => n.id === result.note.id)) data.notes.push(result.note);
+      await sendNote(body);
       storage('set','fgs-reviewer-name',name,true); storage('remove',draftKey());
-      el('feedback').value=''; target=null; clientId=crypto.randomUUID();
-      drawTarget(); drawNotes(); announce('Note saved to this review.'); el('feedback').focus();
+      el('feedback').value=''; el('note-url').value=''; target=null; clientId=crypto.randomUUID();
+      closeDialogs(); drawMarkers(); announce('Feedback saved.'); el('leave-feedback').focus({preventScroll:true});
     } finally { isSending=false; el('feedback').readOnly=false; el('reviewer-name').readOnly=false; }
   });
-  async function refresh(silent) {
-    const sequence = ++refreshSequence;
-    const result = await api(apiRoot);
-    if (sequence !== refreshSequence || isSending) return;
-    if (decodeURIComponent(parts[0]).toLowerCase() !== result.review.host.toLowerCase())
-      throw Error('This invite link does not match the website being reviewed. Open the original link.');
-    data = result;
-    const first = !page;
-    page = data.pages.find(p => p.id === page?.id) || data.pages[0];
-    if (!page) throw Error('No pages are available in this review.');
-    render();
-    if (first) {
-      restoreDraft(); drawTarget();
-      if (isOwner() && storage('get','fgs-first-owner')===location.pathname) {
-        el('owner-tools').open = true; storage('remove','fgs-first-owner');
-        announce('Review created. Save your private owner link, then share the reviewer link.');
-      }
-      const demo = new URL(page.url);
-      if (location.hash==='#live' || (demo.origin===location.origin && demo.pathname.startsWith('/demo/')) || storage('get','fgs-sample')===location.pathname) {
-        storage('remove','fgs-sample'); showMode(true);
-      }
-    } else if (!silent) announce('Feedback refreshed.');
-  }
-  el('refresh-notes').onclick = async () => {
-    el('refresh-notes').disabled=true;
-    try { await refresh(false); } catch(error) { announce(error.message); }
-    finally { el('refresh-notes').disabled=false; }
+  el('floating-notes').onclick=async ()=>{
+    if(!window.FGSReviewCompanion?.available() || data.review.closed)return;
+    const first=storage('get','fgs-reviewer-name',null,true) || '';
+    try {
+      await window.FGSReviewCompanion.open({pageId:page.id,pageUrl:currentFrameUrl || page.url,reviewerName:first,
+        saveNote:async input=>{
+          const addr=new URL(website(input.pageUrl));
+          if(addr.hostname!==new URL(data.review.url).hostname)throw Error('Use an address on the website being reviewed.');
+          await sendNote({clientId:input.clientId,pageId:input.pageId,text:input.text,name:input.name || 'Guest',context:{...reviewerContext(),mode:'page',source:'floating-notes',pageUrl:addr.href}});
+          if(input.name)storage('set','fgs-reviewer-name',input.name,true);
+        }});
+      closeDialogs();
+    } catch(error) { announce(error.message || 'The floating notes window could not open.'); }
   };
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState==='visible' && data && !isSending && !statusBusy) {
-      refresh(true).catch(() => { /* Manual refresh displays any connection error. */ });
-    }
+
+
+  async function refresh(silent=true) {
+    const seq=++refreshSequence, response=await api(apiRoot);
+    if(seq!==refreshSequence || isSending)return;
+    if(decodeURIComponent(parts[0]).toLowerCase()!==response.review.host.toLowerCase())throw Error('Open the complete invitation link for this website.');
+    data=response; const first=!page;
+    page=data.pages.find(p=>p.id===page?.id) || data.pages[0];
+    if(!page)throw Error('This review has no pages.');
+    if(data.review.closed && picking)setPicking(false);
+    render();
+    if(first) { restoreDraft(); openWebsite(); }
+    else if(!silent)announce('Notes refreshed.');
+  }
+  el('refresh-notes').onclick=async ()=>{
+    el('refresh-notes').disabled=true;
+    try{ await refresh(false); }catch(e){announce(e.message);}finally{el('refresh-notes').disabled=false;}
+  };
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden && data && !isSending && !statusBusy)refresh().catch(()=>{});
   });
+    let frameHelpAvailable = false;
+
+  function postFrame(type, mode, keyboard = false) {
+    if (frame?.contentWindow && frameOrigin) {
+      frame.contentWindow.postMessage({channel, type, mode, keyboard}, frameOrigin);
+    }
+  }
 
   function frameStop() {
-    clearTimeout(frameTimer); frameReady=false; frameOrigin=null; currentFrameUrl=null; frame=null;
-    if (page) { el('page-url').textContent=page.url; el('open-page').href=page.url; }
-    el('frame-slot').replaceChildren(); el('live-controls').hidden=true;
-    el('pick-element').hidden=false; el('browse-frame').hidden=true;
+    clearTimeout(frameTimer);
+    frame?.remove();
+    frame = null;
+    frameOrigin = null;
+    frameReady = false;
+    frameHelpAvailable = false;
+    currentFrameUrl = null;
+    navigatedWithoutBridge = false;
   }
-  function postFrame(type, mode, keyboard = false) {
-    if (frame?.contentWindow && frameOrigin) frame.contentWindow.postMessage({channel,type,mode,keyboard},frameOrigin);
-  }
+
   function frameStart() {
-    frameStop(); frameOrigin = new URL(page.url).origin;
-    el('live-status').textContent = 'Connecting to the review script on this page…';
-    frame = document.createElement('iframe');
-    frame.title = 'Live preview of ' + data.review.host;
-    frame.referrerPolicy='no-referrer'; frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms');
-    frame.hidden=true;
-    function startTimer() {
+    frameStop();
+    const websiteUrl = new URL(page.url);
+    frameOrigin = websiteUrl.origin;
+    const nextFrame = document.createElement('iframe');
+    frame = nextFrame;
+    nextFrame.title = 'Website under review: ' + websiteUrl.host;
+    nextFrame.referrerPolicy = 'no-referrer';
+    nextFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+    let loads = 0;
+    // An ordinary working iframe can remain silent forever. Offer help without
+    // replacing the actual website or mistaking silence for an embedding block.
+    function offerHelp() {
+      if (frame !== nextFrame || frameReady) return;
+      frameHelpAvailable = true;
+      renderView();
+    }
+    function scheduleHelp() {
       clearTimeout(frameTimer);
-      frameTimer = setTimeout(() => {
-        if (frameReady) return;
-        frameStop();
-        el('live-status').textContent='Live commenting is unavailable on this page. Open the live page in a new tab, then leave a page note here or choose Screenshot.';
-      }, 9000);
+      frameTimer = setTimeout(offerHelp, 3500);
     }
-    frame.addEventListener('load', () => {
-      if (!frame) return;
-      frameReady=false; frame.hidden=true; el('live-controls').hidden=true;
-      el('pick-element').hidden=false; el('browse-frame').hidden=true;
-      if (target?.mode === 'live') setTarget(null);
-      el('live-status').textContent='Connecting to the review script on this page…';
-      postFrame('connect'); startTimer();
+    nextFrame.addEventListener('load', () => {
+      if (frame !== nextFrame) return;
+      navigatedWithoutBridge = ++loads > 1;
+      if (picking) setPicking(false);
+      frameReady = false;
+      frameHelpAvailable = false;
+      currentFrameUrl = null;
+      postFrame('connect');
+      scheduleHelp();
+      renderView();
     });
-    frame.src=page.url; el('frame-slot').append(frame); startTimer();
+    nextFrame.addEventListener('error', offerHelp);
+    nextFrame.src = websiteUrl.href;
+    el('frame-slot').replaceChildren(nextFrame);
+    scheduleHelp();
   }
-  function showMode(live) {
-    if (isSending) return;
-    if (target && (live !== (target.mode === 'live'))) setTarget(null);
-    el('live-view').hidden=!live; el('captures-view').hidden=live;
-    el('see-live').setAttribute('aria-pressed',String(live)); el('see-captures').setAttribute('aria-pressed',String(!live));
-    if (live) frameStart(); else frameStop();
-    if (data && page) drawNotes();
-  }
-  el('see-live').onclick=() => { if (el('live-view').hidden || !frame) showMode(true); };
-  el('see-captures').onclick=() => showMode(false);
-  function liveMode(pickMode, keyboard = false) {
-    postFrame('mode',pickMode ? 'pick' : 'browse',keyboard);
-    el('pick-element').hidden=pickMode; el('browse-frame').hidden=!pickMode;
-    el('live-status').textContent=pickMode ? 'Tap an element in the preview to add feedback. Press Escape to cancel.' : 'Browse the preview, then select an element to comment on it.';
-    if (pickMode && keyboard) frame?.focus();
-  }
-  el('pick-element').onclick=event=>liveMode(true,event.detail === 0); el('browse-frame').onclick=()=>liveMode(false);
-  el('pick-element').addEventListener('pointerdown', event => { event.preventDefault(); });
-  el('pick-element').addEventListener('mousedown', event => { event.preventDefault(); });
-  window.addEventListener('message',event => {
-    if (!frame || event.source!==frame.contentWindow || event.origin!==frameOrigin) return;
-    const msg=event.data;
-    if (!msg || msg.channel!==channel) return;
-    if (msg.type==='ready') { postFrame('connect'); return; }
-    if (msg.type==='cancelled') { liveMode(false); return; }
-    if (msg.type==='connected') {
-      clearTimeout(frameTimer); frameReady=true; frame.hidden=false;
-      try {
-        const current=new URL(msg.url);
-        if (current.origin===frameOrigin) {
-          current.hash=''; currentFrameUrl=current.href;
-          el('page-url').textContent=currentFrameUrl; el('open-page').href=currentFrameUrl;
-        }
-      } catch { /* The requested page URL remains available. */ }
-      el('live-controls').hidden=data.review.closed; liveMode(false); return;
+
+  // The parent owns the feedback button and the data. Only the current
+  // embedded document at the selected site's origin may report a selection.
+  window.addEventListener('message', event => {
+    if (!frame?.contentWindow || event.source !== frame.contentWindow ||
+        event.origin !== frameOrigin || event.data?.channel !== channel) return;
+    const msg = event.data;
+    if (msg.type === 'ready') {
+      postFrame('connect');
+      return;
     }
-    if (msg.type!=='selected' || !frameReady || data.review.closed || isSending) return;
-    let url;
-    try { url=new URL(msg.url); } catch { return; }
-    if (url.origin!==frameOrigin || typeof msg.element?.label!=='string') return;
-    url.hash=''; liveMode(false);
-    setTarget({mode:'live',pageUrl:url.href,label:msg.element.label.slice(0,160),selector:String(msg.element.selector||'').slice(0,250),
-      scrollX:Number(msg.scrollX)||0,scrollY:Number(msg.scrollY)||0,
-      viewport:{width:Number(msg.viewport?.width)||0,height:Number(msg.viewport?.height)||0}},true);
+    if (msg.type === 'cancelled' && frameReady && picking) {
+      setPicking(false);
+      el('leave-feedback').focus({preventScroll:true});
+      return;
+    }
+    if (!['connected','selected'].includes(msg.type) || typeof msg.url !== 'string') return;
+    let liveUrl;
+    try { liveUrl = new URL(msg.url); } catch { return; }
+    if (liveUrl.origin !== frameOrigin || liveUrl.username || liveUrl.password) return;
+    const exactPage = liveUrl.origin + liveUrl.pathname;
+    if (msg.type === 'connected') {
+      clearTimeout(frameTimer);
+      frameReady = true;
+      frameHelpAvailable = false;
+      navigatedWithoutBridge = false;
+      currentFrameUrl = exactPage;
+      renderView();
+      return;
+    }
+    if (!frameReady || !picking || view !== 'website' || data.review.closed || isSending ||
+        typeof msg.element?.label !== 'string' || !msg.element.label.trim()) return;
+    currentFrameUrl = exactPage;
+    const number = value => Number.isFinite(value) ? value : 0;
+    openComposer({
+      mode: 'live', pageUrl: exactPage, label: msg.element.label.trim().slice(0, 160),
+      selector: typeof msg.element.selector === 'string' ? msg.element.selector.slice(0, 350) : '',
+      scrollX: number(msg.scrollX), scrollY: number(msg.scrollY),
+      viewport: {width: number(msg.viewport?.width), height: number(msg.viewport?.height)}
+    });
   });
-  function readImage(file) {
+
+    function readImage(file) {
     return new Promise((resolve,reject) => {
       const reader = new FileReader();
       reader.onerror=()=>reject(Error('This image could not be read.'));
@@ -499,72 +588,137 @@
     }
     throw Error('Use a smaller screenshot or crop it before uploading.');
   }
-  function gotCapture(value) {
+  function showCapture(id) {
+    const item = data.captures.find(shot => shot.pageId === page.id && (!id || shot.id === id));
+    if (!item) return false;
+    setPicking(false);
+    frameStop();
+    view = 'screenshot';
+    drawCapture(id || item.id);
+    renderView();
+    drawNotes();
+    closeDialogs();
+    return true;
+  }
+  function rememberCapture(item) {
     refreshSequence++;
-    if (!data.captures.some(c=>c.id===value.id)) data.captures.push(value);
-    if (value.pageId===page.id) {
-      setTarget(null); drawCapture(value.id); drawNotes(); el('capture-tools').open=false;
-    }
-    announce('Screenshot saved. Select a spot to leave feedback.');
+    if (!data.captures.some(shot => shot.id === item.id)) data.captures.push(item);
+    if (item.pageId !== page.id) return;
+    if (el('image-dialog').open) {
+      showCapture(item.id);
+      el('leave-feedback').focus({preventScroll:true});
+      announce('Screenshot ready. Choose Leave feedback to pin a note.');
+    } else drawCapture(capture?.id);
   }
   function discardImage() {
-    imageSequence++; stagedImage=null; stagedFilename='';
-    el('upload').reset(); el('upload-preview').removeAttribute('src'); el('image-confirm').hidden=true;
-    el('upload').querySelector('.form-error').textContent='';
+    imageSequence++;
+    stagedImage = null;
+    stagedFilename = '';
+    el('upload').reset();
+    el('upload-preview').removeAttribute('src');
+    el('image-confirm').hidden = true;
+    el('upload').querySelector('.form-error').textContent = '';
   }
-  async function previewFile(file) {
-    const requestId=++imageSequence;
-    stagedImage=null; el('image-confirm').hidden=true; el('upload').querySelector('.form-error').textContent='';
-    if (!file) return;
+  let captureBusy = false;
+  async function captureCurrent() {
+    if (captureBusy || !page?.autoCaptureAvailable || data.review.closed) return;
+    const pageId = page.id;
+    const button = el('auto-capture');
+    const resultText = el('image-error');
+    captureBusy = true;
+    button.disabled = true;
+    button.textContent = 'Capturing…';
+    resultText.textContent = 'Preparing a screenshot…';
     try {
-      const image=await prepareImage(file);
-      if (imageSequence!==requestId) return;
-      stagedImage=image; stagedFilename=file.name.replace(/\.[^.]+$/,'').slice(0,75) || 'Screenshot';
-      el('upload-preview').src=image.dataUrl; el('image-confirm').hidden=false;
-      announce('Screenshot ready to preview.');
-    } catch(error) {
-      if (imageSequence===requestId) el('upload').querySelector('.form-error').textContent=error.message;
+      const result = await api(apiRoot + '/auto-captures', 'POST', {pageId,device:el('auto-device').value});
+      if (page.id === pageId) resultText.textContent = '';
+      rememberCapture(result.capture);
+    } catch (error) {
+      if (page.id === pageId) resultText.textContent = error.message || 'Upload a screenshot to continue.';
+    } finally {
+      captureBusy = false;
+      button.disabled = false;
+      button.textContent = 'Capture this page';
     }
   }
-  el('upload').elements.file.onchange=event=>previewFile(event.target.files[0]);
-  el('discard-image').onclick=discardImage;
-  import('/tab-capture.js').then(module => {
-    if (!module.canCaptureTab()) return;
-    el('tab-controls').hidden=false;
-    el('capture-tab').onclick=async () => {
-      const originalPage=page.id;
-      try {
-        const file=await module.captureTabImage();
-        if (page.id===originalPage) await previewFile(file);
-      } catch(error) { el('upload').querySelector('.form-error').textContent=error.message; }
-    };
-  }).catch(() => { /* File upload remains available everywhere. */ });
-  registerForm('upload',async form => {
-    if (!stagedImage) throw Error('Choose a screenshot and preview it first.');
-    const pageId=page.id, label=form.elements.label.value.trim() || stagedFilename;
-    const image=stagedImage;
-    const res=await api(apiRoot+'/captures','POST',{pageId,label,...image});
-    gotCapture(res.capture);
-    if (page.id===pageId && image===stagedImage) discardImage();
-  });
-  el('auto-capture').onclick=async () => {
-    const btn=el('auto-capture'); btn.disabled=true; btn.textContent='Capturing…';
-    try {
-      const res=await api(apiRoot+'/auto-captures','POST',{pageId:page.id,device:el('auto-device').value});
-      gotCapture(res.capture);
-    } catch(error) { announce(error.message); }
-    finally { btn.disabled=false; btn.textContent='Capture this page'; }
-  };
-  if (location.pathname==='/') {
-    el('landing').hidden=false; el('loading').hidden=true;
-  } else if (invite) {
-    refresh(true).catch(error=>{
-      el('loading').querySelector('h1').textContent='Could not open review';
-      el('loading-message').textContent=error.message; el('reload').hidden=false; el('back-home').hidden=false;
-    });
-  } else {
-    el('loading').querySelector('h1').textContent='Review link unavailable';
-    el('loading-message').textContent='Open the full invite link or create a new review.';
-    el('back-home').hidden=false;
+  function openImages({automatic = false} = {}) {
+    if (!page) return;
+    const items = data.captures.filter(shot => shot.pageId === page.id);
+    const latest = items[items.length - 1];
+    if (automatic && latest && showCapture(latest.id)) return;
+    el('existing-shot').hidden = !latest;
+    el('image-error').textContent = data.review.closed && !latest ? 'This round has no saved screenshot.' : '';
+    modal('image-dialog');
+    if (automatic && page.autoCaptureAvailable && !data.review.closed) {
+      el('auto-device').value = window.matchMedia('(max-width:700px)').matches ? 'mobile' : 'desktop';
+      captureCurrent();
+    }
   }
+  el('auto-capture').onclick = captureCurrent;
+  el('existing-shot').onclick = () => {
+    const items = data.captures.filter(shot => shot.pageId === page.id);
+    if (items.length) showCapture(items[items.length-1].id);
+  };
+  el('capture-select').onchange = event => {
+    if (isSending) { event.target.value = capture?.id || ''; return; }
+    drawCapture(event.target.value);
+    drawNotes();
+  };
+  async function previewFile(file) {
+    const request = ++imageSequence;
+    const warning = el('upload').querySelector('.form-error');
+    stagedImage = null;
+    warning.textContent = '';
+    el('image-confirm').hidden = true;
+    if (!file) return;
+    try {
+      const image = await prepareImage(file);
+      if (request !== imageSequence) return;
+      stagedImage = image;
+      stagedFilename = file.name?.replace(/\.[^.]+$/, '').slice(0,75) || 'Screenshot';
+      el('upload-preview').src = image.dataUrl;
+      el('image-confirm').hidden = false;
+      announce('Preview ready. Choose Share screenshot to add it.');
+    } catch (error) {
+      if (request === imageSequence) warning.textContent = error.message;
+    }
+  }
+  el('upload').elements.file.onchange = event => previewFile(event.target.files[0]);
+  el('image-dialog').addEventListener('paste', event => {
+    if (!el('image-dialog').open || data.review.closed) return;
+    const image = [...(event.clipboardData?.files || [])].find(file => file.type.startsWith('image/'));
+    if (!image) return;
+    event.preventDefault();
+    previewFile(image);
+  });
+  el('discard-image').onclick = discardImage;
+  import('/tab-capture.js').then(helper => {
+    if (!helper.canCaptureTab()) return;
+    el('tab-controls').hidden = false;
+    el('capture-tab').onclick = async () => {
+      const id = page.id;
+      try {
+        const image = await helper.captureTabImage();
+        if (page.id === id && el('image-dialog').open) await previewFile(image);
+      } catch (error) {
+        if (page.id === id) el('upload').querySelector('.form-error').textContent = error.message;
+      }
+    };
+  }).catch(() => { /* Image upload is available when tab capture is unsupported. */ });
+  registerForm('upload', async form => {
+    const image = stagedImage;
+    if (!image) throw Error('Choose or paste an image and preview it first.');
+    const pageId = page.id;
+    const label = form.elements.label.value.trim() || stagedFilename;
+    const result = await api(apiRoot + '/captures', 'POST', {pageId,label,...image});
+    if (page.id === pageId && image === stagedImage) discardImage();
+    rememberCapture(result.capture);
+  });
+
+  if(location.pathname==='/') {el('landing').hidden=false;el('loading').hidden=true;}
+  else if(invite)refresh().catch(error=>{
+    el('loading').querySelector('h1').textContent='Could not open review';
+    el('loading-message').textContent=error.message;el('reload').hidden=false;el('back-home').hidden=false;
+  });
+  else {el('loading').querySelector('h1').textContent='Review link unavailable';el('loading-message').textContent='Open the complete review link or start a new review.';el('back-home').hidden=false;}
 })();

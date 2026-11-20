@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {webcrypto} from "node:crypto";
-import {mkdtempSync, rmSync} from "node:fs";
+import {mkdtempSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -29,7 +29,11 @@ const python = [
 function execute(jobs) {
   const result = spawnSync(process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"),
     ["-c", python, join(temp, "reviews.sqlite"), schema], {input: JSON.stringify(jobs), encoding: "utf8", maxBuffer: 5000000});
-  if (result.status !== 0) throw new Error(result.stderr || String(result.error));
+  if (result.status !== 0) {
+    const reason = result.stderr || String(result.error);
+    console.error("Local SQLite test process failed:", reason);
+    throw new Error(reason);
+  }
   return JSON.parse(result.stdout);
 }
 execute(null);
@@ -80,7 +84,7 @@ test("anonymous review round, shared uploads and pins, closure, invite replaceme
   const again = await api(path + "/pages", "POST", {url:"example.com/contact"}, owner);
   assert.equal(again.page.id, page.id);
   await api(path + "/pages", "POST", {url:"other.example/contact"}, owner, 400);
-  await api(path + "/auto-captures", "POST", {pageId,device:"mobile"}, null, 403);
+  await api(path + "/auto-captures", "POST", {pageId,device:"mobile"}, null, 422);
   await api(path + "/auto-captures", "POST", {pageId,device:"mobile"}, owner, 422);
 
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVXYAAAAASUVORK5CYII=";
@@ -131,4 +135,58 @@ test("creation validates the input and rejects cross-site writes", async () => {
   }
   const denied = await request("/api/reviews","POST",{url:"example.com"},null,{Origin:"https://elsewhere.example"});
   assert.equal(denied.status, 403);
+});
+
+test("FGS aliases, previously issued links and notes on a second live page", async () => {
+  const {out, board, path, owner, pageId} = await create("http://fernandezgrowthsystems.com");
+  assert.equal(board.pages[0].url, "https://www.fernandezgrowthsystems.com/");
+  assert.equal(board.pages[0].frameMode, "live");
+
+  // Old invitations stored their original hostname in both tables.
+  execute([
+    {sql:"UPDATE reviews SET host=?,url=? WHERE id=?",args:["fernandezgrowthsystems.com","http://fernandezgrowthsystems.com/",out.review.id]},
+    {sql:"UPDATE pages SET url=? WHERE id=?",args:["http://fernandezgrowthsystems.com/",pageId]}
+  ]);
+  const legacy = await api(path);
+  assert.equal((await request(legacy.review.reviewerPath)).status, 200);
+  assert.match(legacy.review.reviewerPath, /^\/fernandezgrowthsystems\.com\//);
+  assert.equal(legacy.pages[0].url, "https://www.fernandezgrowthsystems.com/");
+  const original = {pageId, clientId:crypto.randomUUID(), name:"Pat", text:"Please change this heading",
+    context:{mode:"live", pageUrl:"https://www.fernandezgrowthsystems.com/growth-systems-review",elementLabel:"Deliverables"}};
+  await api(path+"/notes","POST",{...original,context:{mode:"live",pageUrl:"https://other.example/"}},null,400);
+  const saved = await api(path+"/notes","POST",original,null,201);
+  assert.equal(saved.page.url, original.context.pageUrl);
+  assert.equal(saved.note.pageId, saved.page.id);
+  assert.notEqual(saved.note.pageId,pageId);
+  const retry = await api(path+"/notes","POST",original);
+  assert.equal(retry.note.id,saved.note.id);
+  assert.equal(retry.page.id,saved.page.id);
+  const second = await api(path+"/notes","POST",{...original, clientId:crypto.randomUUID()},null,201);
+  assert.equal(second.note.pageId,saved.page.id);
+  const updated = await api(path,"GET",undefined,owner);
+  assert.equal(updated.pages.length,2);
+  assert.equal(updated.notes.length,2);
+});
+
+test("guest fallback generates a mobile image once and reuses it across invitations", async () => {
+  const {path,pageId} = await create("www.fernandezgrowthsystems.com/tools");
+  const jpeg = readFileSync(new URL("./mobile-preview.jpg", import.meta.url));
+  let renders = 0;
+  env.FGS_CAPTURE = {async fetch(url, init) {
+    renders++;
+    assert.equal(JSON.parse(init.body).pageUrl,"https://www.fernandezgrowthsystems.com/tools");
+    return new Response(jpeg,{headers:{"Content-Type":"image/jpeg"}});
+  }};
+  try {
+    const body = {pageId,device:"mobile"};
+    const first = await api(path+"/auto-captures","POST",body,null,201);
+    const cached = await api(path+"/auto-captures","POST",body);
+    assert.equal(cached.capture.id,first.capture.id);
+    assert.equal(cached.capture.width,390);
+    assert.equal(cached.capture.height,844);
+    await api(path+"/auto-captures","POST",{...body,refresh:true},null,403);
+    assert.equal(renders,1);
+  } finally {
+    delete env.FGS_CAPTURE;
+  }
 });

@@ -2,9 +2,16 @@
 (() => {
   'use strict';
 
-  const source = document.currentScript?.src;
-  if (!source || window.parent === window) return;
-  const reviewOrigin = new URL(source).origin;
+  const script = document.currentScript;
+  // A normal visit must leave the website's controls and focus behavior alone.
+  if (!script?.src || window.parent === window) return;
+  const scriptOrigin = new URL(script.src).origin;
+  const configuredOrigin = script.getAttribute('data-review-origin');
+  const canonicalOrigin = 'https://sitereview.fernandezgrowthsystems.com';
+  // A site with a first-party-only script policy can host a copy of this file.
+  // Only the explicitly configured review service is allowed to control it.
+  if (configuredOrigin && configuredOrigin !== canonicalOrigin && configuredOrigin !== scriptOrigin) return;
+  const reviewOrigin = configuredOrigin || scriptOrigin;
   const channel = 'fgs-site-review-v1';
   const instance = Symbol.for(channel);
   if (window[instance]) return;
@@ -152,81 +159,88 @@
     if (event.source !== window.parent || event.origin !== reviewOrigin || event.data?.channel !== channel) return;
     const message = event.data;
     if (message.type === 'connect') {
-      connected = true;
+      if (!connected) {
+        connected = true;
+        attachReviewEvents();
+      }
       send('connected', pageInfo());
     } else if (connected && message.type === 'mode' && ['pick', 'browse'].includes(message.mode)) {
       setMode(message.mode === 'pick', message.keyboard === true);
     }
   });
 
-  window.addEventListener('pointermove', event => {
-    if (!picking || event.pointerType === 'touch') return;
-    active = selectableAt(event.target);
-    schedulePaint();
-  }, { capture: true, passive: true });
+  function attachReviewEvents() {
+    window.addEventListener('pointermove', event => {
+      if (!picking || event.pointerType === 'touch') return;
+      active = selectableAt(event.target);
+      schedulePaint();
+    }, { capture: true, passive: true });
 
-  for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup']) {
-    window.addEventListener(type, event => {
-      if (picking && event.button === 0) {
-        if (type === 'mousedown') event.preventDefault();
-        event.stopImmediatePropagation();
+    for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup']) {
+      window.addEventListener(type, event => {
+        if (picking && event.button === 0) {
+          if (type === 'mousedown') event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+    }
+
+    window.addEventListener('click', event => {
+      if (!picking) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const element = selectableAt(event.target);
+      if (element) choose(element, event.detail ? event.clientX : undefined, event.detail ? event.clientY : undefined);
+    }, true);
+
+    window.addEventListener('keydown', event => {
+      if (!picking) return;
+      if (!['Escape', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.key === 'Escape') {
+        setMode(false);
+        send('cancelled');
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        const element = active || (document.activeElement !== overlay && selectableAt(document.activeElement)) || keyboardTarget(1);
+        if (element) choose(element);
+      } else {
+        active = keyboardTarget(['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1);
+        if (!active) return;
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const label = elementLabel(active);
+        announcement.textContent = label;
+        send('highlighted', { label });
+        paint();
       }
     }, true);
-  }
 
-  window.addEventListener('click', event => {
-    if (!picking) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const element = selectableAt(event.target);
-    if (element) choose(element, event.detail ? event.clientX : undefined, event.detail ? event.clientY : undefined);
-  }, true);
-
-  window.addEventListener('keydown', event => {
-    if (!picking) return;
-    if (!['Escape', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', ' '].includes(event.key)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.key === 'Escape') {
-      setMode(false);
-      send('cancelled');
-    } else if (event.key === 'Enter' || event.key === ' ') {
-      const element = active || (document.activeElement !== overlay && selectableAt(document.activeElement)) || keyboardTarget(1);
-      if (element) choose(element);
-    } else {
-      active = keyboardTarget(['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1);
-      if (!active) return;
-      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      const label = elementLabel(active);
-      announcement.textContent = label;
-      send('highlighted', { label });
-      paint();
+    window.addEventListener('focusin', event => {
+      if (!picking || event.target === overlay) return;
+      active = selectableAt(event.target);
+      schedulePaint();
+    }, true);
+    // A reviewer's toolbar sits in the parent page. Crossing this boundary has
+    // no next element in the preview. Menus that dismiss on local focus changes
+    // should stay available to mark, while ordinary in-page focus moves proceed.
+    function preserveOpenNavigation(event) {
+      if (event.relatedTarget && event.relatedTarget !== overlay) return;
+      const element = event.target;
+      if (!(element instanceof Element) || element.closest('input,textarea,select,[contenteditable]')) return;
+      if (element.closest('nav,[role="navigation"],[role="menu"],[role="menubar"],details[open],[aria-expanded="true"]')) {
+        event.stopImmediatePropagation();
+      }
     }
-  }, true);
-
-  window.addEventListener('focusin', event => {
-    if (!picking || event.target === overlay) return;
-    active = selectableAt(event.target);
-    schedulePaint();
-  }, true);
-  // A reviewer's toolbar sits in the parent page. Crossing this boundary has
-  // no next element in the preview. Menus that dismiss on local focus changes
-  // should stay available to mark, while ordinary in-page focus moves proceed.
-  function preserveOpenNavigation(event) {
-    if (!connected || (event.relatedTarget && event.relatedTarget !== overlay)) return;
-    const element = event.target;
-    if (!(element instanceof Element) || element.closest('input,textarea,select,[contenteditable]')) return;
-    if (element.closest('nav,[role="navigation"],[role="menu"],[role="menubar"],details[open],[aria-expanded="true"]')) {
-      event.stopImmediatePropagation();
-    }
+    window.addEventListener('focusout', preserveOpenNavigation, true);
+    window.addEventListener('blur', preserveOpenNavigation, true);
+    window.addEventListener('scroll', schedulePaint, { capture: true, passive: true });
+    window.addEventListener('resize', schedulePaint, { passive: true });
   }
-  window.addEventListener('focusout', preserveOpenNavigation, true);
-  window.addEventListener('blur', preserveOpenNavigation, true);
-  window.addEventListener('scroll', schedulePaint, { capture: true, passive: true });
-  window.addEventListener('resize', schedulePaint, { passive: true });
   window.addEventListener('pageshow', () => send('ready'));
-  window.navigation?.addEventListener('currententrychange', () => {
+  const notifyNavigation = () => {
     if (connected) send('connected', pageInfo());
-  });
+  };
+  if (window.navigation) window.navigation.addEventListener('currententrychange', notifyNavigation);
+  else window.addEventListener('popstate', notifyNavigation);
   send('ready');
 })();

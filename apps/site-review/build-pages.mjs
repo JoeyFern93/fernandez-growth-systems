@@ -11,7 +11,7 @@ await cp(path.join(root,'public'), output, {recursive:true});
 // Pages can start serving a new HTML document while a browser still has
 // the previous script cached. Keep each UI version paired with its markup.
 let html = await readFile(path.join(output,'index.html'),'utf8');
-for (const asset of ['review.js','review.css','install.js','install.css']) {
+for (const asset of ['review.js','review.css','install.js','install.css','companion.js']) {
   const bytes = await readFile(path.join(root,'public',asset));
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0,12);
   const ext = path.extname(asset);

@@ -9,6 +9,9 @@ const INVITE = /^[A-Za-z0-9_-]{24}$/;
 const ITEM_ID = /^[0-9a-f-]{36}$/;
 const CAPTURE_FIELDS = "id, page_id AS pageId, label, width, height";
 const NOTE_FIELDS = "id, page_id AS pageId, capture_id AS captureId, x, y, name, text, context, created_at AS createdAt, resolved";
+const FGS_HOST = "www.fernandezgrowthsystems.com";
+const FGS_ALIASES = new Set(["fernandezgrowthsystems.com", FGS_HOST, "ferngrowthsystems.com", "www.ferngrowthsystems.com"]);
+const FGS_ROUTES = new Set(["/", "/index", "/tools", "/tools/room-measure", "/replay", "/build-fix-sprint", "/growth-systems-review", "/ongoing-growth-support", "/inquiry-privacy", "/thank-you", "/404"]);
 
 class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -56,7 +59,13 @@ function publicUrl(input, expectedHost) {
       /(?:^|\.)(?:localhost|local|internal|lan|home|corp|test|invalid|onion|arpa)$/.test(host)) {
     fail(400, "Use a public website address without a password or custom port.");
   }
-  if (expectedHost && host !== expectedHost) fail(400, "Add a page from " + expectedHost + ".");
+  if (expectedHost && host !== expectedHost && !(FGS_ALIASES.has(host) && FGS_ALIASES.has(expectedHost))) {
+    fail(400, "Add a page from " + expectedHost + ".");
+  }
+  if (FGS_ALIASES.has(host)) {
+    url.hostname = FGS_HOST;
+    url.protocol = "https:";
+  }
   url.hash = "";
   return url;
 }
@@ -79,14 +88,19 @@ async function hash(value) {
 }
 function publicReview(row, owner) {
   const invite = row.active_invite || row.id;
-  return {id: owner ? row.id : invite, host: row.host, url: row.url, title: row.title, closed: !!row.closed,
+  return {id: owner ? row.id : invite, host: row.host, url: publicUrl(row.url).href, title: row.title, closed: !!row.closed,
     role: owner ? "owner" : "reviewer", reviewerPath: "/" + row.host + "/" + invite};
 }
 function lookup(db, invite) {
   return db.prepare("SELECT r.id,r.host,r.url,r.title,r.closed,r.owner_hash,COALESCE(l.invite,r.id) AS active_invite FROM reviews r LEFT JOIN review_links l ON l.review_id=r.id WHERE r.id=? OR r.id=(SELECT review_id FROM review_links WHERE invite=?)").bind(invite, invite).first();
 }
 function publicPage(env, row) {
-  return {id: row.id, url: row.url, label: row.label, autoCaptureAvailable: canAutomaticallyCapture(env, row.url)};
+  const url = publicUrl(row.url);
+  const route = url.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+  const demoHost = url.hostname === "sitereview.fernandezgrowthsystems.com" || /^(?:[\w-]+\.)?fgs-site-review\.pages\.dev$/.test(url.hostname);
+  const live = (url.hostname === FGS_HOST && FGS_ROUTES.has(route)) || (demoHost && url.pathname.startsWith("/demo/"));
+  return {id: row.id, url: url.href, label: row.label, frameMode: live ? "live" : "unknown",
+    autoCaptureAvailable: canAutomaticallyCapture(env, url.href)};
 }
 function publicCapture(reviewId, row) {
   return {...row, imageUrl: "/api/reviews/" + reviewId + "/captures/" + row.id + "/image"};
@@ -95,7 +109,7 @@ function publicNote(row) {
   return {...row, context: JSON.parse(row.context), resolved: !!row.resolved};
 }
 function parseContext(input, host) {
-  if (input == null) return "{}";
+  if (input == null) return {};
   if (typeof input !== "object" || Array.isArray(input) || JSON.stringify(input).length > 3600) {
     fail(400, "The note's device details are too large.");
   }
@@ -116,7 +130,7 @@ function parseContext(input, host) {
     }
   }
   if (input.pageUrl) context.pageUrl = publicUrl(input.pageUrl, host).href;
-  return JSON.stringify(context);
+  return context;
 }
 
 function dimensions(data, type) {
@@ -210,15 +224,23 @@ async function addPage(request, env, db, review) {
   if (!page) fail(409, "The round is closed or already has 30 pages.");
   return json({page: publicPage(env, page)}, result.meta.changes ? 201 : 200);
 }
-async function addCapture(request, env, db, review, auto) {
+async function addCapture(request, env, db, review, auto, owner) {
   let body = await readBody(request, auto ? 2000 : 1752000);
   const page = await db.prepare("SELECT id,url FROM pages WHERE review_id=? AND id=?").bind(review.id, String(body.pageId || "")).first();
   if (!page) fail(404, "Page not found.");
   if (auto) {
     if (!["mobile","desktop"].includes(body.device)) fail(400, "Choose a mobile or desktop capture.");
+    if (body.refresh === true && !owner) fail(403, "Use the owner link to replace the automatic preview.");
+    if (body.refresh !== true) {
+      // Previous releases also used these labels and dimensions for automatic views.
+      const mobile = body.device === "mobile";
+      const cached = await db.prepare("SELECT " + CAPTURE_FIELDS + " FROM captures WHERE review_id=? AND page_id=? AND label=? AND width=? AND height=? ORDER BY rowid DESC LIMIT 1")
+        .bind(review.id, page.id, mobile ? "Mobile screenshot" : "Desktop screenshot", mobile ? 390 : 1440, mobile ? 844 : 900).first();
+      if (cached) return json({capture: publicCapture(review.active_invite, cached)});
+    }
     const current = await db.prepare("SELECT count(*) AS n FROM captures WHERE review_id=?").bind(review.id).first();
     if (current.n >= MAX_SCREENSHOTS) fail(409, "This review already has 10 screenshots.");
-    body = await automaticCapture(env, {reviewId: review.id, pageUrl: page.url, device: body.device});
+    body = await automaticCapture(env, {reviewId: review.id, pageUrl: publicUrl(page.url).href, device: body.device});
   }
   const image = checkedImage(body);
   const label = stringField(body.label, 100, "screenshot name", "Screenshot");
@@ -233,12 +255,21 @@ async function addCapture(request, env, db, review, auto) {
   return json({capture: publicCapture(review.active_invite, {id, pageId: page.id, label, width: image.width, height: image.height})}, result.meta.changes ? 201 : 200);
 }
 
-async function addNote(request, db, review) {
+async function noteResponse(env, db, reviewId, row, startingPageId, status = 200) {
+  const response = {note: publicNote(row)};
+  if (row.pageId !== startingPageId) {
+    const page = await db.prepare("SELECT id,url,label FROM pages WHERE review_id=? AND id=?").bind(reviewId, row.pageId).first();
+    if (page) response.page = publicPage(env, page);
+  }
+  return json(response, status);
+}
+
+async function addNote(request, env, db, review) {
   const body = await readBody(request);
   if (typeof body.clientId !== "string" || !/^[A-Za-z0-9_-]{8,80}$/.test(body.clientId)) fail(400, "The note identifier is invalid. Please try again.");
   const findExisting = () => db.prepare("SELECT " + NOTE_FIELDS + " FROM notes WHERE review_id=? AND client_id=?").bind(review.id, body.clientId).first();
   const existing = await findExisting();
-  if (existing) return json({note: publicNote(existing)});
+  if (existing) return noteResponse(env, db, review.id, existing, body.pageId);
   if (review.closed) fail(409, "This round is closed for feedback.");
   const pageId = body.pageId;
   const captureId = body.captureId ?? null;
@@ -247,13 +278,41 @@ async function addNote(request, db, review) {
   if ((x !== null || y !== null) && (![x,y].every(v => Number.isFinite(v) && v >= 0 && v <= 1))) fail(400, "Choose a spot on the page.");
   const name = stringField(body.name, 80, "reviewer name");
   const note = stringField(body.text, 3000, "note");
-  const details = parseContext(body.context, review.host);
+  const context = parseContext(body.context, review.host);
+  let navigatedUrl = null;
+  if (!captureId && context.pageUrl) {
+    const startingPage = await db.prepare("SELECT url FROM pages WHERE review_id=? AND id=?").bind(review.id, pageId).first();
+    if (!startingPage) fail(404, "The selected page is not part of this review.");
+    if (publicUrl(startingPage.url).href !== context.pageUrl) navigatedUrl = new URL(context.pageUrl);
+  }
   const id = crypto.randomUUID();
-  const result = await db.prepare("INSERT INTO notes(id,review_id,page_id,capture_id,client_id,x,y,name,text,context,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM pages JOIN reviews ON pages.review_id=reviews.id WHERE pages.id=? AND reviews.id=? AND reviews.closed=0) AND (? IS NULL OR EXISTS (SELECT 1 FROM captures WHERE id=? AND page_id=? AND review_id=?)) AND (SELECT count(*) FROM notes WHERE review_id=?) < ? ON CONFLICT(review_id,client_id) DO NOTHING")
-    .bind(id, review.id, pageId, captureId, body.clientId, x, y, name, note, details, new Date().toISOString(), pageId, review.id, captureId, captureId, pageId, review.id, review.id, MAX_NOTES).run();
+  const writes = [];
+  if (navigatedUrl) {
+    // Following a link should only add a page to the board when somebody
+    // actually comments on it. The page and note share one D1 transaction.
+    const label = navigatedUrl.pathname === "/" ? "Homepage" : navigatedUrl.pathname.slice(0, 100);
+    writes.push(db.prepare(`
+      INSERT INTO pages(id,review_id,url,label)
+      SELECT ?1,?2,?3,?4 WHERE EXISTS (SELECT 1 FROM reviews WHERE id=?2 AND closed=0)
+        AND (SELECT COUNT(*) FROM pages WHERE review_id=?2) < ?5
+        AND (SELECT COUNT(*) FROM notes WHERE review_id=?2) < ?6
+        AND NOT EXISTS (SELECT 1 FROM notes WHERE review_id=?2 AND client_id=?7)
+      ON CONFLICT(review_id,url) DO NOTHING`)
+      .bind(crypto.randomUUID(), review.id, navigatedUrl.href, label, MAX_PAGES, MAX_NOTES, body.clientId));
+  }
+  const destination = navigatedUrl ? "p.url" : "p.id";
+  writes.push(db.prepare(`
+    INSERT INTO notes(id,review_id,page_id,capture_id,client_id,x,y,name,text,context,created_at)
+    SELECT ?1,?2,p.id,?3,?4,?5,?6,?7,?8,?9,?10 FROM pages p JOIN reviews r ON r.id=p.review_id
+    WHERE p.review_id=?2 AND ${destination}=?11 AND r.closed=0
+      AND (?3 IS NULL OR EXISTS (SELECT 1 FROM captures WHERE id=?3 AND page_id=p.id AND review_id=?2))
+      AND (SELECT COUNT(*) FROM notes WHERE review_id=?2) < ?12
+    ON CONFLICT(review_id,client_id) DO NOTHING`)
+    .bind(id, review.id, captureId, body.clientId, x, y, name, note, JSON.stringify(context), new Date().toISOString(), navigatedUrl?.href || pageId, MAX_NOTES));
+  const results = await db.batch(writes);
   const saved = await findExisting();
-  if (!saved) fail(409, "This note could not be saved. Check that the round is open, the page or screenshot exists, and there are fewer than 300 notes.");
-  return json({note: publicNote(saved)}, result.meta.changes ? 201 : 200);
+  if (!saved) fail(409, "This note could not be saved. Check that the review is open and has room for this page and note.");
+  return noteResponse(env, db, review.id, saved, pageId, results.at(-1).meta.changes ? 201 : 200);
 }
 
 async function handleApi(request, env, url) {
@@ -296,10 +355,10 @@ async function handleApi(request, env, url) {
       headers: {"Content-Type": asset.media_type, "Content-Length": String(asset.byte_length), "Cache-Control": "private, no-store", "Cross-Origin-Resource-Policy": "same-origin"}
     });
   }
-  if (parts.length === 4 && route === "notes" && method === "POST") return addNote(request, db, review);
-  if (parts.length === 4 && route === "captures" && method === "POST") {
+  if (parts.length === 4 && route === "notes" && method === "POST") return addNote(request, env, db, review);
+  if (parts.length === 4 && ["captures","auto-captures"].includes(route) && method === "POST") {
     if (review.closed) fail(409, "This round is closed for feedback.");
-    return addCapture(request, env, db, review, false);
+    return addCapture(request, env, db, review, route === "auto-captures", owner);
   }
   if (!owner) fail(403, "Use your private owner link for this change.");
   if (parts.length === 4 && route === "rotate-invite" && method === "POST") {
@@ -324,7 +383,6 @@ async function handleApi(request, env, url) {
   }
   if (review.closed) fail(409, "This round is closed for feedback.");
   if (parts.length === 4 && route === "pages" && method === "POST") return addPage(request, env, db, review);
-  if (parts.length === 4 && route === "auto-captures" && method === "POST") return addCapture(request, env, db, review, true);
   fail(404, "Route not found.");
 }
 
