@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#174631">
+  <meta name="referrer" content="no-referrer">
+  <title>Site Review for Chrome | Fernandez Growth Systems</title>
+  <link rel="icon" href="/favicon.png">
+  <link rel="stylesheet" href="/review.css">
+  <link rel="stylesheet" href="/chrome/guide.css">
+  <script defer src="/chrome-desktop.js"></script>
+</head>
+<body class="guide">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="mast"><div class="shell bar">
+    <a class="brand" href="/" aria-label="FGS Site Review home"><img src="/fgs-logo.webp" alt="Fernandez Growth Systems"><span>Site Review</span></a>
+    <a href="/">Open web tool</a>
+  </div></header>
+  <main id="main" tabindex="-1" class="guide-main">
+    <h1>Site Review for Chrome</h1>
+    <p class="guide-intro">Leave feedback on a live website or capture what you see and send someone a link to mark it up on their phone.</p>
+    <div data-phone-only hidden class="phone-guide">
+      <h2>Reviewing on your phone?</h2>
+      <p>Open a review link from your project, or enter a website in the web tool. The Chrome extension runs on computers.</p>
+      <a class="button primary" href="/">Open Site Review</a>
+    </div>
+    <div data-computer-only>
+      <div class="guide-download">
+        <a class="button primary" href="/downloads/fgs-site-review.zip" download="fgs-site-review.zip">Download extension (.zip)</a>
+        <a href="#setup">Installation steps</a>
+      </div>
+      <section id="setup" aria-labelledby="setup-title">
+        <h2 id="setup-title">Install in desktop Chrome</h2>
+        <p>This version installs manually from the FGS download.</p>
+        <ol class="guide-steps">
+          <li><strong>Extract the ZIP.</strong> On Windows, right-click it and choose <b>Extract All</b>. On Mac, double-click it. Keep the extracted folder on your computer.</li>
+          <li><strong>Open Chrome’s extensions page.</strong> Enter <code>chrome://extensions</code> in the address bar and turn on <b>Developer mode</b>.</li>
+          <li><strong>Choose Load unpacked.</strong> Select the extracted folder containing <code>manifest.json</code>. Chrome will list <b>FGS Site Review</b> under your extensions.</li>
+          <li><strong>Pin the extension.</strong> Open the puzzle-piece menu in Chrome’s toolbar and pin FGS Site Review so its button is easy to find.</li>
+        </ol>
+      </section>
+      <section class="guide-how" aria-labelledby="first-title">
+        <h2 id="first-title">Start your first review</h2>
+        <p>Open the website in its own tab, then click the FGS icon in Chrome.</p>
+        <dl>
+          <div><dt>Leave a note on the live page</dt><dd>Choose <b>Start reviewing</b>, click <b>Leave feedback</b> in the corner, select the part you mean, and write your note.</dd></div>
+          <div><dt>Send a client a screenshot</dt><dd>Choose <b>Capture a screenshot</b>. Check the preview, then choose <b>Share &amp; copy link</b>. Clients can open that link on a phone and pin a note without installing anything.</dd></div>
+          <div><dt>Continue an existing review</dt><dd>On an FGS review link, click the extension and choose <b>Use this review</b>. When the original website opens, choose <b>Show feedback button</b> from the extension. New notes go into that same review.</dd></div>
+        </dl>
+        <p class="access-note">Anyone with a reviewer link can see the notes and shared screenshots for that review.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

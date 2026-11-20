@@ -14,6 +14,12 @@ On a preview you control, include this tag on each page:
 
 The preview must allow the review service to frame it and load the script. For a site with a same-origin script policy, host `public/live.js` on that site and set the script tag's `data-review-origin` attribute to `https://sitereview.fernandezgrowthsystems.com`. The bridge waits for the trusted review window. Direct visits use the normal website, and review credentials stay on the review service.
 
+## Desktop Chrome extension
+
+Setup and the downloadable extension are at https://sitereview.fernandezgrowthsystems.com/chrome/. For local development, open Chrome's extensions page, enable Developer mode, select **Load unpacked**, and choose the `extension` directory that contains `manifest.json`.
+
+On a website, open the extension from the toolbar to start leaving feedback on the original page. To collect feedback from someone on a phone, capture the visible area, check the preview, and share its reviewer link. The recipient can pin a note to that image in the web app. People with the reviewer link can see the round's feedback and shared images. Use the private owner link for management.
+
 ## Deployment
 
 The Cloudflare Pages project builds from `apps/site-review` with `node build-pages.mjs`, output directory `dist`. Apply `schema.sql` to the D1 database declared in `wrangler.jsonc` before serving the API. Run `node --test tests/api.test.mjs` with Node and Python available for SQLite integration checks.

@@ -10,7 +10,7 @@
   <link rel="icon" href="/favicon.png"><link rel="manifest" href="/site-review.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/install.css">
-  <script src="/install.js" defer></script><script src="/companion.js" defer></script><script src="/review.js" defer></script>
+  <script src="/install.js" defer></script><script src="/companion.js" defer></script><script src="/review.js" defer></script><script src="/chrome-desktop.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -32,6 +32,7 @@
       <div class="landing-foot"><button id="start-demo" type="button" class="text-button">Try it on the FGS website ↗</button><span>No account needed.</span></div>
       <p id="demo-error" class="form-error" role="alert"></p>
       <button class="text-button install" data-install-review hidden>Add to home screen</button>
+      <p class="desktop-alternative" data-desktop-chrome hidden><a href="/chrome/">Review directly in Chrome with the FGS extension</a></p>
     </section>
     <section id="loading" class="shell loading"><h1>Opening your review…</h1><p id="loading-message" role="status"></p><button type="button" id="reload" hidden>Try again</button> <a href="/" id="back-home" hidden>Start a new review</a></section>
     <section id="workspace" aria-label="Website review" hidden>
@@ -100,6 +101,7 @@
   </dialog>
   <dialog class="drawer" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 id="help-title">View this website</h2><button class="x" data-close aria-label="Close website options">×</button></div>
     <div class="stack"><p>Some websites only display in their own tab. Open the original to browse, then return here to leave feedback.</p><a class="primary button" id="help-open" target="_blank" rel="noopener noreferrer">Open original site ↗</a><button id="help-screenshot">Use a screenshot</button><button id="help-note">Write a page note</button><button id="floating-notes" hidden>Open floating notes</button></div>
+    <p class="desktop-help" data-desktop-chrome hidden><a href="/chrome/" target="_blank" rel="noopener noreferrer">Review on the original site with the Chrome extension</a></p>
   </dialog>
   <dialog class="drawer" id="copy-dialog" aria-labelledby="copy-title"><form method="dialog" class="stack"><h2 id="copy-title">Copy link</h2><label>Copy this value<input id="copy-value" readonly></label><button>Done</button></form></dialog>
   <dialog class="drawer" id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog" class="stack"><h2 id="confirm-title"></h2><p id="confirm-detail"></p><div class="row"><button value="cancel" autofocus>Cancel</button><button value="confirm" class="primary" id="confirm-action"></button></div></form></dialog>

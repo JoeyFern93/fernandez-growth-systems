@@ -1,0 +1,42 @@
+.guide-main {
+  max-width: 812px;
+  margin: 0 auto;
+  padding: clamp(42px, 8vh, 84px) clamp(20px, 5vw, 58px) 80px;
+}
+.guide-main h1 {
+  max-width: 680px;
+  font-size: clamp(40px, 7vw, 68px);
+  letter-spacing: -.05em;
+}
+.guide-intro {
+  max-width: 53ch;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: clamp(18px, 3vw, 21px);
+}
+.guide-download {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 23px;
+  margin: 24px 0 36px;
+}
+.guide-download .primary, .phone-guide .primary { min-height: 48px; padding-inline: 20px; }
+.guide-main section, .phone-guide { border-top: 1px solid var(--line); padding-top: 26px; margin-top: 30px; }
+.guide-main h2 { margin-bottom: 8px; font-size: clamp(24px, 4vw, 32px); letter-spacing: -.035em; }
+.guide-steps { padding-left: 23px; margin: 20px 0 0; }
+.guide-steps li { padding-left: 5px; margin-block: 14px; }
+.guide-steps li::marker { color: var(--green); font-weight: 800; }
+.guide-steps code { display: inline; padding: 1px 5px; margin: 0; background: #e1eade; font: 0.9em ui-monospace, monospace; }
+.guide-how dl { margin: 20px 0; }
+.guide-how dl > div { margin-top: 16px; }
+.guide-how dt { font-weight: 800; }
+.guide-how dd { margin: 4px 0 0; }
+.access-note { color: var(--muted); font-size: .92rem; }
+.phone-guide .primary { margin-top: 16px; }
+@media (max-width: 480px) {
+  .guide .bar { padding-inline: 14px; }
+  .guide .brand { gap: 8px; }
+  .guide .brand span { padding-left: 8px; }
+  .guide .brand img { width: 67px; }
+}

@@ -461,6 +461,7 @@
     if(first) {
       restoreDraft();
       if (!sharedShot || !showCapture(sharedShot.id)) openWebsite();
+      if (linkOptions.get('panel') === 'notes') modal('notes-dialog');
     }
     else if(!silent)announce('Notes refreshed.');
   }

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FGS Site Review</title>
+  <link rel="stylesheet" href="popup.css">
+  <script defer src="popup.js"></script>
+</head>
+<body>
+  <header><img src="icons/48.png" width="34" height="34" alt=""><h1>FGS Site Review</h1></header>
+  <main>
+    <p id="loading" role="status">Checking this tab…</p>
+    <section id="connect" hidden>
+      <h2>Use this review on the live site</h2>
+      <p id="connect-site" class="source"></p>
+      <p>Open the original website, then open this extension there and choose <strong>Show feedback button</strong>. Your notes will appear in this review.</p>
+      <button class="primary" id="connect-review" type="button">Use this review</button>
+    </section>
+    <section id="home" hidden aria-labelledby="host">
+      <p class="label">Current website</p>
+      <h2 id="host"></h2>
+      <p class="hint">Mark something on the live page or send a screenshot to a client.</p>
+      <button class="primary" id="start" type="button">Start reviewing</button>
+      <button id="capture" type="button">Capture a screenshot</button>
+      <div id="existing" hidden>
+        <button id="open-notes" type="button">Open review notes</button>
+        <details id="options">
+          <summary>More options</summary>
+          <button id="copy-review" type="button">Copy reviewer link</button>
+          <button id="copy-latest" type="button" hidden>Copy latest screenshot link</button>
+          <button id="new-review" type="button">Start a new review</button>
+        </details>
+      </div>
+    </section>
+    <section id="new-confirm" hidden>
+      <h2>Start a new review?</h2>
+      <p id="new-detail">This opens a fresh set of notes for this site.</p>
+      <button id="confirm-new" class="primary" type="button">Start a new review</button>
+      <button id="cancel-new" type="button">Go back</button>
+    </section>
+    <section id="preview" hidden>
+      <h2>Share this screenshot?</h2>
+      <p class="source" id="capture-site"></p>
+      <img id="preview-image" alt="Preview of the area captured from the current website">
+      <p>Anyone with the review link can see this image and tap a spot to leave feedback.</p>
+      <button class="primary" id="share" type="button">Share &amp; copy link</button>
+      <button id="discard" type="button">Cancel</button>
+    </section>
+    <section id="shared" hidden>
+      <h2>Screenshot shared</h2>
+      <p>Your client can open this link on a phone and tap the image to leave feedback.</p>
+      <label for="share-link">Screenshot review link</label>
+      <input id="share-link" type="text" readonly spellcheck="false">
+      <button class="primary" id="copy-shot" type="button">Copy link</button>
+      <a class="button" id="open-shot" target="_blank" rel="noopener noreferrer">Open client view</a>
+      <button class="text-button" id="done" type="button">Back to website options</button>
+    </section>
+    <section id="unavailable" hidden>
+      <h2>Open a website to review</h2>
+      <p id="unavailable-detail"></p>
+      <a href="https://sitereview.fernandezgrowthsystems.com/" target="_blank" rel="noopener noreferrer">Open the web tool</a>
+    </section>
+    <p id="error" role="alert"></p>
+    <p id="status" role="status" aria-live="polite"></p>
+    <div id="manual" hidden>
+      <label for="manual-link">Select and copy your link</label>
+      <input id="manual-link" readonly type="text" spellcheck="false">
+    </div>
+  </main>
+</body>
+</html>

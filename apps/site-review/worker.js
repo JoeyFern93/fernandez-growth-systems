@@ -6,6 +6,10 @@ const MAX_NOTES = 300;
 const MAX_PAGES = 30;
 const MAX_TOTAL_SCREENSHOT_BYTES = 200 * 1024 * 1024;
 const INVITE = /^[A-Za-z0-9_-]{24}$/;
+// The public key in extension/manifest.json pins this unpacked extension ID.
+// An Origin check never substitutes for the review invite or owner credential.
+const EXTENSION_ORIGIN = "chrome-extension://knbdankbggjcdbdjcdgacibgbjiaffhg";
+const EXTENSION_WRITE_ROUTES = new Set(["pages", "notes", "captures"]);
 const ITEM_ID = /^[0-9a-f-]{36}$/;
 const CAPTURE_FIELDS = "id, page_id AS pageId, label, width, height";
 const NOTE_FIELDS = "id, page_id AS pageId, capture_id AS captureId, x, y, name, text, context, created_at AS createdAt, resolved";
@@ -276,7 +280,7 @@ async function addNote(request, env, db, review) {
   if (!ITEM_ID.test(pageId) || (captureId !== null && !ITEM_ID.test(captureId))) fail(400, "Choose a valid page or screenshot.");
   const x = body.x ?? null, y = body.y ?? null;
   if ((x !== null || y !== null) && (![x,y].every(v => Number.isFinite(v) && v >= 0 && v <= 1))) fail(400, "Choose a spot on the page.");
-  const name = stringField(body.name, 80, "reviewer name");
+  const name = stringField(body.name, 80, "reviewer name", "Guest");
   const note = stringField(body.text, 3000, "note");
   const context = parseContext(body.context, review.host);
   let navigatedUrl = null;
@@ -315,15 +319,39 @@ async function addNote(request, env, db, review) {
   return noteResponse(env, db, review.id, saved, pageId, results.at(-1).meta.changes ? 201 : 200);
 }
 
+function extensionMethod(pathname) {
+  if (pathname === "/api/reviews") return "POST";
+  const [, api, reviews, invite, operation, ...rest] = pathname.split("/");
+  if (api !== "api" || reviews !== "reviews" || !INVITE.test(invite || "") || rest.length) return null;
+  if (operation === undefined) return "GET";
+  return EXTENSION_WRITE_ROUTES.has(operation) ? "POST" : null;
+}
+
 async function handleApi(request, env, url) {
   const db = env.DB;
   if (!db) fail(503, "Review storage is currently unavailable.");
   const parts = url.pathname.split("/").slice(1);
   if (parts[0] !== "api" || parts[1] !== "reviews") fail(404, "Route not found.");
   const method = request.method;
-  if (!["GET", "HEAD"].includes(method)) {
-    const origin = request.headers.get("Origin");
-    if (origin && origin !== url.origin) fail(403, "Open this review to make changes.");
+  const origin = request.headers.get("Origin");
+  if (origin === EXTENSION_ORIGIN) {
+    const allowed = extensionMethod(url.pathname);
+    if (method === "OPTIONS") {
+      if (!allowed || request.headers.get("Access-Control-Request-Method") !== allowed) {
+        fail(403, "This action is unavailable in the extension.");
+      }
+      const requested = request.headers.get("Access-Control-Request-Headers") || "";
+      if (requested && requested.split(",").some(h => !["content-type", "authorization", "accept"].includes(h.trim().toLowerCase()))) {
+        fail(403, "Unsupported extension request headers.");
+      }
+      return new Response(null, {status:204, headers:{
+        "Access-Control-Allow-Methods":allowed, "Access-Control-Allow-Headers":"Content-Type, Authorization, Accept",
+        "Cache-Control":"private, no-store"
+      }});
+    }
+    if (method !== allowed) fail(403, "This action is unavailable in the extension.");
+  } else if (origin && origin !== url.origin && !["GET", "HEAD"].includes(method)) {
+    fail(403, "Open this review to make changes.");
   }
   if (parts.length === 2 && method === "POST") return createReview(request, env, db);
   const [, , invite, route, item, action] = parts;
@@ -408,6 +436,10 @@ export default {
       response = json({error: expected ? error.message : "Site Review is temporarily unavailable. Please try again."}, expected ? error.status : 503);
     }
     const headers = new Headers(response.headers);
+    if (request.headers.get("Origin") === EXTENSION_ORIGIN && extensionMethod(url.pathname)) {
+      headers.set("Access-Control-Allow-Origin", EXTENSION_ORIGIN);
+      headers.append("Vary", "Origin");
+    }
     const demo = url.pathname.startsWith("/demo/");
     headers.set("Referrer-Policy", "no-referrer");
     headers.set("X-Content-Type-Options", "nosniff");

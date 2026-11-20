@@ -1,0 +1,41 @@
+:root {
+  color-scheme: light;
+  font: 15px/1.45 system-ui, sans-serif;
+  color: #14251c;
+  background: white;
+}
+* {box-sizing: border-box}
+[hidden] {display: none !important}
+body {width: 354px; max-width: 100vw; margin: 0}
+header {display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-bottom: 1px solid #d5dfd6}
+header img {border-radius: 8px}
+h1 {font-size: 17px; margin: 0; letter-spacing: -.035em}
+main {padding: 18px}
+h2 {margin: 0; line-height: 1.2; font-size: 21px; letter-spacing: -.035em; overflow-wrap: anywhere}
+p {margin: 7px 0 13px; color: #46594d}
+.label, label {display: block; font-weight: 650; font-size: 13px; color: #415b49; margin: 0 0 4px}
+.hint {margin: 7px 0 14px}
+button, .button {
+  display: flex; justify-content: center; align-items: center; width: 100%;
+  min-height: 42px; border: 1px solid #c0cec3; border-radius: 8px;
+  font: inherit; font-weight: 650; line-height: 1.3; cursor: pointer;
+  background: white; color: #1c412c; text-align: center; text-decoration: none;
+  margin: 7px 0 0; padding: 9px 12px;
+}
+button:hover, .button:hover {background: #f1f6f0}
+.primary {color: white; background: #1f563b; border-color: #1f563b}
+.primary:hover {background: #163d2a}
+button:disabled {opacity: .65; cursor: progress}
+a {color: #1e5137}
+:focus-visible {outline: 3px solid #1970a5; outline-offset: 2px}
+details {margin-top: 8px}
+summary {cursor: pointer; color: #35533e; padding: 7px 0; font-size: 14px}
+.text-button {text-decoration: underline; text-underline-offset: 2px; border: none}
+.source {font-size: 13px; overflow-wrap: anywhere}
+#preview-image {display: block; margin: 10px auto; width: 100%; max-height: 180px; object-fit: contain; background: #f1f4ef; border: 1px solid #d5dfd6; border-radius: 6px}
+input {width: 100%; min-height: 37px; border: 1px solid #a8baad; border-radius: 6px; color: #14251c; background: white; font: inherit; padding: 6px 8px}
+#error, #status {font-size: 14px; margin: 10px 0 0; overflow-wrap: anywhere}
+#error {color: #972b19}
+#status {color: #225a3c}
+#error:empty, #status:empty {display: none}
+#manual {margin-top: 12px}

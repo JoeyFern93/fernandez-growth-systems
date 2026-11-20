@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {webcrypto} from "node:crypto";
+import {createHash, webcrypto} from "node:crypto";
 import {mkdtempSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -135,6 +135,57 @@ test("creation validates the input and rejects cross-site writes", async () => {
   }
   const denied = await request("/api/reviews","POST",{url:"example.com"},null,{Origin:"https://elsewhere.example"});
   assert.equal(denied.status, 403);
+});
+
+test("Chrome companion can create, capture and annotate only the invited review", async () => {
+  // Exercise the origin Chrome actually assigns the packaged manifest.
+  const manifest = JSON.parse(readFileSync(new URL("../extension/manifest.json", import.meta.url),"utf8"));
+  const digest = createHash("sha256").update(Buffer.from(manifest.key,"base64")).digest("hex");
+  const id = digest.slice(0,32).replace(/[0-9a-f]/g, digit => String.fromCharCode(97 + parseInt(digit,16)));
+  const extension = "chrome-extension://" + id;
+  const client = {Origin:extension};
+  for (const origin of [extension+"x", extension+"/", "null", "https://external.example"]) {
+    const blocked = await request("/api/reviews","POST",{url:"client.example"},null,{Origin:origin});
+    assert.equal(blocked.status,403);
+    assert.equal(blocked.headers.has("Access-Control-Allow-Origin"),false);
+  }
+  const created = await request("/api/reviews","POST",{url:"client.example"},null,client);
+  assert.equal(created.status,201);
+  assert.equal(created.headers.get("Access-Control-Allow-Origin"),extension);
+  const {review, ownerPath} = await created.json();
+  const path = "/api/reviews/" + review.id;
+  const owner = ownerPath.split("#owner=")[1];
+  const preflight = await request(path+"/captures","OPTIONS",undefined,null,{
+    ...client,"Access-Control-Request-Method":"POST","Access-Control-Request-Headers":"authorization, content-type"
+  });
+  assert.equal(preflight.status,204);
+  assert.equal(preflight.headers.get("Access-Control-Allow-Methods"),"POST");
+  assert.equal((await request(path,"OPTIONS",undefined,null,{...client,"Access-Control-Request-Method":"PATCH"})).status,403);
+  assert.equal((await request(path+"/pages","OPTIONS",undefined,null,{
+    ...client,"Access-Control-Request-Method":"POST","Access-Control-Request-Headers":"x-unexpected"
+  })).status,403);
+  const board = await (await request(path,"GET",undefined,null,client)).json();
+  assert.equal(board.review.role,"reviewer");
+  assert.equal((await request(path+"/pages","POST",{url:"client.example/team"},null,client)).status,403);
+  assert.equal((await request(path+"/pages","POST",{url:"other.example/team"},owner,client)).status,400);
+  const added = await request(path+"/pages","POST",{url:"client.example/team"},owner,client);
+  assert.equal(added.status,201);
+  const {page} = await added.json();
+  const jpeg = readFileSync(new URL("./mobile-preview.jpg",import.meta.url));
+  const image = await request(path+"/captures","POST",{pageId:page.id,dataUrl:"data:image/jpeg;base64,"+jpeg.toString("base64")},null,client);
+  assert.equal(image.status,201);
+  const note = await request(path+"/notes","POST",{
+    pageId:page.id,clientId:crypto.randomUUID(),text:"Change this heading.",context:{mode:"live",pageUrl:page.url,elementLabel:"Team"}
+  },null,client);
+  assert.equal(note.status,201);
+  const saved = (await note.json()).note;
+  assert.equal(saved.context.elementLabel,"Team");
+  assert.equal(saved.name,"Guest");
+  for (const [suffix,method,body] of [["","PATCH",{closed:true}],["/rotate-invite","POST",{}],["/auto-captures","POST",{pageId:page.id,device:"mobile"}]]) {
+    assert.equal((await request(path+suffix,method,body,owner,client)).status,403);
+  }
+  assert.equal((await request(path,"PATCH",{closed:true},owner)).status,200);
+  assert.equal((await request(path+"/captures","POST",{pageId:page.id},owner,client)).status,409);
 });
 
 test("FGS aliases, previously issued links and notes on a second live page", async () => {
