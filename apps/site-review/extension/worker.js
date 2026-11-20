@@ -87,17 +87,40 @@ async function board(record) {
   if (siteKey(url) !== siteKey(new URL('https://' + record.host))) throw Error('This review is for a different site.');
   return {data, url, reviewerUrl: reviewerLink(data.review.reviewerPath, data.review.host)};
 }
-async function reviewFor(url, create, replace = false) {
+async function creatorId() {
+  return withSiteLock('creatorId', async () => {
+    let id = await read(chrome.storage.local, 'creatorId');
+    if (!id) {
+      id = crypto.randomUUID();
+      await write(chrome.storage.local, 'creatorId', id);
+    }
+    return id;
+  });
+}
+async function reviewFor(url, create, replace = false, previousReviewerUrl) {
   const key = siteKey(url);
   return withSiteLock(key, async () => {
     const existing = await read(chrome.storage.local, key);
     if (existing && !replace) return existing;
+    if (existing && previousReviewerUrl && previousReviewerUrl !== existing.reviewerUrl) return existing;
     if (!create) throw Error('Open the FGS extension and start a review on this website first.');
-    const result = await api('', {method: 'POST', body: {url: url.href}});
+    // Keep the original starting URL and secret until the owner link is durably
+    // saved. Chrome may restart this worker after the server commits a review.
+    const pendingKey = 'pending:' + key;
+    const previousId = existing?.id || null;
+    let pending = await read(chrome.storage.local, pendingKey);
+    if (!pending || pending.previousId !== previousId) {
+      const secret = crypto.getRandomValues(new Uint8Array(32));
+      pending = {previousId, url: url.href, creationKey: Array.from(secret, b => b.toString(16).padStart(2, '0')).join('')};
+      await write(chrome.storage.local, pendingKey, pending);
+    }
+    const result = await api('', {method: 'POST', body: {
+      url: pending.url, creationKey: pending.creationKey, creatorId: await creatorId()
+    }});
     const ownerLink = parseInvite(result.ownerPath);
     if (!ownerLink?.owner || siteKey(url) !== siteKey(new URL('https://' + ownerLink.host))) throw Error('FGS could not create the owner link. Try again.');
     const record = {id: ownerLink.id, host: ownerLink.host, owner: ownerLink.owner, reviewerUrl: reviewerLink(result.reviewerPath, ownerLink.host)};
-    await write(chrome.storage.local, key, record);
+    await chrome.storage.local.set({[key]: record, [pendingKey]: null});
     return record;
   });
 }
@@ -129,11 +152,11 @@ async function inject(tabId) {
   try { await chrome.scripting.executeScript({target: {tabId}, files: ['overlay.js']}); }
   catch { throw Error('Chrome could not add the feedback button. Click the extension on the website itself and try again.'); }
 }
-async function start(tab, url, replace) {
+async function start(tab, url, replace, previousReviewerUrl) {
   // Check Chrome grants before creating any review on the server.
   try { await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => true}); }
   catch { throw Error('Chrome does not allow the feedback button on this page. Open the original website in a regular tab.'); }
-  const record = await reviewFor(url, true, replace);
+  const record = await reviewFor(url, true, replace, previousReviewerUrl);
   const {data, reviewerUrl} = await board(record);
   requireOpen(data);
   if (reviewerUrl !== record.reviewerUrl) await updateLink(url, record, reviewerUrl);
@@ -257,7 +280,9 @@ async function handle(message, sender) {
     return {isReviewPage: false, host: url.hostname, hasReview: !!record, isOwner: !!record?.owner,
       reviewerUrl: record?.reviewerUrl || null, lastScreenshotUrl: record?.lastShot ? record.reviewerUrl + '#shot=' + record.lastShot : null};
   }
-  if (message.type === 'start' || message.type === 'new-review') return start(tab, url, message.type === 'new-review');
+  if (message.type === 'start' || message.type === 'new-review') {
+    return start(tab, url, message.type === 'new-review', message.type === 'new-review' ? message.previousReviewerUrl : undefined);
+  }
   if (message.type === 'capture') return capture(tab, url);
   if (message.type === 'share-capture') return shareCapture(tab, url, message.captureKey);
   if (message.type === 'discard-capture') {

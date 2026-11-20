@@ -2,7 +2,7 @@
 // database and TLS identity are disposable. No request goes to the live app.
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {createHash, createPublicKey} from 'node:crypto';
+import {createHash, createPublicKey, randomUUID} from 'node:crypto';
 import {mkdir, mkdtemp, readFile, rm} from 'node:fs/promises';
 import https from 'node:https';
 import {tmpdir} from 'node:os';
@@ -15,7 +15,10 @@ import app from '../worker.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await mkdtemp(path.join(tmpdir(), 'fgs-chrome-test-'));
 const reviewHost = 'sitereview.fernandezgrowthsystems.com';
-const siteHost = 'client-site.example';
+// Both hostnames resolve to the loopback test server within this Chrome profile.
+const siteHost = 'coastaltidelabs.com';
+const sharedIp = '203.0.113.14';
+const legacyWebRounds = 100;
 const service = 'https://' + reviewHost;
 const origin = 'https://' + siteHost;
 const inviteId = 'knbdankbggjcdbdjcdgacibgbjiaffhg';
@@ -54,6 +57,28 @@ const env = {
   }
 };
 const pause = ms => new Promise(r => setTimeout(r, ms));
+async function seedLegacyRounds() {
+  // The old service allowed 12 creations per IP and 100 in total per UTC day.
+  // Leave enough time since midnight for this traffic to be outside a one-minute burst.
+  let day = new Date().toISOString().slice(0,10);
+  const elapsedToday = Date.now() - Date.parse(day + 'T00:00:00Z');
+  if (elapsedToday < 61000) await pause(61000 - elapsedToday);
+  day = new Date().toISOString().slice(0,10);
+  const created = day + 'T00:00:00.000Z';
+  const hash = value => createHash('sha256').update(value).digest('hex');
+  const addReview = db.prepare('INSERT INTO reviews(id,owner_hash,host,url,title,created_at,creation_bucket) VALUES(?,?,?,?,?,?,?)');
+  const addPage = db.prepare('INSERT INTO pages(id,review_id,url,label) VALUES(?,?,?,?)');
+  const seedHost = 'earlier-web-review.example';
+  const seedUrl = 'https://' + seedHost + '/';
+  for (let i = 0; i < legacyWebRounds; i++) {
+    const ip = i < 12 ? sharedIp : '198.51.100.' + i;
+    const id = hash('legacy-review-' + i).slice(0,24);
+    addReview.run(id, hash('legacy-owner-' + i), seedHost, seedUrl, 'Earlier web review', created, hash(day + '/' + ip));
+    addPage.run(randomUUID(), id, seedUrl, 'Homepage');
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reviews WHERE creation_bucket=?').get(hash(day + '/' + sharedIp)).n,12);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reviews WHERE created_at>=?').get(day).n,legacyWebRounds);
+}
 async function until(test, describe) {
   const limit = Date.now() + 15000;
   while (Date.now() < limit) { const value = await test(); if (value) return value; await pause(100); }
@@ -73,7 +98,7 @@ async function requestHandler(req, res) {
     }
     assert.equal(host, reviewHost);
     const body = []; for await (const c of req) body.push(c);
-    const request = new Request(service + req.url, {method:req.method, headers:req.headers,
+    const request = new Request(service + req.url, {method:req.method, headers:{...req.headers, 'cf-connecting-ip':sharedIp},
       body:body.length ? Buffer.concat(body) : undefined});
     const response = await app.fetch(request, env);
     if (req.url.startsWith('/api/')) apiTraffic.push([req.method, req.url.split('/').slice(4).join('/'), response.status]);
@@ -111,7 +136,7 @@ try {
   await new Promise((resolve,reject) => server.once('error',reject).listen(0,'127.0.0.1',resolve));
   const port = server.address().port;
   const mappings = [siteHost,reviewHost].map(host => 'MAP '+host+' 127.0.0.1:'+port).join(', ');
-  browser = await puppeteer.launch({enableExtensions:true, pipe:true, headless:process.env.FGS_HEADLESS==='1',
+  browser = await puppeteer.launch({enableExtensions:true, pipe:true, defaultViewport:null, headless:process.env.FGS_HEADLESS==='1',
     userDataDir:path.join(temp,'profile'), args:['--no-proxy-server','--disable-background-networking',
       '--ignore-certificate-errors-spki-list='+pin,'--host-resolver-rules='+mappings+', MAP * ~NOTFOUND, EXCLUDE localhost']});
   const id = await browser.installExtension(process.argv[2] ?? path.join(root,'extension'));
@@ -123,6 +148,7 @@ try {
   await page.setViewport({width:1000,height:740});
   await page.goto(origin + '/details?privateValue=do-not-send#private-fragment');
   const session = await page.createCDPSession();
+  await seedLegacyRounds();
   async function popup() {
     await page.bringToFront();
     const targetPromise = browser.waitForTarget(t => t.type() === 'page' && t.url() === 'chrome-extension://'+id+'/popup.html', {timeout:12000});
@@ -135,8 +161,44 @@ try {
     return ui;
   }
   let ui = await popup();
-  assert.equal(count('reviews'),0,'Opening the extension alone must not create a review');
+  const popupSize = await ui.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const lines = selector => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector(selector));
+      return new Set(Array.from(range.getClientRects(), rect => Math.round(rect.top))).size;
+    };
+    const visible = selector => {
+      const bounds = document.querySelector(selector).getBoundingClientRect();
+      return bounds.width > 0 && bounds.height >= 40 && bounds.top >= 0 && bounds.bottom <= innerHeight + 1;
+    };
+    return {version:chrome.runtime.getManifest().version, width:innerWidth, bodyWidth:document.body.getBoundingClientRect().width, scrollWidth:document.documentElement.scrollWidth,
+      host:document.querySelector('#host').textContent, titleLines:lines('h1'), hostLines:lines('#host'),
+      startVisible:visible('#start'), captureVisible:visible('#capture')};
+  });
+  assert.equal(popupSize.host, siteHost);
+  const legacy = process.env.FGS_LEGACY_EXTENSION === '1';
+  if (legacy) {
+    assert.equal(popupSize.version,'1.0.0','The compatibility check must load the originally shipped ZIP');
+    console.log('Testing the original installed extension against the updated API. Original popup width: ' + popupSize.width + ' CSS pixels.');
+  } else {
+    assert.notEqual(popupSize.version,'1.0.0','The layout check must load the updated ZIP');
+    assert(popupSize.width >= 320 && popupSize.width <= 380, 'Actual Chrome toolbar popup width: ' + JSON.stringify(popupSize));
+    assert(popupSize.bodyWidth >= 320 && popupSize.scrollWidth <= popupSize.width + 1, 'Popup overflow: ' + JSON.stringify(popupSize));
+    assert.equal(popupSize.titleLines,1,'FGS Site Review should fit on one line');
+    assert.equal(popupSize.hostLines,1,'The Coastal Tide Labs hostname should fit on one line');
+    assert(popupSize.startVisible && popupSize.captureVisible,'Both primary actions must be on screen: ' + JSON.stringify(popupSize));
+    console.log('Native Chrome toolbar popup measured ' + popupSize.width + ' CSS pixels; full site address and both actions are visible.');
+  }
+  if (process.env.FGS_PROOF_DIR) {
+    await mkdir(process.env.FGS_PROOF_DIR,{recursive:true});
+    await ui.screenshot({path:path.join(process.env.FGS_PROOF_DIR,legacy ? 'coastal-tide-original-popup.png' : 'coastal-tide-first-use-popup.png')});
+  }
+  assert.equal(count('reviews'),legacyWebRounds,'Opening the extension alone must not create a review');
   await ui.click('#start');
+  await until(() => count('reviews') === legacyWebRounds + 1, 'first extension review after prior web traffic');
+  console.log('First extension click created a fresh round after 12 previous web rounds from the same IP and 100 website-wide today.');
   await clickInOverlay(page, session, 'aria-label', 'Leave feedback');
   await page.click('h1');
   await clickInOverlay(page, session, 'id', 'fgs-note');
@@ -162,7 +224,7 @@ try {
     throw Error('Screenshot share: '+ await ui.$eval('#error',el=>el.textContent)); });
   const link = await ui.$eval('#share-link',el=>el.value);
   assert(link.startsWith(service+'/'+siteHost+'/')); assert.match(new URL(link).hash,/^#shot=[\w-]+$/);
-  assert.equal(count('captures'),1); assert.equal(count('reviews'),1);
+  assert.equal(count('captures'),1); assert.equal(count('reviews'),legacyWebRounds + 1);
   console.log('Captured real tab pixels, checked the private preview, and obtained a screenshot-only guest link.');
 
   const guestContext = await browser.createBrowserContext();

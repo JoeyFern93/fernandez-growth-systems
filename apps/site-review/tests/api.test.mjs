@@ -137,6 +137,80 @@ test("creation validates the input and rejects cross-site writes", async () => {
   assert.equal(denied.status, 403);
 });
 
+test("first-use Chrome can create after a shared network's old daily quota, with short scoped burst guards", async t => {
+  let clock = Date.parse("2027-01-04T12:00:01Z");
+  t.mock.method(Date, "now", () => clock);
+  const ip = "203.0.113.26";
+  const extension = "chrome-extension://knbdankbggjcdbdjcdgacibgbjiaffhg";
+  const headers = {Origin:extension, "CF-Connecting-IP":ip};
+  const create = (body = {}, h = headers) => request("/api/reviews", "POST", {url:"coastaltidelabs.com", ...body}, null, h);
+  function seed(n, bucket) {
+    const prefix = crypto.randomUUID();
+    execute(Array.from({length:n}, (_,i) => ({
+      sql:"INSERT INTO reviews(id,owner_hash,host,url,title,created_at,creation_bucket) VALUES(?,?,?,?,?,?,?)",
+      args:[prefix+i,"test","seed.example","https://seed.example/","Previously started",
+        new Date(clock).toISOString(),bucket]
+    })));
+  }
+  function count(pattern) {
+    return execute([{sql:"SELECT count(*) AS n FROM reviews WHERE creation_bucket GLOB ?",args:[pattern]}])[0].results[0].n;
+  }
+  const oldBucket = createHash("sha256").update("2027-01-04/"+ip).digest("hex");
+  seed(12,oldBucket);
+  seed(88,"other historical networks");
+  assert.equal((await create()).status,201, "An unchanged 1.0.0 extension recovers immediately");
+
+  const creatorId = crypto.randomUUID();
+  const first = await create({creatorId});
+  assert.equal(first.status,201);
+  const {review} = await first.json();
+  const bucket = execute([{sql:"SELECT creation_bucket FROM reviews WHERE id=?",args:[review.id]}])[0].results[0].creation_bucket;
+  const network = bucket.slice(0,bucket.lastIndexOf(":")+1), slot = network.slice(0,network.lastIndexOf(":",network.length-2)+1);
+  seed(11,bucket);
+  const limited = await create({creatorId});
+  assert.equal(limited.status,429);
+  assert.equal(limited.headers.get("Retry-After"),"299");
+  assert.match((await limited.json()).error,/this browser/);
+  assert.equal((await create({creatorId:crypto.randomUUID()})).status,201,"A different installation on the same Wi-Fi can start");
+
+  seed(36-count(network+"*"),network+"other-installations");
+  const shared = await create({creatorId:crypto.randomUUID()});
+  assert.equal(shared.status,429);
+  assert.match((await shared.json()).error,/this network/);
+  assert.equal((await create({},{"CF-Connecting-IP":"203.0.113.99"})).status,201);
+
+  seed(60-count(slot+"*"),slot+"other-networks");
+  const service = await create({},{"CF-Connecting-IP":"203.0.113.88"});
+  assert.equal(service.status,429);
+  assert.match((await service.json()).error,/Site Review is handling/);
+  assert.equal((await request("/api/reviews/"+review.id)).status,200);
+  clock+=300000;
+  assert.equal((await create({creatorId})).status,201,"Existing or new devices recover when the brief burst ends");
+});
+
+test("retries recover the same private review without spending quota, including after invite rotation", async () => {
+  const creationKey = crypto.randomUUID().replaceAll("-","") + crypto.randomUUID().replaceAll("-","");
+  const body = {url:"https://idempotent.example/first",creatorId:crypto.randomUUID(),creationKey};
+  const create = values => request("/api/reviews","POST",values,null,{"CF-Connecting-IP":"203.0.113.101"});
+  const replies = await Promise.all([create(body),create(body)]);
+  assert.deepEqual(replies.map(r=>r.status).sort(),[200,201]);
+  const [one,two] = await Promise.all(replies.map(r=>r.json()));
+  assert.deepEqual(one,two);
+  const owner = one.ownerPath.split("#owner=")[1];
+  const apiPath = "/api/reviews/"+one.review.id;
+  const board = await api(apiPath,"GET",undefined,owner);
+  assert.equal(board.pages.length,1);
+  assert.ok(!JSON.stringify(board).includes(creationKey));
+  assert.equal((await create({...body,url:"https://idempotent.example/other"})).status,409);
+  assert.equal((await api(apiPath,"GET",undefined,owner)).pages.length,1);
+  const rotated = await api(apiPath+"/rotate-invite","POST",{},owner);
+  const recovered = await (await create(body)).json();
+  assert.equal(recovered.reviewerPath,rotated.reviewerPath);
+  assert.equal(recovered.ownerPath,one.ownerPath);
+  assert.equal((await create({...body,creationKey:"small"})).status,400);
+  assert.equal((await create({...body,creatorId:"fake"})).status,400);
+});
+
 test("Chrome companion can create, capture and annotate only the invited review", async () => {
   // Exercise the origin Chrome actually assigns the packaged manifest.
   const manifest = JSON.parse(readFileSync(new URL("../extension/manifest.json", import.meta.url),"utf8"));

@@ -29,7 +29,7 @@ function mount({status, shareLink = imageLink, allowCopy = true} = {}) {
     status:status || defaults,
     capture:{ok:true, captureKey:'local-key', dataUrl:'data:image/jpeg;base64,YQ==', host:'example.com',path:'/services'},
     'share-capture':{ok:true, reviewerUrl:shareLink}, 'discard-capture':{ok:true},
-    'connect-review':{ok:true}, 'open-connected-site':{ok:true}
+    'connect-review':{ok:true}, 'open-connected-site':{ok:true}, 'new-review':{ok:true}
   };
   const document = {
     getElementById:id => nodes.get(id),
@@ -100,4 +100,15 @@ test('a review invite offers a deliberate connection to its target site', async 
   await popup.node('connect-review').click();
   assert.deepEqual(popup.messages.map(m=>m.type), ['status','connect-review','open-connected-site']);
   assert.equal(popup.closed(), true);
+});
+
+test('confirming a new round identifies the review the user chose to replace', async () => {
+  const popup = mount();
+  await new Promise(resolve => setImmediate(resolve));
+  await popup.node('new-review').click();
+  assert.equal(popup.messages.length, 1);
+  await popup.node('confirm-new').click();
+  const request = popup.messages.at(-1);
+  assert.equal(request.type, 'new-review');
+  assert.equal(request.previousReviewerUrl, guestLink);
 });

@@ -1,4 +1,7 @@
 :root {
+  /* Chrome measures this document before it gives the toolbar popup a viewport. */
+  width: 352px;
+  overflow-x: clip;
   color-scheme: light;
   font: 15px/1.45 system-ui, sans-serif;
   color: #14251c;
@@ -6,7 +9,11 @@
 }
 * {box-sizing: border-box}
 [hidden] {display: none !important}
-body {width: 354px; max-width: 100vw; margin: 0}
+body {margin: 0}
+@media (max-width: 351px) {
+  /* Keep the controls inside the available space on a constrained display. */
+  body {max-width: 100vw}
+}
 header {display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-bottom: 1px solid #d5dfd6}
 header img {border-radius: 8px}
 h1 {font-size: 17px; margin: 0; letter-spacing: -.035em}

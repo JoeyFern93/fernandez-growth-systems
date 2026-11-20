@@ -5,6 +5,8 @@ const MAX_SCREENSHOTS = 10;
 const MAX_NOTES = 300;
 const MAX_PAGES = 30;
 const MAX_TOTAL_SCREENSHOT_BYTES = 200 * 1024 * 1024;
+const CREATION_WINDOW_MS = 5 * 60 * 1000;
+const CREATION_LIMITS = {creator: 12, network: 36, service: 60};
 const INVITE = /^[A-Za-z0-9_-]{24}$/;
 // The public key in extension/manifest.json pins this unpacked extension ID.
 // An Origin check never substitutes for the review invite or owner credential.
@@ -196,26 +198,80 @@ function checkedImage(body) {
   return {encoded, width, height, length: bytes.length, type: format[1]};
 }
 
+async function creationTokens(key) {
+  if (key === undefined) return {id: token(18), owner: token(32)};
+  if (typeof key !== "string" || !/^[0-9a-f]{64}$/.test(key)) fail(400, "The review request could not be identified.");
+  // A lost response can be reconstructed with the private per-request key.
+  // The two independent outputs keep the public invite separate from ownership.
+  async function derive(purpose, bytes) {
+    const input = new TextEncoder().encode("FGS review creation v1/" + purpose + "/" + key);
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", input));
+    return btoa(String.fromCharCode(...digest.subarray(0, bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  return {id: await derive("invite", 18), owner: await derive("owner", 32)};
+}
+
 async function createReview(request, env, db) {
   const body = await readBody(request);
   const url = publicUrl(body.url);
   const title = stringField(body.title, 100, "review title", url.hostname);
-  const id = token(18);
-  const owner = token(32);
-  const pageId = crypto.randomUUID();
-  const date = new Date().toISOString();
-  const day = date.slice(0, 10);
-  const bucket = await hash(day + "/" + (request.headers.get("CF-Connecting-IP") || "local"));
+  if (body.creatorId !== undefined && (typeof body.creatorId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(body.creatorId))) {
+    fail(400, "The browser's review identifier is invalid.");
+  }
+  const {id, owner} = await creationTokens(body.creationKey);
+  const ownerHash = await hash(owner);
+  const now = Date.now();
+  const slot = Math.floor(now / CREATION_WINDOW_MS);
+  const prefix = "burst:" + slot + ":";
+  const ip = request.headers.get("CF-Connecting-IP");
+  const network = prefix + (ip ? await hash(prefix + ip) : "unknown") + ":";
+  const channel = request.headers.get("Origin") === EXTENSION_ORIGIN ? "extension" : "web";
+  // Older clients have no installation identifier. Keep their different sites
+  // and interfaces independent, and never treat an unknown IP as one user.
+  const identity = body.creatorId || (ip ? channel + "/" + url.hostname : id);
+  const bucket = network + await hash(prefix + identity);
+  const countsSql = `SELECT count(*) AS service,
+      count(CASE WHEN creation_bucket GLOB ? THEN 1 END) AS network,
+      count(CASE WHEN creation_bucket=? THEN 1 END) AS creator
+    FROM reviews WHERE creation_bucket GLOB ?`;
+  const countsArgs = [ip ? network + "*" : "none", bucket, prefix + "*"];
   const results = await db.batch([
-    db.prepare("INSERT INTO reviews(id, owner_hash, host, url, title, created_at, creation_bucket) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reviews WHERE creation_bucket=?) < 12 AND (SELECT count(*) FROM reviews WHERE created_at >= ?) < 100")
-      .bind(id, await hash(owner), url.hostname, url.href, title, date, bucket, bucket, day),
-    db.prepare("INSERT INTO pages(id, review_id, url, label) SELECT ?,id,?,? FROM reviews WHERE id=?")
-      .bind(pageId, url.href, url.pathname === "/" ? "Homepage" : url.pathname.slice(0, 100), id)
+    db.prepare(`INSERT INTO reviews(id, owner_hash, host, url, title, created_at, creation_bucket)
+      SELECT ?,?,?,?,?,?,? FROM (${countsSql}) WHERE creator<? AND network<? AND service<?
+      ON CONFLICT(id) DO NOTHING`)
+      .bind(id, ownerHash, url.hostname, url.href, title, new Date(now).toISOString(), bucket, ...countsArgs,
+        CREATION_LIMITS.creator, CREATION_LIMITS.network, CREATION_LIMITS.service),
+    db.prepare(`INSERT INTO pages(id, review_id, url, label) SELECT ?,id,?,? FROM reviews
+      WHERE id=? AND owner_hash=? AND url=? ON CONFLICT(review_id,url) DO NOTHING`)
+      .bind(crypto.randomUUID(), url.href, url.pathname === "/" ? "Homepage" : url.pathname.slice(0, 100), id, ownerHash, url.href)
   ]);
-  if (!results[0].meta.changes) fail(429, "The daily review creation limit has been reached. Try again tomorrow.");
-  const path = "/" + url.hostname + "/" + id;
-  return json({reviewerPath: path, ownerPath: path + "#owner=" + owner,
-    review: publicReview({id, host: url.hostname, url: url.href, title, closed: false}, true)}, 201);
+  const created = results[0].meta.changes > 0;
+  let row = {id, host: url.hostname, url: url.href, title, closed: false};
+  if (!created) {
+    const existing = body.creationKey && await lookup(db, id);
+    if (!existing) {
+      const counts = await db.prepare(countsSql).bind(...countsArgs).first();
+      let reason = "Site Review is handling a burst of new reviews.";
+      if (counts.creator >= CREATION_LIMITS.creator) reason = body.creatorId
+        ? "Several reviews were just started from this browser."
+        : "Several reviews were just started for this website on this network.";
+      else if (counts.network >= CREATION_LIMITS.network) reason = "Several reviews were just started on this network.";
+      const seconds = Math.max(1, Math.ceil(((slot + 1) * CREATION_WINDOW_MS - Date.now()) / 1000));
+      const minutes = Math.ceil(seconds / 60);
+      const response = json({error: reason + " Try again in " + minutes + (minutes === 1 ? " minute." : " minutes.") +
+        " Existing review links still work.", retryAfterSeconds: seconds}, 429);
+      response.headers.set("Retry-After", String(seconds));
+      return response;
+    }
+    if (existing.id !== id || existing.owner_hash !== ownerHash || existing.url !== url.href) {
+      fail(409, "This review request already belongs to a different page. Start a new review.");
+    }
+    row = existing;
+  }
+  const review = publicReview(row, true);
+  return json({reviewerPath: review.reviewerPath, ownerPath: "/" + row.host + "/" + id + "#owner=" + owner, review},
+    created ? 201 : 200);
 }
 
 async function addPage(request, env, db, review) {

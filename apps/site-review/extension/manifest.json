@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FGS Site Review",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minimum_chrome_version": "112",
   "description": "Leave feedback on the website you're browsing or share a screenshot your client can review on their phone.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzQtvPciRJ4wPcPS8Z0BUKk7pH7Jh81XrOmVmtuqNIuFX/wThM7l+lJVOhheiibO8g3rPnAKbZB/Bhr5dXj7RZ2kkDBBEUQEGgHkyJn23b6IM3XeyXVEca3CYtYJyBJ1yYI/8bbnbd/OIkczfn9Z/UgMQZIrRImidCK+2kpXfmbInQlVSIqWcBgftb8LJ2QUGNI9WW6M13w1QK+2kRFDBTncEmeJRMgmMwWo+7+Ks0G40Jt/rWlaO0uFCF5kDsYAuABoHpgTf91zzjQTnkfpukiH7FSu9sI5Vji0JS5bJteDCMx/2Y/VXn709D44G9OhepTWkAnN/X4wRbHcuoQeHNQIDAQAB",
