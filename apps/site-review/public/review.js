@@ -296,9 +296,21 @@
     if (!data.pages.some(p => p.id === result.page.id)) data.pages.push(result.page);
     switchPage(result.page.id); form.reset(); announce('Page added.'); el('page-select').focus();
   });
+  async function confirmChange(action, detail) {
+    const dialog = el('confirm-dialog');
+    if (dialog.open) return false;
+    el('confirm-title').textContent = action + '?';
+    el('confirm-detail').textContent = detail;
+    el('confirm-action').textContent = action;
+    dialog.returnValue = 'cancel';
+    const result = new Promise(resolve => dialog.addEventListener('close',
+      () => resolve(dialog.returnValue === 'confirm'), {once:true}));
+    dialog.showModal();
+    return result;
+  }
   el('close-round').onclick = async () => {
     if (statusBusy || isSending) return;
-    if (!data.review.closed && !window.confirm('Close this review? Guests will be able to read existing feedback. You can reopen it anytime.')) return;
+    if (!data.review.closed && !await confirmChange('Close review', 'Guests can still read existing feedback. You can reopen this round anytime.')) return;
     statusBusy = true; el('close-round').disabled = true;
     try {
       const res = await api(apiRoot,'PATCH',{closed:!data.review.closed});
@@ -309,7 +321,7 @@
     finally { statusBusy=false; el('close-round').disabled=false; }
   };
   el('rotate-link').onclick=async () => {
-    if (statusBusy || !window.confirm('Replace the reviewer link? The old reviewer link will stop opening this review. Your private owner link will still work.')) return;
+    if (statusBusy || !await confirmChange('Replace reviewer link', 'Anyone with the old link will need the new one. You can keep using your private owner link.')) return;
     statusBusy=true; el('rotate-link').disabled=true;
     try {
       const res=await api(apiRoot+'/rotate-invite','POST',{});
@@ -380,8 +392,8 @@
     el('frame-slot').replaceChildren(); el('live-controls').hidden=true;
     el('pick-element').hidden=false; el('browse-frame').hidden=true;
   }
-  function postFrame(type, mode) {
-    if (frame?.contentWindow && frameOrigin) frame.contentWindow.postMessage({channel,type,mode},frameOrigin);
+  function postFrame(type, mode, keyboard = false) {
+    if (frame?.contentWindow && frameOrigin) frame.contentWindow.postMessage({channel,type,mode,keyboard},frameOrigin);
   }
   function frameStart() {
     frameStop(); frameOrigin = new URL(page.url).origin;
@@ -418,14 +430,15 @@
   }
   el('see-live').onclick=() => { if (el('live-view').hidden || !frame) showMode(true); };
   el('see-captures').onclick=() => showMode(false);
-  function liveMode(pickMode) {
-    postFrame('mode',pickMode ? 'pick' : 'browse');
+  function liveMode(pickMode, keyboard = false) {
+    postFrame('mode',pickMode ? 'pick' : 'browse',keyboard);
     el('pick-element').hidden=pickMode; el('browse-frame').hidden=!pickMode;
     el('live-status').textContent=pickMode ? 'Tap an element in the preview to add feedback. Press Escape to cancel.' : 'Browse the preview, then select an element to comment on it.';
-    if (pickMode) frame?.focus();
+    if (pickMode && keyboard) frame?.focus();
   }
-  el('pick-element').onclick=()=>liveMode(true); el('browse-frame').onclick=()=>liveMode(false);
+  el('pick-element').onclick=event=>liveMode(true,event.detail === 0); el('browse-frame').onclick=()=>liveMode(false);
   el('pick-element').addEventListener('pointerdown', event => { event.preventDefault(); });
+  el('pick-element').addEventListener('mousedown', event => { event.preventDefault(); });
   window.addEventListener('message',event => {
     if (!frame || event.source!==frame.contentWindow || event.origin!==frameOrigin) return;
     const msg=event.data;

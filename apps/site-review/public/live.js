@@ -102,7 +102,7 @@
     if (picking && !paintRequest) paintRequest = requestAnimationFrame(paint);
   }
 
-  function setMode(pick) {
+  function setMode(pick, keyboard = false) {
     if (pick === picking) return;
     picking = pick;
     if (pick) {
@@ -112,8 +112,7 @@
       announcement.textContent = '';
       // Keep an open menu or disclosure in its current state when marking it.
       active = selectableAt(previousFocus);
-      if (active) previousFocus.focus?.({ preventScroll: true });
-      else overlay.focus({ preventScroll: true });
+      if (keyboard && !active) overlay.focus({ preventScroll: true });
       paint();
     } else {
       active = null;
@@ -156,7 +155,7 @@
       connected = true;
       send('connected', pageInfo());
     } else if (connected && message.type === 'mode' && ['pick', 'browse'].includes(message.mode)) {
-      setMode(message.mode === 'pick');
+      setMode(message.mode === 'pick', message.keyboard === true);
     }
   });
 
@@ -210,6 +209,19 @@
     active = selectableAt(event.target);
     schedulePaint();
   }, true);
+  // A reviewer's toolbar sits in the parent page. Crossing this boundary has
+  // no next element in the preview. Menus that dismiss on local focus changes
+  // should stay available to mark, while ordinary in-page focus moves proceed.
+  function preserveOpenNavigation(event) {
+    if (!connected || (event.relatedTarget && event.relatedTarget !== overlay)) return;
+    const element = event.target;
+    if (!(element instanceof Element) || element.closest('input,textarea,select,[contenteditable]')) return;
+    if (element.closest('nav,[role="navigation"],[role="menu"],[role="menubar"],details[open],[aria-expanded="true"]')) {
+      event.stopImmediatePropagation();
+    }
+  }
+  window.addEventListener('focusout', preserveOpenNavigation, true);
+  window.addEventListener('blur', preserveOpenNavigation, true);
   window.addEventListener('scroll', schedulePaint, { capture: true, passive: true });
   window.addEventListener('resize', schedulePaint, { passive: true });
   window.addEventListener('pageshow', () => send('ready'));

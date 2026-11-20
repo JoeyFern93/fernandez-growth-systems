@@ -110,5 +110,11 @@
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <dialog id="copy-dialog"><form method="dialog"><h2 id="copy-title">Copy link</h2><label>Copy this value<input id="copy-value" type="text" readonly></label><button>Done</button></form></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-detail">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2><p id="confirm-detail"></p>
+      <div class="row"><button value="cancel" autofocus>Cancel</button><button value="confirm" class="primary" id="confirm-action"></button></div>
+    </form>
+  </dialog>
 </body>
 </html>
