@@ -1,0 +1,37 @@
+name: Verify packaged Site Review Chrome extension
+on:
+  push:
+    branches: [qa/site-review-chrome-20261120]
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Live annotation and phone screenshot link
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    defaults:
+      run:
+        working-directory: apps/site-review
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser for this test
+        env:
+          PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
+        run: npm install --no-save --package-lock=false --no-audit --no-fund puppeteer@25.12.0
+      - name: Build and extract the client download
+        run: |
+          node build-pages.mjs
+          unzip -q dist/downloads/fgs-site-review.zip -d "$RUNNER_TEMP/fgs-extension"
+      - name: Test the installed extension and the phone link
+        run: FGS_PROOF_DIR="$RUNNER_TEMP/fgs-proof" xvfb-run -a node tests/chrome-extension-smoke.mjs "$RUNNER_TEMP/fgs-extension"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: chrome-review-verification
+          path: ${{ runner.temp }}/fgs-proof/*.png
+          retention-days: 2
