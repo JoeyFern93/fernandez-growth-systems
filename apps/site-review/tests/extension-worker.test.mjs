@@ -24,12 +24,11 @@ function store() {
 function event() {
   return {addListener(f) { this.listener = f; }};
 }
-function harness() {
+function harness({local = store(), state = {closed: false, switchCapture: false}, issued = new Map()} = {}) {
   const popup = {id, url: 'chrome-extension://' + id + '/popup.html'};
   const tab = {id: 42, windowId: 1, url: 'https://example.com/home?secret=TOKEN#secret'};
-  const local = store(), session = store();
+  const session = store();
   const calls = [], opened = [], injections = [], hidden = [];
-  const state = {closed: false, switchCapture: false};
   const pages = [{id: pageId, url: 'https://example.com/home'}];
   const runtime = {id, onMessage: event(), getURL: name => 'chrome-extension://' + id + '/' + name};
   const chrome = {runtime, storage: {local, session}, tabs: {query: async () => [{...tab}], get: async () => ({...tab}),
@@ -43,8 +42,18 @@ function harness() {
     calls.push({url, options, body});
     const route = new URL(url).pathname.replace('/api/reviews', '');
     let result;
-    if (route === '') result = {ownerPath: path + '#owner=' + owner, reviewerPath: path};
-    else if (route === '/' + invite) result = {review: {host: 'example.com', url: 'https://example.com/home', reviewerPath: path, closed: state.closed}, pages};
+    if (route === '') {
+      if (!issued.has(body.creationKey)) {
+        const newPath = issued.size === 0 ? path : '/example.com/' + ('C' + issued.size).padEnd(24, 'C');
+        issued.set(body.creationKey, {ownerPath: newPath + '#owner=' + owner, reviewerPath: newPath});
+      }
+      result = issued.get(body.creationKey);
+      if (state.dropCreateResponse) {
+        state.dropCreateResponse = false;
+        throw Error('Network response lost after commit');
+      }
+    }
+    else if (/^\/[\w-]{24}$/.test(route)) result = {review: {host: 'example.com', url: 'https://example.com/home', reviewerPath: '/example.com' + route, closed: state.closed}, pages};
     else if (route.endsWith('/pages')) {
       assert.equal(options.headers.Authorization, 'Bearer ' + owner);
       const p = {id: 'page-two', url: body.url}; pages.push(p); result = {page: p};
@@ -58,8 +67,33 @@ function harness() {
     createImageBitmap: async () => ({width: 800, height: 600, close() {}})});
   const send = (type, rest = {}, sender = popup) => new Promise(resolve => runtime.onMessage.listener({type, ...rest}, sender, resolve));
   const fromPage = () => ({id, url: tab.url, tab: {...tab}, frameId: 0});
-  return {send, fromPage, local, session, calls, tab, injections, hidden, opened, state};
+  return {send, fromPage, local, session, calls, tab, injections, hidden, opened, state, issued};
 }
+test('interrupted creation survives a worker restart, another page and simultaneous Start clicks', async () => {
+  const first = harness();
+  first.state.dropCreateResponse = true;
+  assert.match((await first.send('start')).error, /could not reach/i);
+  assert.equal((await first.send('status')).hasReview, false);
+  const before = first.calls[0].body;
+  assert.match(before.creationKey, /^[0-9a-f]{64}$/);
+  assert.match(before.creatorId, /^[0-9a-f-]{36}$/);
+  const retry = harness(first);
+  retry.tab.url = 'https://example.com/other';
+  const starts = await Promise.all([retry.send('start'), retry.send('start')]);
+  assert(starts.every(r => r.reviewerUrl === shareLink));
+  const creates = retry.calls.filter(c => c.url.endsWith('/api/reviews'));
+  assert.equal(creates.length, 1);
+  assert.deepEqual(creates[0].body, before);
+  assert.equal(first.issued.size, 1);
+  assert(!JSON.stringify(await retry.send('status')).includes(before.creationKey));
+  assert(!JSON.stringify([...retry.local.items.values()]).includes(before.creationKey));
+
+  const replacement = await Promise.all([retry.send('new-review', {previousReviewerUrl: shareLink}),
+    retry.send('new-review', {previousReviewerUrl: shareLink})]);
+  assert(replacement[0].ok && replacement[0].reviewerUrl !== shareLink);
+  assert.equal(replacement[0].reviewerUrl, replacement[1].reviewerUrl);
+  assert.equal(first.issued.size, 2);
+});
 test('explicit website feedback keeps credentials in trusted storage, strips URL secrets and preserves the selected element', async () => {
   const h = harness();
   assert.equal((await h.send('status')).hasReview, false);

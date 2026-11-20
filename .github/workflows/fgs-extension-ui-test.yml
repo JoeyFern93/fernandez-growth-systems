@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -29,9 +30,16 @@ jobs:
           unzip -q dist/downloads/fgs-site-review.zip -d "$RUNNER_TEMP/fgs-extension"
       - name: Test the installed extension and the phone link
         run: FGS_PROOF_DIR="$RUNNER_TEMP/fgs-proof" xvfb-run -a node tests/chrome-extension-smoke.mjs "$RUNNER_TEMP/fgs-extension"
+      - name: Verify the already-installed 1.0.0 release on the repaired service
+        run: |
+          mkdir -p "$RUNNER_TEMP/fgs-legacy"
+          git -C "$GITHUB_WORKSPACE" archive bd107136b359d52cd39d8c02d5c139e6fd1f8993 apps/site-review/extension | tar -x -C "$RUNNER_TEMP/fgs-legacy"
+          FGS_LEGACY_EXTENSION=1 FGS_PROOF_DIR="$RUNNER_TEMP/fgs-legacy-proof" xvfb-run -a node tests/chrome-extension-smoke.mjs "$RUNNER_TEMP/fgs-legacy/apps/site-review/extension"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: chrome-review-verification
-          path: ${{ runner.temp }}/fgs-proof/*.png
+          path: |
+            ${{ runner.temp }}/fgs-proof/*.png
+            ${{ runner.temp }}/fgs-legacy-proof/*.png
           retention-days: 2

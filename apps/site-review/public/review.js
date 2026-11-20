@@ -107,11 +107,33 @@
       announce(caption + ' copied.'); }
     catch { el('copy-title').textContent=caption; el('copy-value').value=value; modal('copy-dialog'); el('copy-value').select(); }
   }
-  async function createReview(url) {
-    const r = await api('/api/reviews', 'POST', {url},false);
+  let createRequest, pendingCreation, browserCreatorId;
+  async function openReview(url) {
+    const key = 'fgs-create-pending';
+    if (!pendingCreation) {
+      try { pendingCreation = JSON.parse(storage('get', key)); } catch { /* Optional retry state. */ }
+    }
+    if (!pendingCreation || pendingCreation.url !== url || !/^[0-9a-f]{64}$/.test(pendingCreation.creationKey)) {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      pendingCreation = {url, creationKey: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')};
+      storage('set', key, JSON.stringify(pendingCreation));
+    }
+    if (!browserCreatorId) {
+      browserCreatorId = storage('get','fgs-creator-id',null,true) || crypto.randomUUID();
+      storage('set','fgs-creator-id',browserCreatorId,true);
+    }
+    const r = await api('/api/reviews', 'POST', {...pendingCreation, creatorId:browserCreatorId},false);
     const destination=new URL(r.ownerPath,location.origin);
     if (destination.origin!==location.origin || !destination.hash.startsWith('#owner=')) throw Error('The new review could not be opened.');
+    pendingCreation = null;
+    storage('remove', key);
     location.assign(destination.href);
+  }
+  function createReview(url) {
+    const clean = new URL(url);
+    clean.hash = '';
+    if (!createRequest) createRequest = openReview(clean.href).finally(() => { createRequest = null; });
+    return createRequest;
   }
   registerForm('create',async form=>{
     const button=form.querySelector('[type=submit]'); button.textContent='Opening website…';

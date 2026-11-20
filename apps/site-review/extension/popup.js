@@ -123,8 +123,8 @@ async function copyExisting(url) {
   }
 }
 
-async function startReview(type) {
-  await request(type);
+async function startReview(type, values = {}) {
+  await request(type, values);
   window.close();
 }
 action('start', () => startReview('start'), 'Opening feedback…');
@@ -143,7 +143,7 @@ action('new-review', () => {
     : 'This opens a fresh review that you own. Your existing reviewer link still opens the current review.';
   show('new-confirm');
 });
-action('confirm-new', () => startReview('new-review'), 'Starting review…');
+action('confirm-new', () => startReview('new-review', {previousReviewerUrl:context.reviewerUrl}), 'Starting review…');
 action('cancel-new', () => { show('home'); byId('options').open = false; });
 action('copy-review', () => copyExisting(context.reviewerUrl));
 action('copy-latest', () => copyExisting(context.lastScreenshotUrl));
