@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f563b">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Site Review | Fernandez Growth Systems</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="manifest" href="/site-review.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script src="/install.js" defer></script>
+  <link rel="stylesheet" href="/review.css">
+  <link rel="stylesheet" href="/install.css">
+  <script src="/review.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="mast"><div class="shell bar">
+    <a class="brand" href="/" aria-label="FGS Site Review home"><img src="/fgs-logo.webp" alt="Fernandez Growth Systems" width="132" height="61"><span>Site Review</span></a>
+    <a class="tools-link" href="https://www.fernandezgrowthsystems.com/tools" referrerpolicy="no-referrer">All tools <span aria-hidden="true">&nearr;</span></a>
+  </div></header>
+  <main id="main" class="shell" tabindex="-1">
+    <noscript><p>This tool needs JavaScript to create reviews and save notes. Enable JavaScript and reload the page.</p></noscript>
+    <section id="landing" hidden class="landing">
+      <div class="intro">
+        <h1>Site Review</h1>
+        <p>Send one link for website feedback. Reviewers can leave a page note or pin feedback to a screenshot from their phone.</p>
+        <p class="simple">No account needed.</p>
+        <button type="button" id="start-demo">Try a sample review</button>
+        <div id="demo-error" class="form-error" role="alert"></div>
+        <button class="install" type="button" data-install-review hidden>Add to home screen</button>
+      </div>
+      <form id="create" class="panel form-stack">
+        <h2>Create a review</h2>
+        <label>Website URL<input name="url" type="text" autocomplete="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="example.com" maxlength="1800" required></label>
+        <label>Review title <span class="optional">(optional)</span><input name="title" type="text" placeholder="Homepage, round 1" maxlength="100"></label>
+        <button class="primary" type="submit">Create review</button>
+        <div class="form-error" role="alert"></div>
+      </form>
+    </section>
+    <section id="loading"><h1>Opening review…</h1><p id="loading-message" role="status"></p><button type="button" id="reload" hidden>Try again</button> <a href="/" id="back-home" hidden>Site Review home</a></section>
+    <section id="workspace" hidden>
+      <div class="review-head">
+        <div><p class="kicker">Reviewing</p><h1 id="host"></h1><p id="round"></p></div>
+        <div class="row head-actions"><span id="closed-badge" class="tag" hidden>Closed</span><button id="share" type="button">Copy reviewer link</button></div>
+      </div>
+      <section id="owner-panel" class="owner-box" hidden aria-label="Owner controls">
+        <details id="owner-tools"><summary>Manage review</summary>
+          <div class="owner-content">
+            <section><h3>Review links</h3><p>Share the reviewer link. Keep the owner link for adding pages and managing notes from another device.</p><div class="row"><button type="button" id="copy-owner">Copy private owner link</button><button type="button" id="rotate-link">Replace reviewer link</button><button type="button" id="close-round"></button></div></section>
+            <form id="add-page" class="form-stack"><h3>Add a page</h3><label>Page URL<input name="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://example.com/about" maxlength="1800" required></label><button>Add page</button><div class="form-error" role="alert"></div></form>
+            <section><h3>Enable live comments</h3><p>For previews you manage, include this script on each page. Reviewers can then select a button, heading, or other element directly.</p><code id="snippet"></code><button id="copy-snippet" type="button">Copy preview script</button></section>
+          </div>
+        </details>
+      </section>
+      <p id="closed-message" class="notice" hidden>This round is closed. You can still read its feedback.</p>
+      <div class="workspace-grid">
+        <section class="workspace-left" aria-label="Reviewed page">
+          <div class="panel workspace-page">
+            <div class="page-head"><label for="page-select">Page to review</label><select id="page-select"></select><a id="open-page" class="open-link" target="_blank" rel="noopener noreferrer">Open live page <span aria-hidden="true">↗</span><span class="sr-only"> in a new tab</span></a></div>
+            <p class="page-url" id="page-url"></p>
+            <div id="modebar" class="row modebar"><button type="button" id="see-captures" aria-pressed="true">Screenshot</button><button type="button" id="see-live" aria-pressed="false">Live preview</button></div>
+            <section id="captures-view">
+              <div id="empty-capture" class="empty"><strong>No screenshot added yet</strong><p>Open the live page to explore it, then leave a page note here.</p></div>
+              <div id="has-capture" hidden>
+                <label class="capture-label">Screenshot<select id="capture-select"></select></label>
+                <p class="helper" id="pin-help">Tap a spot to pin a note. With a keyboard, use Select pin position below.</p>
+                <div id="shot-stage"><img id="capture-image" alt="Selected screenshot of the reviewed page"><div id="markers"></div></div>
+                <details id="keyboard-pin"><summary>Select pin position</summary>
+                  <div class="position-controls"><label>Horizontal position, %<input id="pin-x" type="number" min="0" max="100" value="50"></label><label>Vertical position, %<input id="pin-y" type="number" min="0" max="100" value="50"></label><button id="set-pin" type="button">Use position</button></div>
+                </details>
+              </div>
+              <details id="capture-tools" hidden><summary>Add a screenshot</summary>
+                <div id="auto-controls" hidden><label>Layout<select id="auto-device"><option value="mobile">Mobile</option><option value="desktop">Desktop</option></select></label><button id="auto-capture" type="button">Capture this page</button></div>
+                <form id="upload" class="form-stack">
+                  <label>Screenshot image<input name="file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                  <div id="tab-controls" hidden><button id="capture-tab" type="button">Capture a browser tab</button><p class="helper">Choose the website’s tab. You’ll preview one screenshot before adding it.</p></div>
+                  <div id="image-confirm" hidden><img id="upload-preview" alt="Screenshot selected for sharing"><label>Screenshot label <span class="optional">(optional)</span><input name="label" maxlength="80" placeholder="Mobile menu open"></label>
+                    <p class="helper">Everyone with this review link can see this image. Check it for personal details before sharing.</p>
+                    <div class="row"><button type="submit">Add screenshot to review</button><button type="button" id="discard-image">Cancel</button></div>
+                  </div>
+                  <div class="form-error" role="alert"></div>
+                </form>
+              </details>
+            </section>
+            <section id="live-view" hidden>
+              <p id="live-status" class="helper" role="status"></p><div id="live-controls" class="row" hidden><button type="button" id="pick-element">Select an element</button><button type="button" id="browse-frame" hidden>Browse page</button></div>
+              <div id="frame-slot"></div>
+            </section>
+          </div>
+        </section>
+        <div class="workspace-right">
+          <form id="note-form" class="panel form-stack">
+            <h2>Leave a note</h2><p id="note-target" class="target">Page note</p><button class="text-button" id="clear-target" type="button" hidden>Use whole page instead</button>
+            <label>Your first name<input id="reviewer-name" name="name" autocomplete="given-name" maxlength="60" required></label>
+            <label>Feedback<textarea id="feedback" name="text" rows="4" maxlength="2000" required placeholder="What would you like changed?"></textarea></label>
+            <span class="helper">Shared with everyone who has this review link.</span>
+            <button class="primary" type="submit">Save note</button><div class="form-error" role="alert"></div>
+          </form>
+          <section class="panel notes-panel" aria-labelledby="notes-title">
+            <div class="row spread"><h2 id="notes-title">Feedback <span id="note-count"></span></h2><button type="button" id="refresh-notes">Refresh</button></div>
+            <label id="scope-control" hidden>Show feedback<select id="scope"><option value="page">This page</option><option value="all">All pages</option></select></label>
+            <ul id="note-list"></ul>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <dialog id="copy-dialog"><form method="dialog"><h2 id="copy-title">Copy link</h2><label>Copy this value<input id="copy-value" type="text" readonly></label><button>Done</button></form></dialog>
+</body>
+</html>

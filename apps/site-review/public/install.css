@@ -1,0 +1,30 @@
+.review-install-dialog {
+  box-sizing: border-box;
+  width: min(26rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 1.5rem;
+  border: 1px solid #b9caba;
+  border-radius: 1.25rem;
+  color: #153022;
+  background: #fff;
+  box-shadow: 0 16px 60px rgb(13 37 22 / 20%);
+  font-family: inherit;
+}
+.review-install-dialog::backdrop { background: rgb(12 32 21 / 58%); }
+.review-install-dialog h2 { margin: 0; font-size: 1.3rem; }
+.review-install-dialog ol { margin: 1rem 0 1.5rem; padding-left: 1.4rem; }
+.review-install-dialog li { line-height: 1.55; }
+.review-install-dialog li + li { margin-top: .6rem; }
+.review-install-dialog button {
+  padding: .65rem 1.2rem;
+  min-height: 2.75rem;
+  border: none;
+  border-radius: .55rem;
+  color: white;
+  background: #183e2b;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.review-install-dialog button:focus-visible { outline: 3px solid #477b45; outline-offset: 3px; }

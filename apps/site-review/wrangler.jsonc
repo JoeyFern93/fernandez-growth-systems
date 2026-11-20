@@ -1,0 +1,15 @@
+{
+  "name": "fgs-site-review",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-20",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fgs-site-review",
+      "database_id": "69abfa2e-90af-4962-b78d-a916f23f61e6"
+    }
+  ],
+  "services": [
+    { "binding": "FGS_CAPTURE", "service": "fgs-site-review-capture" }
+  ]
+}

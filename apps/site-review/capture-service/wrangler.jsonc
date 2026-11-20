@@ -1,0 +1,8 @@
+{
+  "name": "fgs-site-review-capture",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-20",
+  "workers_dev": false,
+  "preview_urls": false,
+  "browser": { "binding": "BROWSER" }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "FGS Site Review",
+  "short_name": "Site Review",
+  "description": "Share website feedback with clients and keep track of requested changes.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#183e2b",
+  "background_color": "#f7f8f3",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

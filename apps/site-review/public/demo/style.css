@@ -1,0 +1,30 @@
+:root { color-scheme: light; font-family: 'Segoe UI', system-ui, sans-serif; color: #192e24; background: #f9f8f1; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: #15593d; }
+a:focus-visible, summary:focus-visible { outline: 3px solid #104da8; outline-offset: 3px; }
+.skip { position: absolute; left: 1rem; top: -8rem; padding: .7rem; background: white; z-index: 10; }
+.skip:focus { top: .5rem; }
+header, main, footer { max-width: 68rem; margin: 0 auto; padding-inline: clamp(1rem,6vw,4rem); }
+header { padding-block: .95rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #cbd4c8; }
+.wordmark { display: inline-flex; align-items: center; gap: .55rem; line-height: 1.2; font-weight: 650; text-decoration: none; color: #183e2d; }
+.wordmark span { width: 2.1rem; height: 2.1rem; display: grid; place-items: center; color: #fff; background: #265f46; border-radius: 50%; font-family: Georgia,serif; font-size: 1.55rem; font-style: italic; }
+nav details { position: relative; }
+nav summary, nav a { min-height: 2.75rem; padding: .65rem .75rem; cursor: pointer; }
+nav summary { font-weight: 600; }
+nav details > div { z-index: 2; position: absolute; right: 0; top: 100%; min-width: 10rem; display: grid; padding: .25rem; border: 1px solid #bacabc; border-radius: .45rem; background: #fff; box-shadow: 0 .3rem 1rem #20382a18; }
+nav a { display: block; }
+main { padding-block: clamp(2rem,8vw,5rem); }
+h1, h2, p { margin-top: 0; }
+h1 { max-width: 13em; margin-bottom: 1.1rem; font: 500 clamp(2.25rem,7vw,4.7rem)/1.06 Georgia,serif; letter-spacing: -.035em; }
+.intro { max-width: 43rem; font-size: clamp(1rem,2.4vw,1.2rem); line-height: 1.6; color: #45584a; }
+.action { display: inline-flex; align-items: center; justify-content: center; gap: .75rem; padding: .75rem 1.05rem; margin-top: .35rem; border-radius: .4rem; background: #205439; color: white; text-decoration: none; font-weight: 600; }
+section { margin-top: clamp(2rem,6vw,3.5rem); }
+h2 { font: 500 clamp(1.45rem,4vw,2.05rem)/1.18 Georgia,serif; margin-bottom: .85rem; }
+.question { border-top: 1px solid #cbd4c8; max-width: 42rem; }
+.question:last-child { border-bottom: 1px solid #cbd4c8; }
+.question summary { min-height: 2.75rem; padding: .85rem .15rem; cursor: pointer; font-weight: 600; }
+.question p, article p { line-height: 1.6; color: #45584a; }
+.services { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(12rem,100%),1fr)); gap: 1.35rem; margin-bottom: 1.2rem; }
+article { border-top: 1px solid #b4c4b6; padding-top: .9rem; }
+footer { border-top: 1px solid #cbd4c8; padding-block: 1.1rem; color: #45584a; font-size: .88rem; }
