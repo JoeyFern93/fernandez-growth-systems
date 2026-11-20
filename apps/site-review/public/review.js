@@ -3,7 +3,8 @@
   const el = id => document.getElementById(id);
   const parts = location.pathname.split('/').filter(Boolean);
   const invite = parts.length === 2 ? parts[1] : '';
-  const owner = new URLSearchParams(location.hash.slice(1)).get('owner');
+  const linkOptions = new URLSearchParams(location.hash.slice(1));
+  const owner = linkOptions.get('owner');
   const apiRoot = '/api/reviews/' + encodeURIComponent(invite);
   const channel = 'fgs-site-review-v1';
   let data, page, capture, target, frame, frameOrigin, frameReady, currentFrameUrl;
@@ -89,7 +90,11 @@
     const r=d.getBoundingClientRect();
     if(e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom)d.close();
   });
-  function inviteUrl() { return location.origin + data.review.reviewerPath; }
+  function inviteUrl() {
+    const link = new URL(data.review.reviewerPath, location.origin);
+    link.hash = view === 'screenshot' && capture ? 'shot=' + encodeURIComponent(capture.id) : '';
+    return link.href;
+  }
   function ownerUrl() { return location.origin + '/' + encodeURIComponent(data.review.host) + '/' + encodeURIComponent(data.review.id) + '#owner=' + encodeURIComponent(owner); }
   async function copy(value, caption) {
     try { await navigator.clipboard.writeText(value);
@@ -121,7 +126,13 @@
   el('reload').onclick=()=>location.reload();
   el('notes-open').onclick=()=>{ drawNotes(); modal('notes-dialog'); refresh(true).catch(()=>{}); };
   el('options').onclick=()=>modal('menu-dialog');
-  el('share').onclick=()=>{ el('reviewer-link').value=inviteUrl(); modal('share-dialog'); };
+  el('share').onclick=()=>{
+    el('reviewer-link').value=inviteUrl();
+    el('share-detail').textContent=view==='screenshot' && capture
+      ? 'This link opens the screenshot you are viewing. Anyone with the link can leave feedback.'
+      : 'Anyone with this link can open the website and leave feedback.';
+    modal('share-dialog');
+  };
   el('copy-review').onclick=()=>copy(inviteUrl(),'Reviewer link');
   el('copy-owner').onclick=()=>copy(ownerUrl(),'Private owner link');
   el('copy-snippet').onclick=()=>copy(el('snippet').textContent,'Preview script');
@@ -442,11 +453,15 @@
     if(seq!==refreshSequence || isSending)return;
     if(decodeURIComponent(parts[0]).toLowerCase()!==response.review.host.toLowerCase())throw Error('Open the complete invitation link for this website.');
     data=response; const first=!page;
-    page=data.pages.find(p=>p.id===page?.id) || data.pages[0];
+    const sharedShot = first ? data.captures.find(item=>item.id===linkOptions.get('shot')) : null;
+    page=data.pages.find(p=>p.id===(sharedShot?.pageId || page?.id)) || data.pages[0];
     if(!page)throw Error('This review has no pages.');
     if(data.review.closed && picking)setPicking(false);
     render();
-    if(first) { restoreDraft(); openWebsite(); }
+    if(first) {
+      restoreDraft();
+      if (!sharedShot || !showCapture(sharedShot.id)) openWebsite();
+    }
     else if(!silent)announce('Notes refreshed.');
   }
   el('refresh-notes').onclick=async ()=>{
