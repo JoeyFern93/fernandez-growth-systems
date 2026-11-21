@@ -16,6 +16,7 @@ const site='https://www.fernandezgrowthsystems.com';
 const api='https://sitereview.fernandezgrowthsystems.com';
 const probeOnly=process.argv.includes('--test-browser');
 const relayScenario=process.argv.includes('--relay');
+const controlsScenario=process.argv.includes('--controls');
 const temps=await mkdtemp(path.join(process.env.REPLAY_QA_TEMP||os.tmpdir(),'fgs-tv-check-'));
 const output=process.env.REPLAY_QA_PROOF || path.join(here,'replay-tv-proof');
 await mkdir(output,{recursive:true});
@@ -65,11 +66,18 @@ const rounds=[];
 const chrome=process.env.FGS_CHROME_BIN||[path.join(process.env.ProgramFiles||'','Google/Chrome/Application/chrome.exe'),
   '/usr/bin/google-chrome','/usr/bin/chromium','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
 assert(chrome,'Set FGS_CHROME_BIN to a local Chrome executable');
+const cameraFixture=[];
+if(controlsScenario){
+  const {writeTestCamera}=await import('./replay-tv-controls.mjs');
+  const fixture=path.join(temps,'replay-camera.y4m');
+  await writeTestCamera(fixture);
+  cameraFixture.push('--use-file-for-fake-video-capture='+fixture);
+}
 const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-gpu','--no-first-run','--no-default-browser-check',
   '--disable-background-networking','--disable-component-update','--autoplay-policy=no-user-gesture-required',
   '--host-resolver-rules=MAP * ~NOTFOUND','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',
   '--allow-loopback-in-peer-connection','--disable-features=WebRtcHideLocalIpsWithMdns',
-  '--remote-debugging-pipe','--user-data-dir='+path.join(temps,'profile')],
+  ...cameraFixture,'--remote-debugging-pipe','--user-data-dir='+path.join(temps,'profile')],
   {stdio:['ignore','ignore','ignore','pipe','pipe'],windowsHide:true});
 const finished=once(child,'exit');let serial=0,tail='',closing=false;
 const jobs=new Map();const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -168,6 +176,10 @@ async function tab(width,height,mobile=false){
     throw Error('Timeout waiting for '+label+'; '+JSON.stringify(state)+'; requests '+JSON.stringify(requests.slice(-8))+'; '+taskErrors.join(','));
   }
   async function click(id){
+    if(id==='pairTvBtn' || id==='nextFrameBtn'){
+      const insideClosedDrawer=await get("(()=>{const button=document.getElementById("+JSON.stringify(id)+"),drawer=document.getElementById('toggleReplayControls');return button && !button.getClientRects().length && drawer?.getAttribute('aria-expanded')==='false';})()");
+      if(insideClosedDrawer)await click('toggleReplayControls');
+    }
     const pos=await get("(()=>{const el=document.getElementById("+JSON.stringify(id)+");if(!el||el.disabled)return null;el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;const hit=document.elementFromPoint(x,y);return r.width>0 && r.height>0 && (hit===el||el.contains(hit)) ? {x,y}:null;})()");
     assert(pos,'Unreachable control '+id);
     if(mobile){await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{id:1,...pos}]});await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
@@ -180,7 +192,10 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(relayScenario){
+  if(controlsScenario){
+    const {runControls}=await import('./replay-tv-controls.mjs');
+    await runControls({tv,phone,site,db,rounds,requests,relayScenario,taskErrors,delay});
+  }else if(relayScenario){
     const {default:runRelay}=await import('./replay-tv-relay.mjs');
     await runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv:{DB:db},taskErrors,output,delay});
   }else if(probeOnly){

@@ -37,6 +37,7 @@
   function stopTracks(stream) { stream?.getTracks().forEach(track => track.stop()); }
   function closePeer(s) {
     clearTimeout(s.disconnectTimer); clearTimeout(s.connectionTimer); clearTimeout(s.candidateTimer);
+    s.capture?.setSender(null);
     if (!s.peer) return;
     const peer = s.peer;
     s.peer = null;
@@ -51,6 +52,7 @@
     clearTimeout(s.relayHintTimer);
     s.relayController?.abort();
     if (s.role === 'phone') {
+      s.capture?.stop();
       stopTracks(s.media);
       if (el('phone-preview')) {
         el('phone-preview').srcObject = null;
@@ -81,7 +83,7 @@
     }
   }
   function relayOptions(s,mimeType) {
-    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream:s.media,
+    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream:s.capture?.forRelay(mimeType) || s.media,
       mimeType,signal:s.relayController.signal,
       onStatus:message=>{if(!s.ended && s.role==='phone')el('phone-status').textContent=message;},
       onError:error=>{if(!s.ended && !s.relayController.signal.aborted)fail(s,error);}};
@@ -278,7 +280,7 @@
       const config=await api('/'+s.id+'/ice-servers','GET',s.key);
       if(Array.isArray(config.iceServers) && config.iceServers.length) iceServers=config.iceServers;
     } catch { /* Keep discovery available when optional configuration is offline. */ }
-    if(s.ended)throw new Error('Pairing was closed.');
+    if(s.ended || s.relaying)throw new Error('The direct connection is no longer needed.');
     const peer = new RTCPeerConnection({iceServers});
     s.peer = peer;
     sendCandidates(s,peer);
@@ -457,10 +459,11 @@
       el('phone-status').textContent=match?'Open this private phone link in a browser with camera access.':'On the display, open Replay Cam and select TV display. Then open its private phone link or scan its QR code on this phone.';
       return;
     }
+    const capture=window.FGSPhoneCamera?.setup();
     phoneStart.onclick=async()=>{
       if (active) return;
       const secret=params.get('key');
-      const s={role:'phone',id:match[1],key:token(),videoKey:/^[A-Za-z0-9_-]{43}$/.test(secret||'')?secret:null};
+      const s={role:'phone',id:match[1],key:token(),videoKey:/^[A-Za-z0-9_-]{43}$/.test(secret||'')?secret:null,capture};
       active=s; phoneStart.disabled=true;
       try {
         el('phone-status').textContent='Connecting to your TV…';
@@ -469,14 +472,18 @@
         s.expires=session.expiresAt;
         el('phone-status').textContent='Allow camera access to start sending video.';
         phoneStart.hidden=true; el('phone-stop').hidden=false;
-        const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:240}}});
+        const lost=()=>fail(s,new Error('The camera stopped.'));
+        const stream=capture ? await capture.start(lost) :
+          await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:240}}});
         if (s.ended) { stopTracks(stream);return; }
         s.media=stream;
         el('phone-options').hidden=!s.videoKey;
         const track=stream.getVideoTracks()[0];
         if (!track) throw new Error('The phone camera did not provide a video track.');
-        track.addEventListener('ended',()=>fail(s,new Error('The camera stopped.')),{once:true});
-        const preview=el('phone-preview'); preview.srcObject=stream; preview.hidden=false; preview.play().catch(()=>{});
+        if (!capture) {
+          track.addEventListener('ended',lost,{once:true});
+          const preview=el('phone-preview'); preview.srcObject=stream; preview.hidden=false; preview.play().catch(()=>{});
+        }
         el('phone-status').textContent='Camera ready. Waiting for the TV…';
         monitorRelay(s);
         if(!hasDirect()){offerRelay(s,'This phone uses the encrypted relay to send video.');return;}
@@ -484,7 +491,10 @@
           if (!s.ended && !s.connected && !s.relaying && s.videoKey)offerRelay(s,'The TV is taking longer to receive video.');
         },9500);
         const peer=await peerFor(s);
-        peer.addTransceiver(track,{direction:'sendonly',streams:[stream]});
+        if(s.ended || s.relaying) return;
+        const outgoing=capture?.directStream() || stream;
+        const sending=peer.addTransceiver(outgoing.getVideoTracks()[0],{direction:'sendonly',streams:[outgoing]});
+        capture?.setSender(sending.sender);
         const offer=await localDescription(peer,await peer.createOffer());
         if (s.ended || s.relaying) return;
         await api('/'+s.id+'/offer','POST',s.key,offer);
