@@ -6,8 +6,9 @@ on:
     paths:
       - 'site/replay/**'
       - 'apps/site-review/worker.js'
-      - 'apps/site-review/replay-pair.js'
-      - 'tests/replay-tv-e2e.mjs'
+      - 'apps/site-review/replay-*.js'
+      - 'apps/site-review/schema.sql'
+      - 'tests/replay-tv-*.mjs'
       - '.github/workflows/replay-tv-qa.yml'
   workflow_dispatch:
 
@@ -16,29 +17,36 @@ permissions:
 
 jobs:
   tv-and-phone:
-    name: Real video from a simulated phone to the TV
+    name: Phone to TV / ${{ matrix.label }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Direct video
+            scenario: ''
+            jpeg: '0'
+            without_rtc: '0'
+          - label: Encrypted video on a blocked network
+            scenario: --relay
+            jpeg: '0'
+            without_rtc: '0'
+          - label: Encrypted images on a TV without WebRTC
+            scenario: --relay
+            jpeg: '1'
+            without_rtc: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Match the current QR format in the existing smoke test
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('tests/replay-tv-e2e.mjs')
-          source = path.read_text()
-          old = r'/^#pair=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/'
-          new = r'/^#pair=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}&key=[A-Za-z0-9_-]{43}$/'
-          assert source.count(old) == 1
-          path.write_text(source.replace(old, new))
-          PY
-      - name: Run the packaged website and signalling Worker in isolation
-        run: node tests/replay-tv-e2e.mjs
+      - name: Send simulated phone camera frames through the packaged app
+        run: node tests/replay-tv-e2e.mjs ${{ matrix.scenario }}
         env:
           FGS_CHROME_BIN: /usr/bin/google-chrome
           REPLAY_SITE_ROOT: site
           REPLAY_WORKER_ROOT: apps/site-review
           REPLAY_QA_PROOF: replay-tv-proof
+          REPLAY_QA_RELAY_JPEG: ${{ matrix.jpeg }}
+          REPLAY_QA_TV_WITHOUT_RTC: ${{ matrix.without_rtc }}

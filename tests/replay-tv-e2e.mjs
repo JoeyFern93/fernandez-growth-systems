@@ -15,6 +15,7 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 const site='https://www.fernandezgrowthsystems.com';
 const api='https://sitereview.fernandezgrowthsystems.com';
 const probeOnly=process.argv.includes('--test-browser');
+const relayScenario=process.argv.includes('--relay');
 const temps=await mkdtemp(path.join(process.env.REPLAY_QA_TEMP||os.tmpdir(),'fgs-tv-check-'));
 const output=process.env.REPLAY_QA_PROOF || path.join(here,'replay-tv-proof');
 await mkdir(output,{recursive:true});
@@ -70,9 +71,10 @@ const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-gpu','--no-
   '--allow-loopback-in-peer-connection','--disable-features=WebRtcHideLocalIpsWithMdns',
   '--remote-debugging-pipe','--user-data-dir='+path.join(temps,'profile')],
   {stdio:['ignore','ignore','ignore','pipe','pipe'],windowsHide:true});
-const finished=once(child,'exit');let serial=0,tail='';
+const finished=once(child,'exit');let serial=0,tail='',closing=false;
 const jobs=new Map();const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function cdp(method,params={},sessionId){
+  if(closing)return Promise.reject(new Error('Browser is closing'));
   const id=++serial;return new Promise((resolve,reject)=>{jobs.set(id,{resolve,reject});
     child.stdio[3].write(JSON.stringify({id,method,params,sessionId})+'\0');});
 }
@@ -83,7 +85,12 @@ async function route({request,requestId},sessionId){
   let response;
   if(url.origin===api && /^\/api\/replay-pair(?:\/|$)/.test(url.pathname)){
     const headers=new Headers(request.headers);headers.set('CF-Connecting-IP','203.0.113.42');
-    const req=new Request(url,{method:request.method,headers,body:request.postData||undefined});
+    // CDP's text field is not a binary-safe representation of encrypted video.
+    const entries=request.postDataEntries;
+    const body=entries?.length && entries.every(part=>typeof part.bytes==='string')
+      ? Buffer.concat(entries.map(part=>Buffer.from(part.bytes,'base64')))
+      : request.postData||undefined;
+    const req=new Request(url,{method:request.method,headers,body});
     response=await worker.fetch(req,{DB:db},{waitUntil:task=>Promise.resolve(task).catch(e=>taskErrors.push(e.message))});
     requests.push({op:url.pathname.split('/').filter(Boolean).at(-1).replace(/^[A-Za-z0-9_-]{16,}$/,'poll'),verb:request.method,status:response.status});
     if(url.pathname==='/api/replay-pair' && request.method==='POST' && response.status===201){
@@ -113,7 +120,7 @@ child.stdio[4].setEncoding('utf8').on('data',chunk=>{
     }else if(message.method==='Fetch.requestPaused'){
       route(message.params,message.sessionId).catch(e=>{
         // Closing a pairing intentionally aborts its polling request.
-        if(e.message.includes('Invalid InterceptionId'))return;
+        if(closing||e.message.includes('Invalid InterceptionId'))return;
         taskErrors.push(e.message);cdp('Fetch.failRequest',{requestId:message.params.requestId,errorReason:'BlockedByClient'},message.sessionId).catch(()=>{});
       });
     }else if(message.method==='Runtime.exceptionThrown')taskErrors.push(message.params.exceptionDetails.exception?.description||message.params.exceptionDetails.text);
@@ -125,7 +132,8 @@ const observe=`(() => {
   const pcs=[],tracks=[],requests=[];
   const RTC=window.RTCPeerConnection;
   window.RTCPeerConnection=class extends RTC {constructor(configuration,...rest){
-    super({...configuration,iceServers:[]},...rest);pcs.push(this);
+    super({...configuration,iceServers:[],iceTransportPolicy:${relayScenario?"'relay'":"'all'"}},...rest);
+    pcs.push(this);
   }};
   const media=navigator.mediaDevices;
   const open=media.getUserMedia.bind(media);
@@ -172,7 +180,10 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(probeOnly){
+  if(relayScenario){
+    const {default:runRelay}=await import('./replay-tv-relay.mjs');
+    await runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv:{DB:db},taskErrors,output,delay});
+  }else if(probeOnly){
     await Promise.all([tv.navigate(site+'/'),phone.navigate(site+'/')]);
     await Promise.all([tv.until('!!window.__inspectMedia','TV setup'),phone.until('!!window.__inspectMedia','phone setup')]);
     const offer=await phone.get(`(async()=>{window.p=new RTCPeerConnection();window.s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});p.addTrack(s.getVideoTracks()[0],s);await p.setLocalDescription(await p.createOffer());const end=performance.now()+5000;while(p.iceGatheringState!=='complete' && performance.now()<end)await new Promise(r=>setTimeout(r,40));return p.localDescription.toJSON();})()`);
@@ -183,9 +194,9 @@ try{
   }else{
     await tv.navigate(site+'/replay/tv/');
     const link=await tv.until("document.querySelector('#tv-phone-link')?.href?.includes('#pair=') && document.querySelector('#tv-phone-link').href",'TV pairing link');
-    assert.equal(new URL(link).pathname,'/replay/tv/phone.html');assert.match(new URL(link).hash,/^#pair=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    assert.equal(new URL(link).pathname,'/replay/tv/phone.html');assert.match(new URL(link).hash,/^#pair=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}&key=[A-Za-z0-9_-]{43}$/);
     const qr=await tv.until("(()=>{const q=document.querySelector('#tv-qr'), e=q?.matches('svg,img,canvas')?q:q?.querySelector('svg,img,canvas');if(!e)return false;const b=e.getBoundingClientRect();return b.width>60&&b.height>60?{width:b.width,height:b.height,kind:e.tagName}:false;})()",'visible QR');
-    await tv.shot('tv-pair');await phone.navigate(link);await phone.until("!!document.querySelector('#phone-start')",'phone join page');
+    await tv.shot('tv-pair');await phone.navigate(link);await phone.until("typeof document.querySelector('#phone-start')?.onclick==='function'",'phone ready to start');
     assert.equal((await phone.get('__inspectMedia()')).requests.length,0,'the invite must wait for a phone tap');
     await phone.shot('phone-before-camera');await phone.click('phone-start');
     const inbound=await tv.until("__inspectMedia().then(v=>v.received.find(x=>x.frames>=12 && x.bytes>0))",'decoded TV video',35000);
@@ -231,4 +242,4 @@ try{
 }catch(error){console.error('Browser errors',taskErrors);
  for(const [name,screen] of [['tv',tv],['phone',phone]])if(screen){console.error(name+' instrument',await screen.get('window.__inspectMedia?.()').catch(()=>null));await screen.shot(name+'-diagnostic').catch(()=>{});}
  throw error;}
-finally{child.stdio[3].end();await finished;await db.close();await rm(temps,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
+finally{closing=true;child.stdio[3].end();await finished;await db.close();await rm(temps,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
