@@ -16,12 +16,24 @@ body {margin: 0}
 }
 header {display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-bottom: 1px solid #d5dfd6}
 header img {border-radius: 8px}
+header #my-reviews {width: auto; margin: 0 0 0 auto; min-height: 36px; padding: 6px 9px; font-size: 13px; white-space: nowrap}
 h1 {font-size: 17px; margin: 0; letter-spacing: -.035em}
 main {padding: 18px}
 h2 {margin: 0; line-height: 1.2; font-size: 21px; letter-spacing: -.035em; overflow-wrap: anywhere}
 p {margin: 7px 0 13px; color: #46594d}
 .label, label {display: block; font-weight: 650; font-size: 13px; color: #415b49; margin: 0 0 4px}
-.hint {margin: 7px 0 14px}
+.hint {margin: 8px 0 14px; font-size: 14px}
+#home #start {margin-top: 14px}
+.client-actions {display: grid; gap: 6px}
+.client-actions button {margin: 0}
+.capture-setting {display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; margin:8px 0 0}
+.capture-setting select {font:inherit; padding:5px 7px; border:1px solid #c0cec3; border-radius:6px; background:white; color:inherit}
+#review-list {list-style: none; padding: 0; margin: 9px 0 15px}
+#review-list li {padding: 12px 0; border-top: 1px solid #d5dfd6}
+#review-list h3 {font-size: 16px; line-height: 1.35; margin: 0; overflow-wrap: anywhere}
+#review-list p {font-size: 13px; margin: 3px 0 6px}
+.row-actions {display: flex; flex-wrap: wrap; gap: 6px}
+.row-actions button {width: auto; margin: 0; min-height: 36px; padding: 6px 10px; font-size: 13px}
 button, .button {
   display: flex; justify-content: center; align-items: center; width: 100%;
   min-height: 42px; border: 1px solid #c0cec3; border-radius: 8px;
@@ -40,6 +52,8 @@ summary {cursor: pointer; color: #35533e; padding: 7px 0; font-size: 14px}
 .text-button {text-decoration: underline; text-underline-offset: 2px; border: none}
 .source {font-size: 13px; overflow-wrap: anywhere}
 #preview-image {display: block; margin: 10px auto; width: 100%; max-height: 180px; object-fit: contain; background: #f1f4ef; border: 1px solid #d5dfd6; border-radius: 6px}
+#tile-preview {max-height:200px; overflow:auto; border:1px solid #d5dfd6; border-radius:6px}
+#tile-preview img {display:block; width:100%; height:auto}
 input {width: 100%; min-height: 37px; border: 1px solid #a8baad; border-radius: 6px; color: #14251c; background: white; font: inherit; padding: 6px 8px}
 #error, #status {font-size: 14px; margin: 10px 0 0; overflow-wrap: anywhere}
 #error {color: #972b19}

@@ -19,42 +19,60 @@
   </div></header>
   <main id="main" tabindex="-1" class="guide-main">
     <h1>Site Review for Chrome</h1>
-    <p class="guide-intro">Leave feedback on a live website or capture what you see and send someone a link to mark it up on their phone.</p>
-    <div data-phone-only hidden class="phone-guide">
-      <h2>Reviewing on your phone?</h2>
-      <p>Open a review link from your project, or enter a website in the web tool. The Chrome extension runs on computers.</p>
-      <a class="button primary" href="/">Open Site Review</a>
-    </div>
+    <p class="guide-intro" data-computer-only>Use the extension to point out a change on a website. Each note goes into that site's shared review on FGS Site Review.</p>
+    <p class="guide-intro" data-phone-only hidden>You can leave feedback from a review link on your phone.</p>
     <div data-computer-only>
       <div class="guide-download">
-        <a class="button primary" href="/downloads/fgs-site-review.zip?v=1.0.1" download="fgs-site-review.zip">Download extension 1.0.1 (.zip)</a>
-        <a href="#setup">Installation steps</a>
+        <a class="button primary" href="/downloads/fgs-site-review.zip?v=1.0.2" download="fgs-site-review-1.0.2.zip">Download extension 1.0.2 (.zip)</a>
+        <a href="#setup">Install or update</a>
       </div>
-      <section id="setup" aria-labelledby="setup-title">
-        <h2 id="setup-title">Install in desktop Chrome</h2>
-        <p>This version installs manually from the FGS download.</p>
+      <section aria-labelledby="leave-title">
+        <h2 id="leave-title">Leave your first note</h2>
         <ol class="guide-steps">
-          <li><strong>Extract the ZIP.</strong> On Windows, right-click it and choose <b>Extract All</b>. On Mac, double-click it. Keep the extracted folder on your computer.</li>
-          <li><strong>Open Chrome’s extensions page.</strong> Enter <code>chrome://extensions</code> in the address bar and turn on <b>Developer mode</b>.</li>
-          <li><strong>Choose Load unpacked.</strong> Select the extracted folder containing <code>manifest.json</code>. Chrome will list <b>FGS Site Review</b> under your extensions.</li>
-          <li><strong>Pin the extension.</strong> Open the puzzle-piece menu in Chrome’s toolbar and pin FGS Site Review so its button is easy to find.</li>
+          <li>Open the website you want to review in desktop Chrome. Click the FGS icon in the toolbar and choose <strong>Leave feedback</strong>.</li>
+          <li>Choose <strong>Element</strong> and click the headline, button or image you want changed. Use <strong>Point</strong> to pin an exact spot, <strong>Draw</strong> to circle an area, or <strong>Page</strong> for a general comment. Type what you want to change.</li>
+          <li>Choose <strong>Send feedback</strong>. Click <strong>View notes</strong> to see the saved note.</li>
         </ol>
+      </section>
+      <section aria-labelledby="find-title">
+        <h2 id="find-title">Find the feedback later</h2>
+        <p>Click the FGS icon, choose <strong>My reviews</strong>, then <strong>Open notes</strong> for the site you want. This list remembers reviews used with the extension in this Chrome profile. Future notes for that site go into the same review. To collect a separate round, use <strong>More options</strong> and choose <strong>Start a new review</strong>.</p>
+        <p>On another device, open the review link and choose <strong>Notes</strong>. To manage a review from another device, save your private owner link from <strong>Share</strong>.</p>
+      </section>
+      <section aria-labelledby="share-title">
+        <h2 id="share-title">Ask a client for feedback</h2>
+        <p>Choose <strong>Copy client link</strong> in the extension and send it to your client. To share exactly what you see, set <strong>Screenshot area</strong> to <strong>Visible area</strong> or <strong>Full page</strong>. Choose <strong>Capture a screenshot</strong>, check the image and choose <strong>Share &amp; copy link</strong>. A client can scroll through the full-page image and mark any section.</p>
+        <p class="access-note">Anyone with the reviewer link can read the notes and see shared screenshots for that review.</p>
         <details>
-          <summary>Already installed? Update your extension</summary>
-          <p>Download the new ZIP and extract its contents into the same folder you selected when you first installed FGS Site Review. Allow it to replace the old files. Open <code>chrome://extensions</code> and click the reload icon on the FGS Site Review card. The card should show version <b>1.0.1</b>.</p>
+          <summary>Use the extension with a review link you already have</summary>
+          <p>Open that link, click the FGS icon and choose <b>Use this review</b>. Once the original site opens, click the extension and choose <b>Leave feedback</b>. Your notes will go into that existing review.</p>
         </details>
       </section>
-      <section class="guide-how" aria-labelledby="first-title">
-        <h2 id="first-title">Start your first review</h2>
-        <p>Open the website in its own tab, then click the FGS icon in Chrome.</p>
-        <dl>
-          <div><dt>Leave a note on the live page</dt><dd>Choose <b>Start reviewing</b>, click <b>Leave feedback</b> in the corner, select the part you mean, and write your note.</dd></div>
-          <div><dt>Send a client a screenshot</dt><dd>Choose <b>Capture a screenshot</b>. Check the preview, then choose <b>Share &amp; copy link</b>. Clients can open that link on a phone and pin a note without installing anything.</dd></div>
-          <div><dt>Continue an existing review</dt><dd>On an FGS review link, click the extension and choose <b>Use this review</b>. When the original website opens, choose <b>Show feedback button</b> from the extension. New notes go into that same review.</dd></div>
-        </dl>
-        <p class="access-note">Anyone with a reviewer link can see the notes and shared screenshots for that review.</p>
-      </section>
     </div>
+    <section aria-labelledby="invite-title">
+      <h2 id="invite-title">Received a review link?</h2>
+      <p>Open the link on your phone or computer and tap <strong>Leave feedback</strong>. Choose the kind of feedback you want to leave, mark the page if needed, type your note and tap <strong>Send feedback</strong>. The person who sent the link can read it under <strong>Notes</strong>. No account or installation is needed.</p>
+      <details>
+        <summary>What if the website won't open in the review?</summary>
+        <p>Use <b>Page</b> to write a general note. Choose <b>Full-page screenshot</b> and then <b>Capture full page</b> to open a scrollable image of a public page. Scroll to the section you want, then choose <b>Point</b> or <b>Draw</b>. Open <b>Notes</b> to see the mark on that saved image. For an exact <b>Element</b> on a site that isn't connected, use the desktop extension on the original website.</p>
+      </details>
+    </section>
+    <section data-computer-only id="setup" aria-labelledby="setup-title">
+      <h2 id="setup-title">Install or update in desktop Chrome</h2>
+      <details>
+        <summary>Install for the first time</summary>
+        <ol class="guide-steps">
+          <li>Download and extract the ZIP. On Windows, right-click it and choose <b>Extract All</b>. On Mac, double-click it. Keep the extracted folder on your computer.</li>
+          <li>Enter <code>chrome://extensions</code> in Chrome's address bar and turn on <b>Developer mode</b>.</li>
+          <li>Choose <b>Load unpacked</b> and select the folder containing <code>manifest.json</code>.</li>
+          <li>Open the puzzle-piece menu in Chrome's toolbar and pin <b>FGS Site Review</b>.</li>
+        </ol>
+      </details>
+      <details>
+        <summary>Update an existing installation</summary>
+        <p>Download the new ZIP and extract it into the same folder you chose when you installed FGS Site Review. Replace the old files. Open <code>chrome://extensions</code> and click the reload icon on the FGS Site Review card. Its version should read <b>1.0.2</b>.</p>
+      </details>
+    </section>
   </main>
 </body>
 </html>

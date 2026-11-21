@@ -18,7 +18,7 @@ const documents = new Map();
 for (const name of ['index.html', 'chrome/index.html']) {
   documents.set(name, await readFile(path.join(output, name), 'utf8'));
 }
-for (const asset of ['review.js','review.css','install.js','install.css','companion.js','chrome-desktop.js','chrome/guide.css']) {
+for (const asset of ['review.js','review.css','install.js','install.css','companion.js','chrome-desktop.js','chrome/guide.css','annotation-preview.js','visual-marks.js']) {
   const bytes = await readFile(path.join(root,'public',asset));
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0,12);
   const ext = path.extname(asset);
@@ -30,16 +30,15 @@ for (const asset of ['review.js','review.css','install.js','install.css','compan
 }
 for (const [name, html] of documents) await writeFile(path.join(output, name), html);
 
-// Bundle our two dependency-free modules for Pages' single-file advanced mode.
-const capture = await readFile(path.join(root,'capture.js'),'utf8');
-const worker = await readFile(path.join(root,'worker.js'),'utf8');
-const captureImport = /^import\s*\{([^}]+)\}\s*from\s*["']\.\/capture\.js["'];?/m;
-const imported = worker.match(captureImport);
-if (!imported) throw new Error('The capture module import is missing.');
-const functions = imported[1].trim();
-const bundledCapture = 'const { ' + functions + ' } = (() => {\n' +
-  capture.replace(/^export default captureWorker;?\s*$/gm,'').replace(/^export /gm,'') +
-  '\nreturn { ' + functions + ' };\n})();';
-const bundle = worker.replace(captureImport, () => bundledCapture);
+// Pages advanced mode serves one worker. Inline the small local modules in their own scopes.
+let bundle = await readFile(path.join(root,'worker.js'),'utf8');
+const imports = [...bundle.matchAll(/^import \{([^}]+)\} from ["']\.\/([\w-]+\.js)["'];?$/gm)];
+for (const [declaration, names, filename] of imports) {
+  const source = await readFile(path.join(root,filename),'utf8');
+  if (/^import /m.test(source)) throw new Error('Nested module imports need bundling in ' + filename);
+  const definitions = source.replace(/^export default \w+;?\s*$/gm,'').replace(/^export /gm,'');
+  bundle = bundle.replace(declaration, () => 'const {' + names + '} = (() => {\n' + definitions + '\nreturn {' + names + '};\n})();');
+}
+if (/^import /m.test(bundle)) throw new Error('A worker import was not bundled.');
 await writeFile(path.join(output,'_worker.js'),bundle);
 console.log('Built Site Review for Cloudflare Pages.');

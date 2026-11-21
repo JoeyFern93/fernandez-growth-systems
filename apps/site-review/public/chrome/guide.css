@@ -21,19 +21,18 @@
   gap: 12px 23px;
   margin: 24px 0 36px;
 }
-.guide-download .primary, .phone-guide .primary { min-height: 48px; padding-inline: 20px; }
-.guide-main section, .phone-guide { border-top: 1px solid var(--line); padding-top: 26px; margin-top: 30px; }
+.guide-download .primary { min-height: 48px; padding-inline: 20px; }
+.guide-main section { border-top: 1px solid var(--line); padding-top: 26px; margin-top: 30px; scroll-margin-top: 20px; }
 .guide-main h2 { margin-bottom: 8px; font-size: clamp(24px, 4vw, 32px); letter-spacing: -.035em; }
 .guide-steps { padding-left: 23px; margin: 20px 0 0; }
 .guide-steps li { padding-left: 5px; margin-block: 14px; }
 .guide-steps li::marker { color: var(--green); font-weight: 800; }
-.guide-steps code { display: inline; padding: 1px 5px; margin: 0; background: #e1eade; font: 0.9em ui-monospace, monospace; }
-.guide-how dl { margin: 20px 0; }
-.guide-how dl > div { margin-top: 16px; }
-.guide-how dt { font-weight: 800; }
-.guide-how dd { margin: 4px 0 0; }
+.guide-main code { display: inline; padding: 1px 5px; margin: 0; background: #e1eade; font: .9em ui-monospace, monospace; overflow-wrap: anywhere; }
+.guide-main section > p + p { margin-top: 12px; }
+.guide-main details { margin-top: 14px; }
+.guide-main summary { width: fit-content; min-height: 44px; padding-block: 10px; font-weight: 800; cursor: pointer; color: var(--green); }
+.guide-main details p { margin-top: 4px; }
 .access-note { color: var(--muted); font-size: .92rem; }
-.phone-guide .primary { margin-top: 16px; }
 @media (max-width: 480px) {
   .guide .bar { padding-inline: 14px; }
   .guide .brand { gap: 8px; }

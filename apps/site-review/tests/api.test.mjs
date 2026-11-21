@@ -28,7 +28,7 @@ const python = [
 ].join("\n");
 function execute(jobs) {
   const result = spawnSync(process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"),
-    ["-c", python, join(temp, "reviews.sqlite"), schema], {input: JSON.stringify(jobs), encoding: "utf8", maxBuffer: 5000000});
+    ["-X", "utf8", "-c", python, join(temp, "reviews.sqlite"), schema], {input: JSON.stringify(jobs), encoding: "utf8", maxBuffer: 5000000});
   if (result.status !== 0) {
     const reason = result.stderr || String(result.error);
     console.error("Local SQLite test process failed:", reason);
@@ -69,6 +69,27 @@ async function create(host = "example.com") {
   const board = await api(path);
   return {path, owner, board, out, pageId: board.pages[0].id};
 }
+
+test("a point and drawing keep their locations on a tall captured page after reopening Notes", async () => {
+  const {path, pageId} = await create("markup.example");
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVXYAAAAASUVORK5CYII=";
+  const {capture} = await api(path + "/captures", "POST", {pageId, dataUrl:"data:image/png;base64," + png}, null, 201);
+  const send = annotation => ({pageId, captureId:capture.id, text:"Feedback near the footer", clientId:crypto.randomUUID(),
+    context:{mode:annotation.kind, annotation}});
+  const atFooter = {kind:"point", width:800, height:12000, point:[0.5, 0.93976]};
+  const {note:pin} = await api(path + "/notes", "POST", send(atFooter), null, 201);
+  assert.equal(pin.y, 0.9398);
+  assert.equal(pin.x, 0.5);
+  const lines = {kind:"draw", width:800, height:12000, strokes:[[[0.2,0.89],[0.5,0.9]],[[1,1]]]};
+  const {note:draw} = await api(path + "/notes", "POST", send(lines), null, 201);
+  const board = await api(path);
+  const loaded = board.notes.find(note => note.id === draw.id);
+  assert.equal(loaded.captureId, capture.id);
+  assert.deepEqual(loaded.context.annotation, lines);
+  await api(path + "/notes", "POST", send({...lines,strokes:[[[1,1.2]]]}), null, 400);
+  await api(path + "/notes", "POST", send({...lines,strokes:Array(25).fill([[0,0]])}), null, 400);
+  await api(path + "/notes", "POST", send({...lines,strokes:[Array(257).fill([0,0])]}), null, 400);
+});
 
 test("anonymous review round, shared uploads and pins, closure, invite replacement and project isolation", async () => {
   const {path, owner, pageId, board, out} = await create();

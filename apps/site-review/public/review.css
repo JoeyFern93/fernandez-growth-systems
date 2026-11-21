@@ -16,3 +16,59 @@ dialog.drawer{margin:auto 15px 15px auto;width:min(410px,calc(100vw - 30px));max
 @media(forced-colors:active){.fab,.marker span,.primary,.count{border:1px solid ButtonText}}
 
 .desktop-alternative, .desktop-help { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line); font-size: .92rem; }
+
+.method-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.method-grid button { display: grid; align-content: start; gap: 3px; padding: 12px; text-align: left; }
+.method-grid strong { font-size: 1.02rem; color: var(--dark); }
+.method-grid span { font-weight: 520; font-size: .86rem; line-height: 1.35; color: var(--muted); }
+#method-status { margin-top: 14px; }
+#method-status a, #method-status button { display: inline-flex; align-items: center; min-height: 44px; margin-right: 10px; }
+#frame-slot { position:relative; }
+#mark-surface, .draw-lines { position:absolute; inset:0; width:100%; height:100%; }
+.draw-lines { pointer-events:none; overflow:visible; }
+.draw-lines polyline { fill:none; stroke:#ae2242; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 0 1px #fff); }
+#mark-surface { z-index:2; cursor:crosshair; touch-action:pan-y; }
+#mark-surface[data-method=draw] { touch-action:none; }
+.scroll-drawing #mark-surface { pointer-events:none; }
+.mark-cursor { position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; border:2px solid white; border-radius:50%; background:#ac2744; box-shadow:0 0 0 2px #ac2744; }
+.page-help { position:static; max-width:none; flex:none; display:flex; gap:4px 14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:2px 8px; box-shadow:none; border:0; border-bottom:1px solid var(--line); background:var(--wash); border-radius:0; }
+.page-help span { font-weight:700; }
+.page-help button,.page-help a { min-height:44px; display:inline-flex; align-items:center; padding:5px 2px; background:none; border:0; font-size:inherit; color:var(--green); text-decoration:underline; }
+#shot-stage > img, #capture-tiles img { width:100%; height:auto; display:block; }
+#snapshot { padding-bottom:max(74px,env(safe-area-inset-bottom)); }
+.draw-lines circle { fill:#ae2242; stroke:#ae2242; stroke-width:3; }
+.snapshot-heading { z-index:3; }
+.snapshot-heading select { max-width:48%; }
+.snapshot-heading button { font-size:.85rem; flex:none; padding:6px 9px; }
+#capture-address-hint { margin-top:-10px; }
+#image-error:empty { display:none; }
+.marker-pending { z-index:1; }
+@media(max-width:580px) {
+  .page-help { gap:0 9px; font-size:.8rem; }
+  .page-help span { display:none; }
+  .snapshot-heading { gap:4px; padding:3px 6px; }
+  .snapshot-heading select { flex:1 1 0; width:0; min-height:44px; }
+  .snapshot-heading button { font-size:.79rem; }
+  .pick-actions .row { gap:2px; }
+}
+
+.annotation-preview { margin: 10px 0 6px; }
+.annotation-image { position: relative; overflow: hidden; box-sizing: border-box; background: #f1f3f1; outline: 1px solid var(--line); border-radius: 3px; }
+.annotation-image img, .annotation-image svg { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.annotation-window { width: min(100%, 21rem); max-height: 14rem; overflow: auto; overscroll-behavior: contain; }
+.annotation-tiles { position: absolute; inset: 0; }
+.annotation-tiles img { position: static; width: 100%; }
+.annotation-image svg { pointer-events: none; }
+.annotation-image path { vector-effect: non-scaling-stroke; stroke: #ac2744; stroke-width: 2.5; }
+.annotation-image path.drawing-halo { stroke: #fff; stroke-width: 4.5; }
+.annotation-image circle { fill: #ac2744; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.annotation-preview figcaption { margin-top: 5px; font-size: .83rem; color: var(--muted); }
+#my-reviews {margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}
+#my-reviews h2 {font-size:1.6rem;letter-spacing:-.03em}
+#saved-review-hint {color:var(--muted);margin:6px 0 12px}
+#saved-review-list {padding:0;margin:0;list-style:none}
+#saved-review-list li {background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px}
+#saved-review-list li+li {margin-top:8px}
+#saved-review-list strong {overflow-wrap:anywhere}
+#saved-review-list small {display:block}
+.saved-review-actions {display:flex;align-items:center;gap:6px}

@@ -8,30 +8,38 @@ const html = await readFile(new URL('../extension/popup.html', import.meta.url),
 const guestLink = 'https://sitereview.fernandezgrowthsystems.com/example.com/test-invite';
 const imageLink = guestLink + '#shot=saved-image';
 
-function mount({status, shareLink = imageLink, allowCopy = true} = {}) {
+function mount({status, shareLink = imageLink, allowCopy = true, reviews = [], captureResult} = {}) {
   const messages = [];
   const copies = [];
   const nodes = new Map();
   let closed = false;
-  for (const match of html.matchAll(/<(\w+)\b[^>]*?\bid="([^"]+)"[^>]*>/g)) {
-    const [,tag,id] = match;
-    nodes.set(id, {
-      tag, textContent:'', hidden:match[0].includes(' hidden'), value:'',
+  const createElement = tag => ({
+      tag, textContent:'', hidden:false, value:'', children:[],
       addEventListener(_name, fn) { this.click = fn; },
       focus() { this.focused = true; },
       select() { this.selected = true; },
+      append(...children) { this.children.push(...children); },
+      replaceChildren(...children) { this.children = children; },
       removeAttribute(key) { delete this[key]; },
       querySelector() { return null; }
-    });
+  });
+  for (const match of html.matchAll(/<(\w+)\b[^>]*?\bid="([^"]+)"[^>]*>/g)) {
+    const [,tag,id] = match;
+    const node = createElement(tag);
+    node.hidden = match[0].includes(' hidden');
+    nodes.set(id,node);
   }
   const defaults = {ok:true, host:'example.com', hasReview:true, reviewerUrl:guestLink};
   const replies = {
     status:status || defaults,
-    capture:{ok:true, captureKey:'local-key', dataUrl:'data:image/jpeg;base64,YQ==', host:'example.com',path:'/services'},
+    capture:captureResult || {ok:true, captureKey:'local-key', dataUrl:'data:image/jpeg;base64,YQ==', host:'example.com',path:'/services'},
     'share-capture':{ok:true, reviewerUrl:shareLink}, 'discard-capture':{ok:true},
-    'connect-review':{ok:true}, 'open-connected-site':{ok:true}, 'new-review':{ok:true}
+    'connect-review':{ok:true}, 'open-connected-site':{ok:true}, 'new-review':{ok:true},
+    'list-reviews':{ok:true,reviews}, 'open-saved-review':{ok:true}, 'get-saved-reviewer-link':{ok:true,reviewerUrl:guestLink},
+    'begin-feedback':{ok:true}, 'get-reviewer-link':{ok:true,reviewerUrl:guestLink}
   };
   const document = {
+    createElement,
     getElementById:id => nodes.get(id),
     querySelectorAll:() => [...nodes.values()].filter(node => node.tag === 'button')
   };
@@ -98,7 +106,7 @@ test('a review invite offers a deliberate connection to its target site', async 
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(popup.node('connect').hidden, false);
   await popup.node('connect-review').click();
-  assert.deepEqual(popup.messages.map(m=>m.type), ['status','connect-review','open-connected-site']);
+  assert.deepEqual(popup.messages.map(m=>m.type), ['status','open-connected-site']);
   assert.equal(popup.closed(), true);
 });
 
@@ -111,4 +119,50 @@ test('confirming a new round identifies the review the user chose to replace', a
   const request = popup.messages.at(-1);
   assert.equal(request.type, 'new-review');
   assert.equal(request.previousReviewerUrl, guestLink);
+});
+
+test('first-time reviewer can enter the picker or copy an intentional invitation with one action', async () => {
+  const popup = mount({status:{ok:true,host:'example.com',hasReview:false}});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(popup.node('existing').hidden,true);
+  await popup.node('copy-review').click();
+  assert.deepEqual(popup.messages.map(m=>m.type),['status','get-reviewer-link']);
+  assert.deepEqual(popup.copies,[guestLink]);
+  assert.equal(popup.node('existing').hidden,false);
+  await popup.node('start').click();
+  assert.equal(popup.messages.at(-1).type,'begin-feedback');
+  assert.equal(popup.closed(),true);
+});
+
+test('My reviews can find and open saved notes even from an unsupported tab', async () => {
+  const popup = mount({status:{ok:false,error:'Open a website.'},
+    reviews:[{id:'round',host:'example.com',current:true,isOwner:true,savedAt:0}]});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(popup.node('unavailable').hidden,false);
+  assert.equal(popup.node('my-reviews').hidden,false);
+  await popup.node('my-reviews').click();
+  const [row] = popup.node('review-list').children;
+  const [host,,buttons] = row.children;
+  assert.equal(host.textContent,'example.com');
+  assert.equal(popup.node('empty-shelf').hidden,true);
+  await buttons.children[1].click();
+  assert.deepEqual(popup.copies,[guestLink]);
+  await buttons.children[0].click();
+  assert.deepEqual(Array.from(popup.messages,m=>m.type),['status','list-reviews','get-saved-reviewer-link','open-saved-review']);
+  assert.equal(popup.messages.at(-1).id,'round');
+  assert.equal(popup.closed(),true);
+});
+
+test('tall full-page image stays in a scrollable preview until all tiles are explicitly shared', async () => {
+  const tiles = [{dataUrl:'data:image/jpeg;base64,YQ=='},{dataUrl:'data:image/jpeg;base64,Yg=='}];
+  const popup = mount({captureResult:{ok:true,captureKey:'full-key',area:'full',tiles,width:1200,height:9000,host:'example.com'}});
+  await new Promise(resolve => setImmediate(resolve));
+  popup.node('capture-area').value = 'full';
+  await popup.node('capture').click();
+  assert.equal(popup.messages.at(-1).area,'full');
+  assert.equal(popup.node('preview-image').hidden,true);
+  assert.deepEqual(Array.from(popup.node('tile-preview').children,img=>img.src),tiles.map(t=>t.dataUrl));
+  await popup.node('share').click();
+  assert.equal(JSON.stringify(popup.messages.at(-1).fullImage),JSON.stringify({tiles}));
+  assert.equal(popup.node('tile-preview').children.length,0);
 });

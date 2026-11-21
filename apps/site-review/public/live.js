@@ -33,7 +33,7 @@
 
   function pageInfo() {
     // The source website may carry unrelated private parameters in its URL.
-    return { url: location.origin + location.pathname, title: document.title.slice(0, 160) };
+    return { url: location.origin + location.pathname, title: document.title.slice(0, 160), visualLayout: true };
   }
 
   function createOverlay() {
@@ -164,6 +164,8 @@
         attachReviewEvents();
       }
       send('connected', pageInfo());
+    } else if (connected && message.type === 'request-layout') {
+      send('visual-layout', {...pageInfo(), viewport:{width:innerWidth,height:innerHeight},scrollX,scrollY,keyboard:message.keyboard===true});
     } else if (connected && message.type === 'mode' && ['pick', 'browse'].includes(message.mode)) {
       setMode(message.mode === 'pick', message.keyboard === true);
     }
