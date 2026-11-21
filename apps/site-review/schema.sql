@@ -84,3 +84,33 @@ CREATE TABLE IF NOT EXISTS replay_pairs (
   answer TEXT
 );
 CREATE INDEX IF NOT EXISTS replay_pairs_expiry ON replay_pairs(expires);
+
+CREATE TABLE IF NOT EXISTS replay_pair_ice (
+      id TEXT NOT NULL REFERENCES replay_pairs(id) ON DELETE CASCADE,
+      role TEXT NOT NULL, revision INTEGER NOT NULL, candidates TEXT NOT NULL, complete INTEGER NOT NULL,
+      PRIMARY KEY(id,role)) WITHOUT ROWID;
+
+CREATE TRIGGER IF NOT EXISTS replay_clear_ice AFTER UPDATE OF ended ON replay_pairs WHEN NEW.ended=1 BEGIN
+      DELETE FROM replay_pair_ice WHERE id=NEW.id; END;
+
+CREATE TABLE IF NOT EXISTS replay_relays (
+     id TEXT PRIMARY KEY REFERENCES replay_pairs(id) ON DELETE CASCADE, status TEXT NOT NULL,
+     formats TEXT NOT NULL, mime TEXT, latest INTEGER NOT NULL DEFAULT -1,
+     last_at INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, writer TEXT);
+
+CREATE TABLE IF NOT EXISTS replay_relay_chunks (
+     pair_id TEXT NOT NULL REFERENCES replay_relays(id) ON DELETE CASCADE,
+     slot INTEGER NOT NULL, seq INTEGER NOT NULL, ciphertext TEXT NOT NULL, reads INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY(pair_id,slot)) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS replay_relay_days (day INTEGER PRIMARY KEY,packets INTEGER NOT NULL,bytes INTEGER NOT NULL);
+
+CREATE TRIGGER IF NOT EXISTS replay_erase_ended AFTER UPDATE OF ended ON replay_pairs WHEN NEW.ended=1 BEGIN
+     DELETE FROM replay_relay_chunks WHERE pair_id=NEW.id;
+     UPDATE replay_relays SET status='ended',writer=NULL WHERE id=NEW.id AND status<>'ended';
+   END;
+
+CREATE TRIGGER IF NOT EXISTS replay_erase_expired AFTER DELETE ON replay_pairs BEGIN
+     DELETE FROM replay_relay_chunks WHERE pair_id=OLD.id;
+     DELETE FROM replay_relays WHERE id=OLD.id;
+   END;

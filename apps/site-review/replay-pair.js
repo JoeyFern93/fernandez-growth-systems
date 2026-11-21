@@ -9,15 +9,23 @@ const CREATE = `CREATE TABLE IF NOT EXISTS replay_pairs (
  bucket TEXT NOT NULL, expires INTEGER NOT NULL, ended INTEGER NOT NULL DEFAULT 0,
  offer TEXT, answer TEXT)`;
 const initialized = new WeakMap();
+const nextSweep = new WeakMap();
+const expiredPairs = "DELETE FROM replay_pairs WHERE expires<=? AND NOT EXISTS (SELECT 1 FROM replay_relays WHERE id=replay_pairs.id AND status='active' AND expires>?)";
 
 class PairError extends Error {
   constructor(status,message) { super(message); this.status=status; }
 }
 function fail(status,message) { throw new PairError(status,message); }
-async function setup(db) {
+async function setup(db, relaySchema) {
   if(!initialized.has(db)) {
     const result=db.batch([db.prepare(CREATE),
-      db.prepare('CREATE INDEX IF NOT EXISTS replay_pairs_expiry ON replay_pairs(expires)')]);
+      db.prepare('CREATE INDEX IF NOT EXISTS replay_pairs_expiry ON replay_pairs(expires)'),
+      db.prepare(`CREATE TABLE IF NOT EXISTS replay_pair_ice (id TEXT NOT NULL REFERENCES replay_pairs(id) ON DELETE CASCADE,
+        role TEXT NOT NULL, revision INTEGER NOT NULL, candidates TEXT NOT NULL, complete INTEGER NOT NULL,
+        PRIMARY KEY(id,role)) WITHOUT ROWID`),
+      db.prepare(`CREATE TRIGGER IF NOT EXISTS replay_clear_ice AFTER UPDATE OF ended ON replay_pairs WHEN NEW.ended=1 BEGIN
+        DELETE FROM replay_pair_ice WHERE id=NEW.id; END`),
+      ...relaySchema.map(sql=>db.prepare(sql))]);
     initialized.set(db,result);
     try { await result; } catch(error) { initialized.delete(db);throw error; }
   } else await initialized.get(db);
@@ -77,7 +85,7 @@ async function createPair(request,db,now) {
   const ip=request.headers.get('CF-Connecting-IP');
   const bucket=ip ? await digest('network',Math.floor(now/TTL)+'/'+ip) : tvHash;
   const [,result]=await db.batch([
-    db.prepare('DELETE FROM replay_pairs WHERE expires<=?').bind(now),
+    db.prepare(expiredPairs).bind(now,now),
     db.prepare(`INSERT INTO replay_pairs(id,tv_hash,invite_hash,bucket,expires)
       SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM replay_pairs) < 160
       AND (SELECT count(*) FROM replay_pairs WHERE bucket=?) < 16 ON CONFLICT(id) DO NOTHING`)
@@ -88,10 +96,60 @@ async function createPair(request,db,now) {
   if(row.ended) fail(410,'This pairing has ended. Show a new QR code on the TV.');
   return {status:result.meta.changes ? 201 : 200, data:{id,invite:row.expires===expiry ? invite : await digest('invite/'+row.expires,tvToken),expiresAt:row.expires}};
 }
-async function handle(request,db,id,action,now) {
+function checkedCandidate(value) {
+  const c=value?.candidate;
+  if(typeof c!=='string' || c.length>1200 || !/^[\x20-\x7e]+$/.test(c) ||
+      !/^candidate:[^ ]{1,64} [12] (udp|tcp) \d{1,10} [^ ]{1,255} \d{1,5} typ (host|srflx|prflx|relay)(?: [^ ]+)*$/i.test(c)) {
+    fail(400,'Invalid connection candidate.');
+  }
+  if(value.sdpMid!=null && (typeof value.sdpMid!=='string' || !/^[A-Za-z0-9_.-]{1,32}$/.test(value.sdpMid))) fail(400,'Invalid video media identifier.');
+  if(value.sdpMLineIndex!=null && value.sdpMLineIndex!==0) fail(400,'Choose the video connection.');
+  if(value.sdpMid==null && value.sdpMLineIndex==null) fail(400,'Choose the video connection.');
+  if(value.usernameFragment!=null && (typeof value.usernameFragment!=='string' || !/^[A-Za-z0-9+/_=-]{1,256}$/.test(value.usernameFragment))) fail(400,'Invalid candidate fragment.');
+  return {candidate:c,sdpMid:value.sdpMid??null,sdpMLineIndex:value.sdpMLineIndex??null,...(value.usernameFragment ? {usernameFragment:value.usernameFragment} : {})};
+}
+async function candidates(request,db,id,role,url,now) {
+  const read=which=>db.prepare('SELECT candidates,complete,revision FROM replay_pair_ice WHERE id=? AND role=?').bind(id,which).first();
+  if(request.method==='GET') {
+    const row=await read(role==='tv'?'phone':'tv'), list=JSON.parse(row?.candidates||'[]');
+    const after=Number(url.searchParams.get('after')||0);
+    if(after>64) fail(400,'Invalid candidate cursor.');
+    return {data:{candidates:list.slice(after),next:list.length,complete:!!row?.complete}};
+  }
+  const input=await body(request,24000);
+  if(!Array.isArray(input.candidates) || input.candidates.length>12 ||
+      (input.complete!==undefined && typeof input.complete!=='boolean')) fail(400,'Send up to 12 video connection candidates.');
+  const incoming=input.candidates.map(checkedCandidate);
+  for(let attempt=0;attempt<5;attempt++) {
+    const row=await read(role), list=JSON.parse(row?.candidates||'[]'), original=list.length, complete=!!row?.complete || input.complete===true;
+    const seen=new Set(list.map(x=>JSON.stringify(x)));
+    for(const value of incoming) {
+      const key=JSON.stringify(value);if(!seen.has(key)) {seen.add(key);list.push(value);}
+    }
+    if(list.length>64) fail(413,'The connection candidate limit has been reached.');
+    const data={status:'ok',count:list.length,complete};
+    if(original===list.length && !!row?.complete===complete) return {data};
+    const previous=row?.revision||0;
+    const write=await db.prepare(`INSERT INTO replay_pair_ice(id,role,revision,candidates,complete)
+      SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM replay_pairs WHERE id=? AND ended=0 AND expires>?)
+      ON CONFLICT(id,role) DO UPDATE SET revision=excluded.revision,candidates=excluded.candidates,complete=excluded.complete
+      WHERE replay_pair_ice.revision=?`).bind(id,role,previous+1,JSON.stringify(list),+complete,id,now,previous).run();
+    if(write.meta.changes) return {data};
+  }
+  fail(409,'Connection details changed. Retry the same batch.');
+}
+async function handle(request,env,id,action,now,url,helpers) {
+  const db=env.DB;
   if(!db) fail(503,'Pairing is temporarily unavailable.');
-  await setup(db);
+  await setup(db,helpers.relaySchema);
   if(!id) return createPair(request,db,now);
+  // Pair creation always sweeps. Active traffic also clears abandoned rooms at most once
+  // per minute on each Worker isolate, including their encrypted rolling windows.
+  if(now >= (nextSweep.get(db)||0)) {
+    nextSweep.set(db,now+60000);
+    try {await db.prepare(expiredPairs).bind(now,now).run();}
+    catch(error) {nextSweep.delete(db);throw error;}
+  }
   if(action==='claim') {
     const input=await body(request);
     const [invite,phone]=await Promise.all([digest('claim',requireToken(input.invite)),digest('role',requireToken(input.phoneToken))]);
@@ -109,8 +167,15 @@ async function handle(request,db,id,action,now) {
   const token=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('Authorization')||'')?.[1];
   if(!token) fail(401,'Pairing access is required.');
   const roleHash=await digest('role',token);
-  const row=await db.prepare('SELECT tv_hash,phone_hash,expires,ended,offer,answer FROM replay_pairs WHERE id=?').bind(id).first();
-  if(!row || row.expires<=now) fail(410,'This pairing has expired. Show a new QR code on the TV.');
+  // Fetch pixel-free signaling metadata only; media packets never need the potentially long SDP.
+  const desc=(!action || action==='offer' || action==='answer') ? ',p.offer,p.answer' : '';
+  const row=await db.prepare(`SELECT p.tv_hash,p.phone_hash,p.expires,p.ended,
+    CASE WHEN r.status='active' THEN MAX(r.expires,p.expires) ELSE p.expires END AS access_until`+desc+
+    ' FROM replay_pairs p LEFT JOIN replay_relays r ON r.id=p.id WHERE p.id=?').bind(id).first();
+  if(!row || row.access_until<=now) {
+    if(row) await db.prepare(expiredPairs+' AND id=?').bind(now,now,id).run();
+    fail(410,'This pairing has expired. Show a new QR code on the TV.');
+  }
   const tv=roleHash===row.tv_hash, phone=roleHash===row.phone_hash;
   if(!tv && !phone) fail(403,'Pairing access is invalid.');
   if(action==='end') {
@@ -118,6 +183,10 @@ async function handle(request,db,id,action,now) {
     return {data:{status:'ended'}};
   }
   if(row.ended) fail(410,'This pairing has ended.');
+  const role=tv?'tv':'phone';
+  if(action==='candidates') return candidates(request,db,id,role,url,now);
+  if(action==='ice-servers') return {data:await helpers.turnIceServers(env,db,id,role,now)};
+  if(action==='relay' || action==='relay-chunk') return helpers.replayRelay({request,db,id,role,action,url,now,pair:row,body,fail});
   if(!action) {
     const data=publicState(row);
     if(tv && row.offer) data.offer={type:'offer',sdp:row.offer};
@@ -137,25 +206,35 @@ async function handle(request,db,id,action,now) {
   if(!result.meta.changes) fail(409,'This pairing changed. Start a new pairing on the TV.');
   return {data:{status:action==='offer'?'offered':'answered',expiresAt:row.expires}};
 }
-export async function replayPair(request,db,url) {
+export async function replayPair(request,env,url,helpers) {
   const origin=request.headers.get('Origin'), headers=new Headers({'Cache-Control':'private, no-store','Vary':'Origin','Referrer-Policy':'no-referrer'});
   if(!ORIGINS.has(origin)) return Response.json({error:'Open Replay Cam to pair a TV.'},{status:403,headers});
   headers.set('Access-Control-Allow-Origin',origin);
   try {
     const path=url.pathname.slice(PREFIX.length);
-    const match=/^\/([A-Za-z0-9_-]{22})(?:\/(claim|offer|answer|end))?$/.exec(path);
-    if(url.search || (path && !match)) fail(404,'Pairing route not found.');
-    const id=match?.[1], action=match?.[2], allowed=!id || action ? 'POST' : 'GET';
+    const match=/^\/([A-Za-z0-9_-]{22})(?:\/(claim|offer|answer|end|candidates|ice-servers|relay|relay-chunk))?$/.exec(path);
+    if(path && !match) fail(404,'Pairing route not found.');
+    const id=match?.[1], action=match?.[2];
+    if(action==='relay-chunk' ? !/^\?seq=(?:0|[1-9]\d{0,6})$/.test(url.search) :
+       url.search && !(action==='candidates' && /^\?after=(?:0|[1-9]\d?)$/.test(url.search))) fail(404,'Pairing route not found.');
+    const methods=['candidates','relay','relay-chunk'].includes(action) ? ['GET','POST'] :
+      (!id || (action && action!=='ice-servers') ? ['POST'] : ['GET']);
     if(request.method==='OPTIONS') {
       const requested=(request.headers.get('Access-Control-Request-Headers')||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
-      if(request.headers.get('Access-Control-Request-Method')!==allowed || requested.some(h=>!['authorization','content-type','accept'].includes(h))) fail(403,'Unsupported pairing request.');
-      headers.set('Access-Control-Allow-Methods',allowed);
+      if(!methods.includes(request.headers.get('Access-Control-Request-Method')) || requested.some(h=>!['authorization','content-type','accept'].includes(h))) fail(403,'Unsupported pairing request.');
+      headers.set('Access-Control-Allow-Methods',methods.join(', '));
       headers.set('Access-Control-Allow-Headers','Authorization, Content-Type, Accept');
       headers.set('Access-Control-Max-Age','600');
       return new Response(null,{status:204,headers});
     }
-    if(request.method!==allowed) fail(405,'Use the correct method for this pairing action.');
-    const result=await handle(request,db,id,action,Date.now());
+    if(!methods.includes(request.method)) fail(405,'Use the correct method for this pairing action.');
+    const result=await handle(request,env,id,action,Date.now(),url,helpers);
+    if(result.bytes) {
+      headers.set('Content-Type','application/octet-stream');
+      headers.set('Content-Length',String(result.bytes.length));
+      return new Response(result.bytes,{status:200,headers});
+    }
+    if(result.status===204) return new Response(null,{status:204,headers});
     return Response.json(result.data,{status:result.status||200,headers});
   } catch(error) {
     const status=error instanceof PairError ? error.status : 503;

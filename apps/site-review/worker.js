@@ -1,4 +1,6 @@
 import { replayPair } from "./replay-pair.js";
+import { replayRelay, relaySchema } from "./replay-relay.js";
+import { turnIceServers } from "./replay-turn.js";
 import { automaticCapture, canAutomaticallyCapture, CaptureError, probeFramePolicy } from "./capture.js";
 
 import { CAPTURE_BODY_LIMIT, CAPTURE_FIELDS, CaptureStorageError, publicCapture, readCapture, storeCapture, storedImage } from "./capture-storage.js";
@@ -464,7 +466,7 @@ async function handleApi(request, env, url) {
 }
 
 async function routeRequest(request, env, url) {
-  if (url.pathname === "/api/replay-pair" || url.pathname.startsWith("/api/replay-pair/")) return replayPair(request,env.DB,url);
+  if (url.pathname === "/api/replay-pair" || url.pathname.startsWith("/api/replay-pair/")) return replayPair(request,env,url,{replayRelay,relaySchema,turnIceServers});
   if (url.pathname.startsWith("/api/")) return handleApi(request, env, url);
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length === 2 && INVITE.test(parts[1]) && ["GET","HEAD"].includes(request.method)) {

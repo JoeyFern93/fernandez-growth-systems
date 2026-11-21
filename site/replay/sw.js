@@ -1,10 +1,10 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-21-motion-analysis-v11-tv';
+const CACHE_NAME = CACHE_PREFIX + '2026-11-21-tv-recovery-v2';
 const APP_SHELL = [
   './', './css/app-v10.css', './css/dashboard-v11.css', './js/dashboard-v11.js',
   './js/frame-times-v1.js', './js/frame-export-v1.js', './js/app-v11.js', './js/replay-ui.js',
-  './tv/pair.js', './tv/pair.css', './manifest-v3.webmanifest', './js/install-v4.js',
+  './tv/pair.js', './tv/relay-media.js', './tv/pair.css', './manifest-v3.webmanifest', './js/install-v4.js',
   '../favicon-v5.ico', '../favicon-v5.svg', '../favicon-v5-32.png', '../assets/tool-install-v1.css',
   '../assets/brand/website/fgs-brand-v3.css', '../assets/brand/replay-brand-v3.css',
   '../assets/brand/fonts/Nunito-Variable.woff2', '../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg',

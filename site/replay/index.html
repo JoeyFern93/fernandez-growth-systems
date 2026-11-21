@@ -8,7 +8,7 @@
   <meta name="color-scheme" content="dark">
   <title>Replay Cam | Delayed Video Replay for Athletes | Fernandez Growth Systems</title>
   <link rel="canonical" href="https://www.fernandezgrowthsystems.com/replay/">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://sitereview.fernandezgrowthsystems.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://sitereview.fernandezgrowthsystems.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <link rel="manifest" href="manifest-v3.webmanifest">
   <link rel="icon" href="/favicon-v5.ico" sizes="any">
   <link rel="icon" href="/favicon-v5.svg" type="image/svg+xml">
@@ -95,6 +95,16 @@
         </div>
         <p id="frameRateStatus" class="fps-readout" role="status">Start the camera to measure its frame rate.</p>
         <div class="camera-actions"><button id="flipBtn" type="button" class="button button-secondary" disabled>Switch camera</button><button id="mirrorBtn" type="button" class="button button-secondary" aria-pressed="false">Mirror: off</button><button id="pairTvBtn" type="button" class="button button-secondary" aria-haspopup="dialog">TV display</button></div>
+        <details class="cast-help">
+          <summary>Cast or mirror this screen</summary>
+          <p>The TV shows the delayed replay and controls from this device. Connect both devices to the same Wi-Fi and start mirroring before starting the camera.</p>
+          <ul>
+            <li><strong>Android with Google Cast</strong> &mdash; In Google Home, open Devices, press and hold your TV, then choose <strong>Cast</strong> and <strong>Cast my screen</strong>. If asked, share Replay Cam or the browser you use for it.</li>
+            <li><strong>iPhone or iPad with AirPlay</strong> &mdash; Open Control Center, tap <strong>Screen Mirroring</strong> and select your TV.</li>
+            <li><strong>Computer with Google Cast</strong> &mdash; In Chrome, open the three-dot menu, choose <strong>Cast, save, and share</strong>, then <strong>Cast</strong>. Select this tab as the source and choose your TV.</li>
+          </ul>
+          <p>Return to Replay Cam and tap <strong>Try demo</strong>. When the moving timer appears on the TV, tap <strong>Stop</strong>, then <strong>Start camera</strong>. Choose <strong>Full screen</strong> for a larger view.</p>
+        </details>
         <div class="delay-control">
         <label for="delayRange">Replay delay <strong id="delayValue">10 seconds</strong></label>
         <input id="delayRange" type="range" min="1" max="120" value="10" step="1">
@@ -158,8 +168,9 @@
         <dl><div><dt>Camera</dt><dd id="cameraStatus">Stopped</dd></div><div><dt>Replay</dt><dd id="replayStatus">Waiting</dd></div><div><dt>Buffer</dt><dd id="bufferStatus">0 seconds</dd></div></dl>
       </section>
         <section class="card privacy-card" aria-labelledby="privacyTitle">
-        <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Video stays on this device</h2>
-        <p>Replay Cam does not upload camera video or record audio. Recent replay clears when you stop. Download clips and completed session recordings before closing or refreshing this page. Downloaded videos become normal files on this device, so follow your organization's recording, consent, and deletion policies.</p>
+        <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Where your video goes</h2>
+        <p>Ordinary replay runs on this device. In a private TV room, your phone sends silent video to the paired display. If you choose the internet relay, Fernandez Growth Systems forwards encrypted video. Keep the phone link private because it contains the video key. Screen mirroring shares what you see with the TV you select.</p>
+        <p>Recent replay clears when you stop. Download clips and completed session recordings before closing or refreshing this page. Downloaded videos become normal files on this device, so follow your organization's recording, consent, and deletion policies.</p>
       </section>
         <a href="/" class="home-link">Back to Fernandez Growth Systems</a>
       </section>
@@ -203,6 +214,7 @@
   <script src="js/frame-times-v1.js" defer></script>
   <script src="js/frame-export-v1.js" defer></script>
   <script src="js/app-v11.js" defer></script>
+  <script src="/replay/tv/relay-media.js" defer></script>
   <script src="/replay/tv/pair.js" defer></script>
   <script src="js/replay-ui.js" defer></script>
   <script src="js/dashboard-v11.js" defer></script>
