@@ -2,7 +2,7 @@ name: Verify Replay Cam TV pairing
 
 on:
   push:
-    branches: [qa/replay-camera-dashboard-tv-20261120]
+    branches: [qa/replay-camera-dashboard-tv-20261120, qa/replay-controls-20261120]
     paths:
       - 'site/replay/**'
       - 'apps/site-review/worker.js'
@@ -36,6 +36,14 @@ jobs:
             scenario: --relay
             jpeg: '1'
             without_rtc: '1'
+          - label: Phone controls and replay sizing over direct video
+            scenario: --controls
+            jpeg: '0'
+            without_rtc: '0'
+          - label: Phone controls and replay sizing over encrypted video
+            scenario: --controls --relay
+            jpeg: '0'
+            without_rtc: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -1,27 +1,94 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><meta name="theme-color" content="#14241d">
-<link rel="icon" href="/replay/icons/fgs-192-v4.png"><link rel="stylesheet" href="/replay/tv/pair.css?v=a0975fc0dca4">
-<title>Phone camera · Replay Cam</title><script defer src="/replay/tv/relay-media.js?v=dc757ce63e12"></script><script defer src="/replay/tv/pair.js?v=47bfdac38e0c"></script></head>
-<body class="replay-phone"><main class="phone-shell">
-<header><img src="/replay/icons/fgs-192-v4.png" width="36" height="36" alt=""><strong>Replay Cam</strong></header>
-<h1>Phone camera</h1><p id="phone-status" role="status">Tap Start camera to join your private TV room. Your phone can use mobile data or a different Wi-Fi network.</p>
-<video id="phone-preview" muted autoplay playsinline hidden aria-label="Your camera preview"></video>
-<button type="button" id="phone-start" disabled>Start camera</button>
-<button type="button" id="phone-options" hidden>Internet relay options</button>
-<section id="phone-relay" aria-label="Encrypted video relay" hidden>
-  <p>Keep this room open and send encrypted video through Fernandez Growth Systems for up to 30 minutes. Your private phone link contains the video key. The relay may use a lower frame rate and counts toward mobile data usage.</p>
-  <button id="relay-consent" type="button">Use internet relay</button>
-</section>
-<button type="button" id="phone-stop" hidden>Disconnect camera</button>
-<p class="phone-detail">Keep this page open while you replay. Your microphone stays off.</p>
-<details class="cast-help">
-  <summary>Cast or mirror from this phone</summary>
-  <p>To show the delayed replay on your TV, connect both devices to the same Wi-Fi and start mirroring before starting a new camera session.</p>
-  <ul>
-    <li><strong>Android with Google Cast</strong> &mdash; In Google Home, open Devices, press and hold your TV, then tap <strong>Cast</strong> and <strong>Cast my screen</strong>. If asked, share the browser where you will open Replay Cam.</li>
-    <li><strong>iPhone with AirPlay</strong> &mdash; Open Control Center, tap <strong>Screen Mirroring</strong> and choose your TV.</li>
-  </ul>
-  <p><a href="https://www.fernandezgrowthsystems.com/replay/" referrerpolicy="no-referrer">Open Replay Cam on this phone</a> to leave pairing. Tap <strong>Try demo</strong> to check the TV. Then tap <strong>Stop</strong> and <strong>Start camera</strong>.</p>
-</details>
-</main></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#14241d">
+  <link rel="icon" href="/replay/icons/fgs-192-v4.png">
+  <link rel="stylesheet" href="/replay/tv/pair.css?v=a0975fc0dca4">
+  <link rel="stylesheet" href="/replay/tv/phone-controls.css?v=9303e7695254">
+  <title>Phone camera | Replay Cam</title>
+  <script defer src="/replay/tv/relay-media.js?v=dc757ce63e12"></script>
+  <script defer src="/replay/tv/phone-camera.js?v=463fb609e559"></script>
+  <script defer src="/replay/tv/phone-view.js?v=62c370200835"></script>
+  <script defer src="/replay/tv/pair.js?v=5cff35827a90"></script>
+</head>
+<body class="replay-phone">
+  <main class="phone-shell">
+    <header class="phone-heading">
+      <img src="/replay/icons/fgs-192-v4.png" width="28" height="28" alt="Replay Cam">
+      <h1>Phone camera</h1>
+    </header>
+    <div class="phone-view" id="phone-view">
+      <video id="phone-preview" muted autoplay playsinline hidden aria-label="Live camera view"></video>
+      <button type="button" id="phone-preview-expand" aria-label="Expand camera preview" aria-controls="phone-preview" aria-expanded="false" hidden>Expand</button>
+    </div>
+    <div class="phone-tools">
+        <p id="phone-status" role="status">Start the camera to join your TV room. Wi-Fi or mobile data works.</p>
+        <div class="phone-session-actions">
+          <button type="button" id="phone-start" disabled>Start camera</button>
+          <button type="button" id="phone-options" hidden>Relay options</button>
+          <button type="button" id="phone-stop" hidden>Disconnect</button>
+        </div>
+        <section id="phone-relay" aria-label="Encrypted video relay" hidden>
+          <p>Share encrypted video through Fernandez Growth Systems for up to 30 minutes. Cellular uses mobile data.</p>
+          <button id="relay-consent" type="button">Use internet relay</button>
+        </section>
+        <div class="phone-transform">
+          <button type="button" id="phone-rotate" aria-describedby="phone-angle">Rotate 90°</button>
+          <output id="phone-angle" for="phone-rotate" aria-label="Current rotation">0°</output>
+          <button type="button" id="phone-mirror" aria-pressed="false">Mirror</button>
+        </div>
+
+      <details id="phone-camera-settings" class="phone-settings">
+        <summary>Camera settings</summary>
+        <div class="phone-setting-fields">
+          <label class="phone-field" for="phone-lens">Camera or lens
+            <select id="phone-lens">
+              <option value="environment" selected>Rear camera</option>
+              <option value="user">Front camera</option>
+            </select>
+          </label>
+          <div id="phone-zoom-row" class="phone-field" hidden>
+            <label for="phone-zoom">Zoom <output id="phone-zoom-value" for="phone-zoom">1×</output></label>
+            <input id="phone-zoom" type="range" min="1" max="1" step="0.1" value="1">
+          </div>
+          <div class="phone-quality">
+            <label class="phone-field" for="phone-resolution">Resolution
+              <select id="phone-resolution">
+                <option value="auto" selected>Auto</option>
+                <option value="480">480p</option>
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+              </select>
+            </label>
+            <label class="phone-field" for="phone-fps">Frame rate
+              <select id="phone-fps">
+                <option value="auto" selected>Auto</option>
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+                <option value="120">120 fps</option>
+                <option value="240">240 fps</option>
+              </select>
+            </label>
+          </div>
+          <p id="phone-camera-readout">Start the camera to see its active settings.</p>
+          <p class="phone-setting-note">Framing changes appear in the TV replay and new recordings. Your microphone stays off.</p>
+        </div>
+      </details>
+    <p id="phone-camera-status" role="status"></p>
+    <details class="cast-help">
+      <summary>Cast or mirror from this phone</summary>
+      <p>To show the delayed replay on your TV, connect both devices to the same Wi-Fi and start mirroring before starting a new camera session.</p>
+      <ul>
+        <li><strong>Android with Google Cast</strong> &mdash; In Google Home, open Devices, press and hold your TV, then tap <strong>Cast</strong> and <strong>Cast my screen</strong>. If asked, share the browser where you will open Replay Cam.</li>
+        <li><strong>iPhone with AirPlay</strong> &mdash; Open Control Center, tap <strong>Screen Mirroring</strong> and choose your TV.</li>
+      </ul>
+      <p><a href="https://www.fernandezgrowthsystems.com/replay/" referrerpolicy="no-referrer">Open Replay Cam on this phone</a> to leave pairing. Tap <strong>Try demo</strong> to check the TV. Then tap <strong>Stop</strong> and <strong>Start camera</strong>.</p>
+    </details>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,10 +1,10 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-21-tv-room-assets-v3';
+const CACHE_NAME = CACHE_PREFIX + '2026-11-21-player-phone-controls-v4';
 const APP_SHELL = [
-  './', './css/app-v10.css', './css/dashboard-v11.css', './js/dashboard-v11.js',
-  './js/frame-times-v1.js', './js/frame-export-v1.js', './js/app-v11.js?v=d94f673603e0', './js/replay-ui.js',
-  './tv/pair.js?v=47bfdac38e0c', './tv/relay-media.js?v=dc757ce63e12', './tv/pair.css?v=a0975fc0dca4', './manifest-v3.webmanifest', './js/install-v4.js',
+  './', './css/app-v10.css', './css/dashboard-v11.css?v=8eabeb1debc0', './js/dashboard-v11.js?v=298f5a765e76',
+  './js/frame-times-v1.js', './js/frame-export-v1.js', './js/app-v11.js?v=3d2377a7a9f6', './js/replay-ui.js',
+  './tv/pair.js?v=5cff35827a90', './tv/relay-media.js?v=dc757ce63e12', './tv/pair.css?v=a0975fc0dca4', './manifest-v3.webmanifest', './js/install-v4.js',
   '../favicon-v5.ico', '../favicon-v5.svg', '../favicon-v5-32.png', '../assets/tool-install-v1.css',
   '../assets/brand/website/fgs-brand-v3.css', '../assets/brand/replay-brand-v3.css',
   '../assets/brand/fonts/Nunito-Variable.woff2', '../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg',

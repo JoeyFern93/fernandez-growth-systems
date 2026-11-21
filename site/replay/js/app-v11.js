@@ -62,6 +62,16 @@
     const [width, height] = value.split('x').map(Number);
     return { width, height };
   };
+  function replayCanvasSize(maxWidth, maxHeight) {
+    const w = ui.live.videoWidth, h = ui.live.videoHeight;
+    if (!w || !h) return {width: maxWidth, height: maxHeight};
+    // Match the initial source orientation within the selected quality budget.
+    // Later rotations still draw the entire frame into the existing recording.
+    const scale = Math.min(Math.max(maxWidth,maxHeight) / Math.max(w,h),
+      Math.min(maxWidth,maxHeight) / Math.min(w,h));
+    return {width: Math.max(2, 2 * Math.floor(w * scale / 2)),
+      height: Math.max(2, 2 * Math.floor(h * scale / 2))};
+  }
 
   function selectedRate() {
     const fps = Number(ui.captureFps.value);
@@ -130,19 +140,23 @@
     state.toastTimer = setTimeout(() => { ui.toast.hidden = true; }, duration);
   }
   function showViewerMessage(title, detail) {
+    const demoSlot = $('quickDemoSlot');
     ui.viewerMessage.replaceChildren();
     const strong = document.createElement('strong');
     const span = document.createElement('span');
     strong.textContent = title;
     span.textContent = detail;
     ui.viewerMessage.append(strong, span);
+    if (demoSlot) ui.viewerMessage.append(demoSlot);
     ui.viewerMessage.hidden = false;
   }
   function updateDelayText() {
     const seconds = Number(ui.delay.value);
     ui.delayValue.textContent = plural(seconds, 'second');
-    ui.delayBadge.textContent = state.running
-      ? `≈ ${plural(seconds, 'second')} behind` : `${plural(seconds, 'second')} delay`;
+    ui.delayBadge.textContent = `${seconds}s delay`;
+    ui.delayBadge.dataset.seconds = seconds;
+    ui.delayBadge.setAttribute('aria-label', `Replay delay, ${plural(seconds, 'second')}`);
+    ui.delayBadge.title = `Replay delay: ${plural(seconds, 'second')}`;
   }
   function updateControls() {
     const busy = !!state.clip;
@@ -846,6 +860,7 @@
     try {
       state.nativeReplay = allowNative && (preferOriginalTrack() || !ui.processingCanvas.captureStream) &&
         typeof state.stream?.getVideoTracks()[0]?.clone === 'function';
+      if (state.nativeReplay) state.replayContentAspect = 0;
       state.encoderStream = state.nativeReplay ? cloneCameraVideo() : canvasVideo(ui.processingCanvas, state.replayFps);
       const width = state.nativeReplay ? ui.live.videoWidth : ui.processingCanvas.width;
       const height = state.nativeReplay ? ui.live.videoHeight : ui.processingCanvas.height;
@@ -882,8 +897,7 @@
     ui.delay.value = String(state.delaySeconds);
     updateDelayText();
     const generation = state.generation;
-    const width = 320;
-    const height = 180;
+    const {width, height} = replayCanvasSize(320, 180);
     const fps = 10;
     state.nativeReplay = false;
     state.replayFps = fps;
@@ -961,8 +975,9 @@
     state.delaySeconds = Number(ui.delay.value);
     state.replayContentAspect = ui.live.videoWidth / ui.live.videoHeight || 0;
     const replay = parseResolution(ui.replayResolution.value);
-    ui.processingCanvas.width = replay.width;
-    ui.processingCanvas.height = replay.height;
+    const canvasSize = replayCanvasSize(replay.width, replay.height);
+    ui.processingCanvas.width = canvasSize.width;
+    ui.processingCanvas.height = canvasSize.height;
     state.replayFps = state.sourceFps;
     updateDelayText();
     setReplayReady(false);
@@ -1996,6 +2011,7 @@
     try {
       session.native = !session.mirrored && (preferOriginalTrack() || !ui.clipCanvas.captureStream) &&
         typeof state.stream.getVideoTracks()[0]?.clone === 'function';
+      if (session.native) session.contentAspect = 0;
       session.fps = session.native ? state.sourceFps || state.observedFps
         : state.observedFps || state.sourceFps;
       if (!session.native && !drawContained(ui.live, session.canvas, session.mirrored)) throw new Error('Camera not ready');
@@ -2187,7 +2203,8 @@
   ui.speed.addEventListener('change', () => setReviewSpeed(ui.speed.value));
   ui.camera.addEventListener('change', () => { if (state.running && state.sourceMode === 'camera') startCamera(); });
   ui.delayedVideo.addEventListener('error', compressedBufferError);
-  ui.viewer.addEventListener('click', () => {
+  ui.viewer.addEventListener('click', event => {
+    if (event.target.closest('button')) return;
     if (state.clip || state.trim) return;
     if (state.reviewing) { toggleReviewPlayback(); return; }
     if (state.running && state.engine === 'compressed' && state.playbackStarted) {
