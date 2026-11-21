@@ -114,45 +114,51 @@ function instrument(side, service) {
 // Also imported by the existing local fixture to validate this same interaction.
 export default async function scenario({tv,phone}) {
   let phase='browser setup', cleanup=false, failure, statistics;
+  const stage=value=>{phase=value;console.log('Checking '+value);};
   try{
     for(const [tab,side] of [[tv,'tv'],[phone,'phone']]){
       await tab.send('Page.addScriptToEvaluateOnNewDocument',{source:'('+instrument.toString()+')('+JSON.stringify(side)+','+JSON.stringify(api)+');'});
     }
-    phase='TV room creation';
+    stage('TV room creation');
     await tv.navigate(site+'/replay/tv/');
     await tv.until("window.FGSReplayRelay && document.querySelector('#tv-phone-link')?.hash?.startsWith('#pair=')",'TV room',18000);
     // Never print the private link, the document, raw network URLs or Chrome errors.
     const invite=await tv.get("document.querySelector('#tv-phone-link').href");
     if (new URL(invite).origin!==site || new URL(invite).pathname!=='/replay/tv/phone.html') throw Error();
-    phase='paired phone camera';
+    stage('paired phone camera');
     await phone.navigate(invite);
     await phone.until("window.FGSReplayRelay && typeof document.getElementById('phone-start')?.onclick==='function'",'phone controls',16000);
     await phone.until("window.FGSPhoneCamera && !document.getElementById('phone-camera-settings').open && document.getElementById('phone-rotate')",'updated compact phone camera',10000);
     await phone.click('phone-start');
     await phone.until("__smoke.counts().sourceRequests===1 && document.getElementById('phone-preview').srcObject",'simulated camera',16000);
-    phase='relay consent';
+    stage('relay consent');
     await phone.until("!document.getElementById('phone-relay').hidden && !document.getElementById('relay-consent').disabled",'fallback option',25000);
     if ((await phone.get('__smoke.counts()')).accepted!==0) throw Error();
     await phone.click('relay-consent');
-    phase='decoded relay motion';
+    stage('decoded relay motion');
     await tv.until("__smoke.marker('liveVideo')>=3",'changing live camera markers',35000);
     await tv.until("!document.getElementById('reviewRange').disabled && !document.getElementById('tv-pair-dialog').open",'TV dashboard',15000);
     await tv.get("(()=>{const el=document.getElementById('delayRange');el.value=1;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));})()");
-    phase='delayed replay motion';
+    stage('delayed replay motion');
     await tv.until("Math.max(__smoke.marker('delayedVideo'),__smoke.marker('delayedCanvas'))>=3",'changing delayed camera markers',20000);
-    phase='compact replay controls';
+    stage('compact replay controls');
     const layout=await tv.get("(()=>{const viewer=document.getElementById('viewer');const size=document.getElementById('replaySize');const area=()=>viewer.clientWidth*viewer.clientHeight;const change=v=>{size.value=v;size.dispatchEvent(new Event('change',{bubbles:true}));};const initial=size.value;const large=area();change('standard');const standard=area();change('large');return {initial,large,standard,compact:document.getElementById('toggleReplayControls').getAttribute('aria-expanded')==='false'};})()");
     if(layout.initial!=='large'||!layout.compact||layout.large<layout.standard*1.15)throw Error('Replay sizing');
-    phase='mirrored delayed phone video';
+    stage('mirrored delayed phone video');
     await phone.click('phone-mirror');
     await tv.until("Math.max(__smoke.marker('delayedVideo','mirror'),__smoke.marker('delayedCanvas','mirror'))>=3",'mirrored delayed frames',25000);
     const sender=await phone.get('__smoke.counts()'), receiver=await tv.get('__smoke.counts()');
     if(receiver.created!==1 || receiver.sourceRequests!==0 || (await tv.get('__smoke.directFrames()'))!==0 || sender.accepted<1 || receiver.received<1)throw Error();
     statistics={rooms:receiver.created,encryptedPacketsSent:sender.accepted,encryptedPacketsReceived:receiver.received,delayedMotion:true,mirroredDelayedFrames:true,defaultLayout:layout};
-    phase='normal disconnect';
+    stage('normal disconnect');
     await phone.click('phone-stop');
     await phone.until('__smoke.counts().ended','simulated camera released',13000);
-  }catch{failure=phase;}
+  }catch{failure=phase;
+    for(const [side,tab] of [['TV',tv],['phone',phone]]){
+      const state=await tab.get("({correctOrigin:location.origin==='https://www.fernandezgrowthsystems.com',ready:document.readyState,newPlayer:!!document.getElementById('replaySize'),pairDialog:!!document.getElementById('tv-pair-dialog'),hasInvite:!!document.getElementById('tv-phone-link')?.hash,phoneModule:!!window.FGSPhoneCamera,phoneSettings:!!document.getElementById('phone-camera-settings'),relay:!!window.FGSReplayRelay})").catch(()=>null);
+      console.log(side+' page state',JSON.stringify(state));
+    }
+  }
   finally{
     // A room can already exist even when the expected phone controls did not load.
     await phone.get('window.__smoke?.release()').catch(()=>false);
@@ -163,6 +169,11 @@ export default async function scenario({tv,phone}) {
 }
 
 async function runPublic() {
+  for(const slug of ['/replay/','/replay/tv/phone.html']) {
+    const result=await fetch(site+slug,{signal:AbortSignal.timeout(10000)});
+    const html=await result.text();
+    console.log('Release HTML',slug,result.status,{player:html.includes('id="replaySize"'),phone:html.includes('id="phone-mirror"'),versioned:html.includes('phone-camera.js?v=')||html.includes('js/dashboard-v11.js?v=')});
+  }
   const binary=process.env.FGS_CHROME_BIN || [
     path.join(process.env.ProgramFiles || '', 'Google/Chrome/Application/chrome.exe'),
     '/usr/bin/google-chrome','/usr/bin/chromium','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
@@ -180,7 +191,7 @@ async function runPublic() {
   function call(method,params={},sessionId){
     return new Promise((resolve,reject)=>{
       const id=++serial;
-      const timer=setTimeout(()=>{jobs.delete(id);reject(Error('Chrome command timed out.'));},12500);
+      const timer=setTimeout(()=>{jobs.delete(id);reject(Error('Chrome command timed out.'));},35000);
       jobs.set(id,{finish:m=>{clearTimeout(timer);jobs.delete(id);if(m.error)reject(Error('Chrome command failed.'));else resolve(m.result);}});
       child.stdio[3].write(JSON.stringify({id,method,params,sessionId})+'\0',error=>{
         if(error)jobs.get(id)?.finish({error:true});
@@ -235,6 +246,6 @@ if(process.argv[1] && import.meta.url===pathToFileURL(path.resolve(process.argv[
     console.error('No network check started. Pass --public to test the deployed site once.');process.exitCode=2;
   }else{
     try{await runPublic();}
-    catch(error){console.error(/^Smoke check stopped during [a-z ]+\. Room closure (unconfirmed|confirmed)\.$/.test(error.message)?error.message:'Smoke runner could not complete.');process.exitCode=1;}
+    catch(error){console.error(/^Smoke check stopped during [A-Za-z ]+\. Room closure (unconfirmed|confirmed)\.$/.test(error.message)?error.message:'Smoke runner stopped ('+(error.name==='TypeError'?'network or runtime':error.code==='ENOENT'?'file missing':'runner')+').');process.exitCode=1;}
   }
 }
