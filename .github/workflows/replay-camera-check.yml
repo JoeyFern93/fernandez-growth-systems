@@ -1,0 +1,45 @@
+name: Verify Replay Cam capture and playback
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/replay-camera-*']
+    paths:
+      - 'site/replay/**'
+      - 'tests/replay/**'
+      - '.github/workflows/replay-camera-check.yml'
+permissions:
+  contents: read
+jobs:
+  replay:
+    name: ${{ matrix.driver }} ${{ matrix.fps }} fps camera
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { driver: Native, fps: 60, minimum_delivered: 50, generator: '0' }
+          - { driver: Native, fps: 120, minimum_delivered: 100, generator: '0' }
+          - { driver: Generated, fps: 120, minimum_delivered: 100, generator: '1' }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Measure camera frames, slow motion and the exported file
+        run: node tests/replay/high-fps.test.mjs
+        env:
+          REPLAY_SITE_ROOT: ${{ github.workspace }}/site
+          REPLAY_QA_PROOF: ${{ runner.temp }}/proof
+          REPLAY_QA_FPS: ${{ matrix.fps }}
+          REPLAY_MIN_SOURCE_FPS: ${{ matrix.minimum_delivered }}
+          REPLAY_CAMERA_GENERATOR: ${{ matrix.generator }}
+      - name: Save measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-camera-${{ matrix.driver }}-${{ matrix.fps }}-fps
+          path: ${{ runner.temp }}/proof/
+          retention-days: 7

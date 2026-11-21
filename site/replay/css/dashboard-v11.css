@@ -1,0 +1,160 @@
+/* The page is the camera workspace. Long lists of clips and settings scroll in
+   their own panels so the video stays in view. */
+html:has(body.fgs-replay) { height: 100%; overflow: hidden; }
+body.fgs-replay {
+  --dash-surface: #15291f;
+  --dash-edge: #44604f;
+  --dash-soft: #c8dcbf;
+  --dash-ink: #eff6ec;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #0c1b14;
+  color: var(--dash-ink);
+  line-height: 1.35;
+}
+.fgs-replay [hidden] { display: none !important; }
+.fgs-replay .visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.fgs-replay .app-header {
+  width: 100%; max-width: none; min-width: 0; margin: 0; padding: max(8px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px max(20px, env(safe-area-inset-left));
+  align-items: center; gap: 10px; border-bottom: 1px solid #35513e; background: #11241a;
+}
+.fgs-replay .app-identity,.fgs-replay .header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fgs-replay .app-header h1 { font-size: clamp(1.05rem, 2.1vw, 1.55rem); white-space: nowrap; letter-spacing: -.035em; }
+.fgs-replay .app-header .fgs-link { flex: none; display: grid; place-items: center; margin: 0; padding: 5px; width: 38px; height: 38px; min-height: 0; }
+.fgs-replay .app-header .fgs-link img { width: 100%; height: 100%; }
+.fgs-replay .header-actions { flex-wrap: nowrap; max-width: none; gap: 7px; }
+.fgs-replay .badge,.fgs-replay .delay-badge { padding: 5px 9px; font-size: .73rem; white-space: nowrap; }
+.fgs-replay .button,.fgs-replay .preset,.fgs-replay select {
+  min-height: 38px; min-width: 0; padding: 6px 11px; font-size: .85rem; line-height: 1.22; border-radius: 7px;
+}
+.fgs-replay select { padding-right: 18px; }
+.fgs-replay .button-primary,.fgs-replay .button-success { background: #d2eab6; border-color: #d2eab6; color: #152a1c; }
+.fgs-replay .button-primary:hover:not(:disabled),.fgs-replay .button-success:hover:not(:disabled) { background: #e1f3cc; color: #152a1c; }
+.fgs-replay .button-secondary,.fgs-replay .preset,.fgs-replay select { background: #183026; border-color: #66816c; }
+.fgs-replay .app-shell { display: block; min-width: 0; min-height: 0; width: 100%; height: 100%; max-width: none; padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.fgs-replay .dashboard-stage,.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) {
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 29vw, 430px);
+  grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "video tabs" "video settings" "playback settings";
+  width: 100%; height: 100%; min-height: 0; min-width: 0; gap: 10px 14px; overflow: hidden;
+}
+.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) { width: 100vw; height: 100dvh; padding: max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); }
+.fgs-replay .dashboard-stage.expanded { position: fixed; inset: 0; z-index: 100; }
+.fgs-replay .video-column { grid-area: video; display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 6px; }
+.fgs-replay .capture-toolbar { display: flex; align-items: center; gap: 7px; }
+.fgs-replay .capture-toolbar .primary-controls { display: flex; flex-wrap: nowrap; margin: 0; gap: 6px; }
+.fgs-replay .capture-toolbar .primary-controls .button { flex: none; }
+.fgs-replay .capture-toolbar .delay-badge { margin-left: auto; }
+.fgs-replay .video-column .viewer,.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) .video-column .viewer {
+  flex: 1 1 0; min-height: 0; width: 100%; min-width: 0; aspect-ratio: auto; background: #030906;
+}
+.fgs-replay .viewer-message { background: radial-gradient(ellipse at 50% 45%,#173525,#09130d 79%); }
+.fgs-replay .viewer-message strong { font-size: clamp(1.15rem,2.6vw,2.05rem); }
+.fgs-replay .viewer-message span { max-width: 33ch; }
+.fgs-replay #replayInstallStatus { margin: 0; }
+.fgs-replay .panel-tabs {
+  grid-area: tabs; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  gap: 3px; padding: 3px; align-self: start; border: 1px solid var(--dash-edge); border-radius: 10px; background: #0e2018;
+}
+.fgs-replay .panel-tabs button { padding: 7px 4px; min-height: 36px; font: inherit; font-size: .85rem; font-weight: 750; color: var(--dash-soft); border: none; border-radius: 6px; background: transparent; cursor: pointer; }
+.fgs-replay .panel-tabs button[aria-selected=true] { color: #11251a; background: #cce6b7; }
+.fgs-replay .panel-tabs button:focus-visible { outline-offset: -3px; outline-color: #67a64c; }
+.fgs-replay .playback-panel,.fgs-replay .settings-panel,.fgs-replay .clips-panel,
+.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) .playback-panel {
+  padding: 13px; margin: 0; min-width: 0; min-height: 0; max-height: none; overflow: auto;
+  border: 1px solid var(--dash-edge); border-radius: 12px; background: var(--dash-surface); overscroll-behavior: contain;
+}
+.fgs-replay .playback-panel { position: relative; grid-area: playback; }
+.fgs-replay .video-column { position: relative; }
+.fgs-replay .settings-panel,.fgs-replay .clips-panel { grid-area: settings; }
+.fgs-replay .settings-panel h2,.fgs-replay .clips-panel h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.fgs-replay .camera-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.fgs-replay .camera-fields label:first-child,.fgs-replay .camera-fields label:last-child { grid-column: 1/-1; }
+.fgs-replay .camera-fields label,.fgs-replay .clip-length-field label { display: block; min-width: 0; font-size: .78rem; color: var(--dash-soft); font-weight: 700; }
+.fgs-replay .camera-fields select { display: block; width: 100%; margin-top: 4px; }
+.fgs-replay .fps-readout,.fgs-replay .settings-help { margin: 10px 0; font-size: .78rem; color: var(--dash-soft); overflow-wrap: anywhere; }
+.fgs-replay .camera-actions,.fgs-replay .delay-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.fgs-replay .delay-control { border-radius: 0; border-top: 1px solid var(--dash-edge); padding: 12px 0 0; margin: 12px 0 0; background: transparent; }
+.fgs-replay .delay-control label { align-items: baseline; font-weight: 800; color: var(--dash-ink); font-size: .95rem; }
+.fgs-replay .delay-control label strong { font-weight: 700; font-size: .82rem; color: var(--dash-soft); }
+.fgs-replay .delay-control .preset { min-height: 33px; flex: 1; padding: 4px; }
+.fgs-replay .delay-control .preset[aria-pressed=true] { color: #152a1c; background: #d2eab6; border-color: #d2eab6; }
+.fgs-replay .delay-control input { min-height: 25px; margin: 3px 0 0; }
+.fgs-replay .delay-presets { margin-top: 7px; }
+.fgs-replay .playback-panel .review-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 2px 8px; flex-wrap: wrap; }
+.fgs-replay .playback-panel .review-heading label { font-size: 1rem; color: var(--dash-ink); }
+.fgs-replay .playback-panel .review-heading output { color: var(--dash-soft); font-size: .78rem; }
+.fgs-replay .playback-panel .timeline-track,.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) .timeline-track { height: clamp(29px,5.3vh,55px); margin-top: 6px; }
+.fgs-replay .playback-panel #reviewRange { min-height: 22px; height: 22px; display: block; margin: 0; }
+.fgs-replay .review-time-labels { font-size: .67rem; }
+.fgs-replay .playback-panel .review-actions,.fgs-replay .fine-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 7px 0 0;
+}
+.fgs-replay .playback-panel .review-actions .button { grid-column: auto; min-height: 36px; padding: 6px 9px; }
+.fgs-replay .frame-steps,.fgs-replay .trim-frame-controls { display: flex; align-items: center; gap: 5px; }
+.fgs-replay .review-speed { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; padding: 0; margin: 0; min-height: 0; background: transparent; border: none; }
+.fgs-replay .review-speed label { font-size: .75rem; }
+.fgs-replay .review-speed select { width: auto; flex: none; min-height: 36px; }
+.fgs-replay .playback-panel #recordClipBtn { margin-left: auto; flex: 0 0 auto; }
+.fgs-replay .trim-frame-controls { flex-wrap: wrap; margin-top: 8px; }
+.fgs-replay .trim-frame-controls label { font-size: .78rem; }
+.fgs-replay .trim-frame-controls select { width: auto; }
+.fgs-replay .clips-panel > :is(.card,.session-recording,.trim-panel) { margin: 10px 0; padding: 12px; background: #10221a; border: 1px solid var(--dash-edge); box-shadow: none; }
+.fgs-replay .clips-panel .eyebrow { display: none; }
+.fgs-replay .clips-panel .trim-preview-frame { max-height: 23dvh; }
+.fgs-replay .clips-panel .trim-preview-frame canvas { height: 100%; max-height: 23dvh; }
+.fgs-replay .clips-panel .help-text,.fgs-replay .clips-panel ol,.fgs-replay .home-link { font-size: .82rem; }
+.fgs-replay .clips-panel .quick-guide,.fgs-replay .guide-card,.fgs-replay .privacy-card,.fgs-replay .diagnostics-card { font-size: .85rem; }
+.fgs-replay .clips-panel .home-link { display: inline-block; padding: 9px 0; }
+
+@media (min-width:900px) and (min-height:591px) {
+  .fgs-replay #playbackTab { display: none; }
+  .fgs-replay .playback-panel #playPauseBtn { flex: 0 1 auto; min-width: 108px; }
+}
+@media (max-width:899px), (max-height:590px) {
+  .fgs-replay .dashboard-stage,.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) {
+    grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,.9fr) auto minmax(0,1fr);
+    grid-template-areas: "video" "tabs" "settings"; gap: 6px;
+  }
+  .fgs-replay .playback-panel { grid-area: settings; }
+  .fgs-replay .app-shell { padding: 6px max(7px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left)); }
+  .fgs-replay .viewer-message span { font-size: .83rem; }
+  .fgs-replay .camera-fields { gap: 6px; }
+  .fgs-replay .panel-tabs button { min-height: 35px; }
+}
+@media (max-width:550px) {
+  .fgs-replay .app-header { padding-inline: max(7px,env(safe-area-inset-left)) max(7px,env(safe-area-inset-right)); gap: 4px; }
+  .fgs-replay .app-identity,.fgs-replay .header-actions { gap: 5px; }
+  .fgs-replay .app-header .fgs-link { width: 30px; height: 30px; }
+  .fgs-replay .app-header .button { font-size: .72rem; min-height: 34px; padding: 5px 6px; }
+  .fgs-replay .capture-toolbar .button,.fgs-replay .capture-toolbar .delay-badge { font-size: .75rem; padding: 5px 7px; }
+  .fgs-replay .playback-panel,.fgs-replay .settings-panel,.fgs-replay .clips-panel { padding: 8px; }
+  .fgs-replay .playback-panel .review-actions { display: grid; grid-template-columns: minmax(0,.65fr) minmax(0,1.45fr) minmax(0,.65fr) minmax(0,1.45fr); }
+  .fgs-replay .playback-panel .review-actions .button { min-width: 0; font-size: .74rem; padding: 5px 2px; }
+  .fgs-replay .playback-panel #returnDelayBtn { grid-column: auto; }
+  .fgs-replay .fine-controls { gap: 5px; }
+  .fgs-replay .frame-steps .button { padding-inline: 7px; font-size: .76rem; }
+  .fgs-replay .review-speed { flex-wrap: wrap; }
+  .fgs-replay .capture-toolbar #exitFullscreenBtn { font-size: .65rem; padding-inline: 3px; }
+  .fgs-replay .capture-toolbar:has(#exitFullscreenBtn:not([hidden])) .delay-badge { display: none; }
+}
+@media (max-width:460px) {
+  .fgs-replay #connectionBadge { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; }
+}
+@media (orientation: landscape) and (max-height:590px) {
+  .fgs-replay .dashboard-stage,.fgs-replay .dashboard-stage:is(:fullscreen,.expanded) {
+    grid-template-columns: minmax(0,1fr) minmax(295px,40%); grid-template-rows: auto minmax(0,1fr);
+    grid-template-areas: "video tabs" "video settings"; gap: 5px 8px;
+  }
+  .fgs-replay .app-header { padding-block: 3px; }
+  .fgs-replay .app-header .fgs-link { height: 28px; width: 28px; }
+  .fgs-replay .app-header .button,.fgs-replay .capture-toolbar .button,.fgs-replay .panel-tabs button { min-height: 31px; }
+  .fgs-replay .capture-toolbar .delay-badge { font-size: .64rem; padding-inline: 5px; }
+  .fgs-replay .playback-panel,.fgs-replay .settings-panel,.fgs-replay .clips-panel { padding: 8px; }
+}
