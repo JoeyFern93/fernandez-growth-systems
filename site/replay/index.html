@@ -12,13 +12,14 @@
   <link rel="manifest" href="manifest-v3.webmanifest">
   <link rel="icon" href="/favicon-v5.ico" sizes="any">
   <link rel="icon" href="/favicon-v5.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/fgs-apple-180-v4.png">
   <link rel="stylesheet" href="css/app-v10.css">
   <link rel="preload" href="../assets/brand/fonts/Nunito-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css">
   <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css">
   <link rel="stylesheet" href="/assets/tool-install-v1.css">
-  <script defer src="/assets/fgs-review-bridge.js?v=64f54dc4a831" data-review-origin="https://sitereview.fernandezgrowthsystems.com"></script>
+  <script src="js/install-v4.js" defer></script>
+  <script defer src="/assets/fgs-review-bridge.js?v=d8293ba5c04f" data-review-origin="https://sitereview.fernandezgrowthsystems.com"></script>
 </head>
 <body class="fgs-replay" data-tool-name="Replay Cam">
   <a class="skip-link" href="#main">Skip to replay controls</a>
@@ -26,13 +27,14 @@
     <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><picture><source media="(max-width: 610px)" srcset="../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"><img class="replay-brand-logo" src="../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png" width="1839" height="855" alt="Fernandez Growth Systems" decoding="async"></picture></a><h1>Replay Cam<span class="beta-label">BETA</span></h1><p>Practice. Step back. Watch it again.</p></div>
     <div class="header-actions">
       <span id="connectionBadge" class="badge">Ready</span>
-      <button id="installBtn" class="button button-secondary" type="button" data-tool-install>Add as app</button>
+      <button id="installBtn" class="button button-secondary" type="button" hidden>How to install</button>
       <button id="fullscreenBtn" class="button button-secondary">Full screen</button>
     </div>
   </header>
 
   <main class="app-shell" id="main" tabindex="-1">
     <section class="viewer-panel" aria-labelledby="viewerTitle">
+      <p id="replayInstallStatus" class="help-text" role="status" hidden></p>
       <div class="section-heading">
         <div><p class="eyebrow">PRACTICE &amp; REVIEW</p><h2 id="viewerTitle">Athlete replay</h2></div>
         <output id="delayBadge" class="delay-badge">10 seconds behind</output>
@@ -147,7 +149,6 @@
         <ol><li>Place your device where it can see the whole skill.</li><li>Choose a delay that gives you time to return to the screen.</li><li>Tap <strong>Start camera</strong> and allow camera access when your browser asks.</li><li>Wait for the replay to appear, then practice and watch.</li><li>Drag the <strong>Video timeline</strong> backward to pause and inspect a skill. Tap <strong>Save clip</strong> to trim that available footage, or <strong>Back to delay</strong> to practice again.</li></ol>
         <p class="help-text">If the camera is blocked, check this site's camera permission in your browser. Open Replay Cam directly in Safari or Chrome.</p>
         <p class="help-text">Use the timeline with a finger, mouse, or arrow keys. Full screen keeps the review controls beside or below the video. Available delay, history, full screen, and clip recording depend on your device and browser. Compatibility mode uses a shorter history at lower quality. Switching apps or locking your screen stops the session and clears the rolling history; start again when you return.</p>
-        <p class="help-text">Use <strong>Add as app</strong> for device-specific install instructions. On supported browsers it opens the install prompt; iPhone and iPad use the browser's Share menu.</p>
       </details>
 
       <details class="card settings-card">
@@ -180,12 +181,41 @@
   <footer class="app-footer"><a href="/">Back to Fernandez Growth Systems</a><span>Replay Cam · Free practice tool</span></footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="replayInstallHelp" class="tool-install-dialog" aria-labelledby="installHeading">
+    <div class="tool-install-dialog-inner">
+      <button id="closeInstallHelp" class="tool-install-close" type="button" aria-label="Close installation help" autofocus>&times;</button>
+      <h2 id="installHeading">How to install Replay Cam</h2>
+      <section data-install-device="android" hidden>
+        <h3>Chrome on Android</h3>
+        <ol>
+          <li>Open this page in Chrome and tap the three-dot menu.</li>
+          <li>Tap <strong>Install and create shortcut</strong>, then <strong>Install</strong>. Some versions show <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+          <li>Confirm the installation. Look for Replay Cam on your device.</li>
+        </ol>
+        <p>If Chrome only offers <strong>Create shortcut</strong>, that option adds a home screen link that opens in Chrome.</p>
+      </section>
+      <section data-install-device="ios" hidden>
+        <h3>Safari on iPhone or iPad</h3>
+        <ol>
+          <li>Open this page in Safari and tap <strong>Share</strong>. In some layouts, tap the page menu first.</li>
+          <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Turn on <strong>Open as Web App</strong> if you see it, then tap <strong>Add</strong>.</li>
+        </ol>
+      </section>
+      <section data-install-device="desktop" hidden>
+        <h3>On a computer</h3>
+        <p><strong>Chrome</strong> &mdash; Open the three-dot menu, choose <strong>Cast, save, and share</strong>, then <strong>Install page as app</strong>.</p>
+        <p><strong>Edge</strong> &mdash; Open the three-dot menu, then choose <strong>More tools</strong>, <strong>Apps</strong>, and <strong>Install this site as an app</strong>.</p>
+        <p><strong>Safari on Mac</strong> &mdash; Open the <strong>File</strong> menu and choose <strong>Add to Dock</strong>.</p>
+        <p>If your browser has no install option, you can bookmark Replay Cam and use it here.</p>
+      </section>
+    </div>
+  </dialog>
   <video id="liveVideo" autoplay playsinline muted hidden></video>
   <canvas id="processingCanvas" hidden></canvas>
   <canvas id="clipCanvas" hidden></canvas>
   <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
   <script src="js/app-v10.js" defer></script>
   <script src="js/replay-ui.js" defer></script>
-  <script src="/assets/tool-install-v1.js" defer></script>
 </body>
 </html>

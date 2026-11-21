@@ -1,10 +1,10 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-16-inline-preview-v10-r2';
-const APP_SHELL = ["./", "./index.html", "./css/app-v10.css", "./js/app-v10.js", "./js/replay-ui.js", "./manifest-v3.webmanifest", "./icons/icon-v3.svg", "./icons/icon-192-v3.png", "./icons/icon-512-v3.png", "./icons/icon-maskable-512.png", "./icons/icon-maskable-512-v3.svg", "../favicon-v5.ico", "../favicon-v5.svg", "../favicon-v5-32.png", "../assets/tool-install-v1.css", "../assets/tool-install-v1.js", "../assets/brand/website/fgs-brand-v3.css", "../assets/brand/replay-brand-v3.css", "../assets/brand/fonts/Nunito-Variable.woff2", "../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png", "../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg"];
+const CACHE_NAME = CACHE_PREFIX + '2026-11-21-install-v4';
+const APP_SHELL = ["./","./index.html","./css/app-v10.css","./js/app-v10.js","./js/replay-ui.js","./manifest-v3.webmanifest","../favicon-v5.ico","../favicon-v5.svg","../favicon-v5-32.png","../assets/tool-install-v1.css","../assets/brand/website/fgs-brand-v3.css","../assets/brand/replay-brand-v3.css","../assets/brand/fonts/Nunito-Variable.woff2","../assets/brand/logos/FGS-Logo-Green-Transparent-v3.png","../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg","./js/install-v4.js","./icons/fgs-192-v4.png","./icons/fgs-512-v4.png","./icons/fgs-maskable-512-v4.png","./icons/fgs-apple-180-v4.png"];
 const scope = new URL(self.registration.scope);
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL.map(path => new Request(new URL(path, scope), {cache: "reload"})))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
