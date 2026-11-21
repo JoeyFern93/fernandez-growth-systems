@@ -489,13 +489,18 @@
   el('scope').onchange = drawNotes;
 
   function renderView() {
-    const live = view==='website', still = view==='screenshot';
-    el('frame-slot').hidden=!live; el('snapshot').hidden=!still; el('fallback').hidden=live || still;
+    const live = view==='website', checking=view==='connecting', still = view==='screenshot';
+    el('frame-slot').hidden=!(live || checking); el('frame-slot').classList.toggle('preview-pending',checking);
+    el('snapshot').hidden=!still; el('fallback').hidden=live || still;
     el('page-help').hidden=picking || !live || !frameHelpAvailable;
     el('view-label').textContent=data.review.closed ? 'Closed review' : still ? 'Screenshot review' : frameReady ? 'Live website' : 'Website review';
     const address=currentFrameUrl || page.url;
     for(const id of ['open-page','help-open','fallback-open','canvas-original','image-original'])el(id).href=address;
-    el('return-live').hidden=live || new URL(page.url).protocol!=='https:';
+    const canEmbed=new URL(page.url).protocol==='https:' && !page.frameBlocked && page.frameMode!=='blocked' && !deniedPages.has(page.id);
+    el('return-live').hidden=live || !canEmbed;
+    el('shot-live').hidden=!still || !canEmbed;
+    el('fallback-live').hidden=checking || !canEmbed;
+    el('fallback-screenshot').hidden=data.review.closed && !data.captures.some(shot=>shot.pageId===page.id);
     el('leave-feedback').hidden=picking || data.review.closed;
   }
   function render() {
@@ -514,12 +519,13 @@
     if(float)float.hidden=data.review.closed || !window.FGSReviewCompanion?.available();
     drawCapture(capture?.id); drawNotes(); renderView();
   }
-  const policyChecks=new Map(), autoAttempts=new Set();
+  const policyChecks=new Map(), deniedPages=new Set(), autoAttempts=new Set();
   function completeShot(pageId=page.id) {
     return data.captures.filter(c=>c.pageId===pageId && (c.fullPage===true || c.tiles?.length || /^full page\b/i.test(c.label || ''))).at(-1);
   }
   function blockedPreview() {
     frameStop(); view='fallback';
+    deniedPages.add(page.id);
     el('fallback-title').textContent='Review this page as a screenshot';
     el('fallback-detail').textContent='This website opens in its own tab. A full-page screenshot lets you scroll, pin a point, or draw here.';
     renderView();
@@ -533,13 +539,22 @@
   }
   function openWebsite(preferSaved=true) {
     closeDialogs(); setPicking(false); frameStop(); pendingShotMethod=null;
+    const saved=preferSaved && completeShot();
+    if(saved && showCapture(saved.id))return;
     if(new URL(page.url).protocol!=='https:') {
       view='fallback';
       el('fallback-title').textContent='Open this website in a new tab';
       el('fallback-detail').textContent='This site uses HTTP. Open the original to browse, then return here to leave a note or review a screenshot.';
       renderView();
-    } else if(page.frameBlocked || page.frameMode==='blocked')blockedPreview();
-    else {view='website'; renderView(); frameStart(preferSaved);}
+    } else if(page.frameBlocked || page.frameMode==='blocked' || deniedPages.has(page.id))blockedPreview();
+    else {
+      view=preferSaved?'connecting':'website';
+      if(preferSaved){
+        el('fallback-title').textContent='Opening the live preview…';
+        el('fallback-detail').textContent='You can also open the original website in a new tab.';
+      }
+      renderView(); frameStart(!preferSaved);
+    }
   }
   function switchPage(id,open=true) {
     if(isSending) { el('page-select').value=page.id; return; }
@@ -549,17 +564,18 @@
   }
   el('page-select').onchange=()=>switchPage(el('page-select').value);
   el('return-live').onclick=()=>openWebsite(false);
+  el('fallback-live').onclick=el('shot-live').onclick=()=>openWebsite(false);
   el('page-help-button').onclick=()=>modal('help-dialog');
-  el('canvas-full').onclick=()=>openImages({automatic:true});
+  el('canvas-full').onclick=()=>openImages();
   el('shot-add-page').onclick=()=>{openImages();el('full-page-url').focus();el('full-page-url').select();};
   el('shot-page-select').onchange=()=>{
     if(isSending){el('shot-page-select').value=page.id;return;}
     switchPage(el('shot-page-select').value,false);
     if(capture)showCapture((completeShot() || capture).id);
-    else {openWebsite();openImages({automatic:true});}
+    else {openWebsite();openImages();}
   };
-  el('help-screenshot').onclick=()=>openImages({automatic:true});
-  el('fallback-screenshot').onclick=()=>openImages({automatic:true});
+  el('help-screenshot').onclick=()=>openImages();
+  el('fallback-screenshot').onclick=()=>openImages();
   el('open-images').onclick=()=>openImages();
   registerForm('add-page',async form=>{
     const r=await api(apiRoot+'/pages','POST',{url:website(form.elements.url.value)});
@@ -704,6 +720,7 @@
 
   function frameStop() {
     clearTimeout(frameTimer);
+    frameTimer=null;
     clearTimeout(layoutTimer);
     frame?.remove();
     frame = null;
@@ -715,7 +732,7 @@
     navigatedWithoutBridge = false;
   }
 
-  function frameStart(preferSaved) {
+  function frameStart(keepLiveVisible) {
     frameStop();
     const websiteUrl = new URL(page.url);
     frameOrigin = websiteUrl.origin;
@@ -731,22 +748,28 @@
         .then(policy=>policy.blocked===true).catch(()=>false));
     }
     policyChecks.get(initialPageId).then(blocked=>{
-      if(blocked && frame===nextFrame && !frameReady && view==='website' && page.id===initialPageId)blockedPreview();
+      if(!blocked)return;
+      deniedPages.add(initialPageId);
+      if(page.id!==initialPageId)return;
+      if(frame===nextFrame && !frameReady && (view==='connecting' || view==='website'))blockedPreview();
+      else if(view==='fallback' || view==='screenshot')renderView();
     });
-    // An ordinary working iframe can remain silent forever. Offer help without
-    // replacing the actual website or mistaking silence for an embedding block.
+    // A cross-origin iframe's load event can also mean the browser displayed
+    // its refusal page. Use the bridge handshake as the positive live signal.
     function offerHelp() {
       if (frame !== nextFrame || frameReady) return;
-      const shot=completeShot();
-      if(preferSaved && shot && loads<=1 && !picking && !document.querySelector('dialog[open]') && document.activeElement!==nextFrame){
-        showCapture(shot.id);return;
+      clearTimeout(frameTimer); frameTimer=null;
+      if(keepLiveVisible){
+        frameHelpAvailable=true;
+      }else{
+        frameStop(); view='fallback';
+        el('fallback-title').textContent='Choose how to review this page';
+        el('fallback-detail').textContent='Open the original website to browse, or use a screenshot to pin a point or draw on this page.';
       }
-      frameHelpAvailable = true;
       renderView();
     }
     function scheduleHelp() {
-      clearTimeout(frameTimer);
-      frameTimer = setTimeout(offerHelp, 3500);
+      if(!frameTimer)frameTimer = setTimeout(offerHelp, 3500);
     }
     nextFrame.addEventListener('load', () => {
       if (frame !== nextFrame) return;
@@ -756,6 +779,7 @@
       supportsLayout = false;
       frameHelpAvailable = false;
       currentFrameUrl = null;
+      if(!keepLiveVisible)view='connecting';
       postFrame('connect');
       scheduleHelp();
       renderView();
@@ -788,8 +812,10 @@
     const exactPage = liveUrl.origin + liveUrl.pathname;
     if (msg.type === 'connected') {
       clearTimeout(frameTimer);
+      frameTimer=null;
       if(picking && currentFrameUrl && currentFrameUrl!==exactPage)setPicking(false);
       frameReady = true;
+      view='website';
       supportsLayout = msg.visualLayout===true;
       frameHelpAvailable = false;
       navigatedWithoutBridge = false;
@@ -818,7 +844,7 @@
     });
   });
 
-    function readImage(file) {
+  function readImage(file) {
     return new Promise((resolve,reject) => {
       const reader = new FileReader();
       reader.onerror=()=>reject(Error('This image could not be read.'));
@@ -835,19 +861,21 @@
     const {img}=await readImage(file);
     const w=img.naturalWidth, h=img.naturalHeight;
     if (w*h>50000000) throw Error('Use a smaller screenshot or crop it to the part you want to review.');
-    const max=1250000;
-    let scale=Math.min(1, 6500/Math.max(w,h),Math.sqrt(16000000/(w*h)));
+    // Keep lettering readable down the page. Re-encode locally so image metadata
+    // stays out of the shared capture. Smaller canvases cover low-memory browsers.
+    const max=10*1024*1024;
+    let scale=Math.min(1, 16384/Math.max(w,h));
     while (scale>.025) {
       const canvas=document.createElement('canvas');
       canvas.width=Math.max(1,Math.round(w*scale)); canvas.height=Math.max(1,Math.round(h*scale));
       const ctx=canvas.getContext('2d'); if (!ctx) throw Error('This browser could not resize the image.');
       ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height);
-      if (file.type==='image/png' && file.size<=max && canvas.width*canvas.height<=5000000) {
+      if (file.type==='image/png' && file.size<=1250000 && canvas.width*canvas.height<=5000000) {
         const png=canvas.toDataURL('image/png');
-        if (png.length*.75<max) return {width:canvas.width,height:canvas.height,dataUrl:png};
+        if (png.startsWith('data:image/png;') && png.length*.75<1250000) return {width:canvas.width,height:canvas.height,dataUrl:png};
       }
       const url=canvas.toDataURL('image/jpeg',.83);
-      if (url.length*0.75<max) return {width:canvas.width,height:canvas.height,dataUrl:url};
+      if (url.startsWith('data:image/jpeg;') && url.length*0.75<max) return {width:canvas.width,height:canvas.height,dataUrl:url};
       scale*=.75;
     }
     throw Error('Use a smaller screenshot or crop it before uploading.');
@@ -901,8 +929,7 @@
       if (page.id === pageId && imageSession===session) resultText.textContent = '';
       receiveCapture(result,pageId,session);
     } catch (error) {
-      if (page.id === pageId && session===imageSession) resultText.textContent = (error.message || 'The capture could not finish.')+
-        (el('extension-capture').closest('[data-desktop-chrome]').hidden ? ' You can upload a screenshot below.' : ' Try capturing with the Chrome extension, or upload a screenshot.');
+      if (page.id === pageId && session===imageSession) resultText.textContent = error.message || 'The capture could not finish.';
     } finally {
       captureBusy = false;
       button.disabled = false;
@@ -1033,7 +1060,8 @@
     const image = stagedImage;
     if (!image) throw Error('Choose or paste an image and preview it first.');
     const pageId = page.id, session=imageSession;
-    const label = form.elements.label.value.trim() || stagedFilename;
+    const name=form.elements.label.value.trim() || stagedFilename;
+    const label=form.elements.fullPage.checked && !/^full page\b/i.test(name) ? ('Full page · '+name).slice(0,80) : name;
     const url=exactAddress(el('full-page-url').value || page.url);
     const result = await api(apiRoot + '/captures', 'POST', {pageId,label,...image,...(url!==page.url ? {url}:{})});
     if (page.id === pageId && image === stagedImage) discardImage();

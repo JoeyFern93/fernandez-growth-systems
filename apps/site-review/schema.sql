@@ -70,3 +70,17 @@ CREATE TABLE IF NOT EXISTS capture_attempts (
   review_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS capture_attempts_time ON capture_attempts(attempted_at);
+
+
+CREATE TABLE IF NOT EXISTS replay_pairs (
+  id TEXT PRIMARY KEY,
+  tv_hash TEXT NOT NULL,
+  invite_hash TEXT,
+  phone_hash TEXT,
+  bucket TEXT NOT NULL,
+  expires INTEGER NOT NULL,
+  ended INTEGER NOT NULL DEFAULT 0,
+  offer TEXT,
+  answer TEXT
+);
+CREATE INDEX IF NOT EXISTS replay_pairs_expiry ON replay_pairs(expires);

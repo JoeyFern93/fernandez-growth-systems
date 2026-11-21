@@ -1,0 +1,39 @@
+name: Verify Replay Cam TV pairing
+
+on:
+  push:
+    branches: [qa/replay-camera-dashboard-tv-20261120]
+    paths:
+      - 'site/replay/**'
+      - 'apps/site-review/worker.js'
+      - 'apps/site-review/replay-pair.js'
+      - 'tests/replay-tv-e2e.mjs'
+      - '.github/workflows/replay-tv-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tv-and-phone:
+    name: Real video from a simulated phone to the TV
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run the packaged website and signalling Worker in isolation
+        run: node tests/replay-tv-e2e.mjs
+        env:
+          FGS_CHROME_BIN: /usr/bin/google-chrome
+          REPLAY_SITE_ROOT: site
+          REPLAY_WORKER_ROOT: apps/site-review
+          REPLAY_QA_PROOF: replay-tv-proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: replay-tv-two-device-verification
+          path: replay-tv-proof/
+          retention-days: 3

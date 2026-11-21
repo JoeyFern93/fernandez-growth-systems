@@ -1687,6 +1687,10 @@
       bitrate:Math.min(recordingBitrate(width,height,sampleRate),Math.floor(0.9 * MAX_SESSION_BYTES * 8 / length)),
       maxBytes:MAX_SESSION_BYTES});
     if (!encoder) return false;
+    if (state.clip !== clip || clip.cancelled || clip.generation !== state.generation) {
+      encoder.close();
+      return true;
+    }
     clip.frameEncoder = encoder;
     let heldRecorder = null;
     if (trim.sourceType === 'recent' && state.recorder?.state === 'recording') {
@@ -1795,6 +1799,7 @@
       }
       state.reviewing = true; state.reviewPaused = false; state.reviewSpeed = 1;
       if (trim.engine !== 'fallback') { source.playbackRate = 1; await source.play(); }
+      if (state.clip !== clip || clip.cancelled || clip.generation !== state.generation) return;
       const started = now(); let lastPosition = clip.start, lastAdvance = started, lastUi = -Infinity;
       const frameVideo = trim.engine === 'fallback' ? null : source;
       const draw = (timestamp, metadata) => {
