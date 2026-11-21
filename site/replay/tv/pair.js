@@ -510,5 +510,9 @@
     };
   }
   window.addEventListener('pagehide',()=>end(active));
-  if (phoneStart) setupPhone(); else makeTvDialog();
+  if (phoneStart) {
+    // A second invitation in the same tab changes only the URL fragment.
+    window.addEventListener('hashchange',()=>{end(active);location.reload();});
+    setupPhone();
+  } else makeTvDialog();
 })();
