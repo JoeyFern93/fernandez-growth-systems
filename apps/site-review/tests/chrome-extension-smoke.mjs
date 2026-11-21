@@ -397,12 +397,26 @@ try {
       'The bottom of the shared image must contain the actual footer pixels.');
     const tall = await guest.$eval('#snapshot', el => el.scrollHeight - el.clientHeight);
     assert(tall > 150,'The phone should provide a scrollable full-page image.');
-    const screen = await guest.$eval('#snapshot', el => {
-      const box=el.getBoundingClientRect(); return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height*.7)};
+    const swipe = await guest.$eval('#snapshot', el => {
+      const box=el.getBoundingClientRect();
+      const x=Math.round(box.x+box.width/2), y=Math.round(box.y+box.height*.7);
+      return {x,y,distance:Math.round(box.height*.46),hit:document.elementFromPoint(x,y)?.closest('#mark-surface')?.id};
     });
+    assert.equal(swipe.hit,'mark-surface','The finger must land on the screenshot in point mode.');
     const guestSession = await guest.createCDPSession();
-    await guestSession.send('Input.synthesizeScrollGesture',{...screen,yDistance:-(tall+250),speed:1600,gestureSourceType:'touch'});
-    await guest.waitForFunction(() => document.querySelector('#snapshot').scrollTop > 0, {timeout:5000});
+    const finger = (type, y) => guestSession.send('Input.dispatchTouchEvent',{type,
+      touchPoints:type==='touchEnd' ? [] : [{id:0,x:swipe.x,y}]});
+    const maxSwipes=Math.ceil(tall/(swipe.distance*.75))+1;
+    for(let i=0;i<maxSwipes;i++){
+      await finger('touchStart',swipe.y);
+      for(let step=1;step<=9;step++){
+        await pause(30);
+        await finger('touchMove',Math.round(swipe.y-swipe.distance*step/9));
+      }
+      await finger('touchEnd');
+      await guest.waitForFunction(() => document.querySelector('#snapshot').scrollTop>0, {timeout:5000});
+      if (await guest.$eval('#snapshot',el=>el.scrollTop>=el.scrollHeight-el.clientHeight-2)) break;
+    }
     const pin = await guest.$eval('#shot-stage', el => {
       const box=el.getBoundingClientRect();
       return {x:Math.round(box.left+box.width*.4),y:Math.round(box.top+box.height*.91)};
@@ -421,6 +435,14 @@ try {
   assert.equal(note.name,'Guest');
   assert(apiTraffic.some(([m,,s])=>m==='POST' && s===201));
   if (!legacy) {
+    await guest.reload();
+    await guest.waitForSelector('#markers .marker[data-note-id]', {visible:true});
+    const anchor = await guest.$eval('#markers .marker[data-note-id]',marker=>{
+      const box=marker.getBoundingClientRect(), stage=document.getElementById('shot-stage').getBoundingClientRect();
+      return {x:(box.left+box.width/2-stage.left)/stage.width,y:(box.top+box.height/2-stage.top)/stage.height};
+    });
+    assert(Math.abs(anchor.x-note.x)<.002 && Math.abs(anchor.y-note.y)<.002,
+      'Reopening the shared link must place the pin at the same coordinates.');
     await guest.goto(service + '/');
     await guest.waitForSelector('#my-reviews');
     assert.equal(await guest.$$eval('#saved-review-list li', els => els.length),0,

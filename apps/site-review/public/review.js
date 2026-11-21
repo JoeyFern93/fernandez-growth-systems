@@ -667,6 +667,17 @@
     if(!page)throw Error('This review has no pages.');
     if(data.review.closed && picking)setPicking(false);
     render();
+    if(!first && el('image-dialog').open) {
+      availableImage();
+      if(extensionHandoff?.session===imageSession) {
+        const targetPage=data.pages.find(p=>p.url===extensionHandoff.address);
+        const received=targetPage && data.captures.findLast(shot=>shot.pageId===targetPage.id && !extensionHandoff.known.has(shot.id));
+        if(received && !el('image-original').hidden && el('image-original').href===extensionHandoff.address) {
+          extensionHandoff=null;
+          openAvailableImage(received);
+        }
+      }
+    }
     if(first) {
       rememberOwnerReview(data.review,owner);
       restoreDraft();
@@ -916,25 +927,29 @@
     }
   }
   el('auto-capture').onclick = captureCurrent;
+  let extensionHandoff=null;
   el('extension-capture').onclick = async () => {
     const button=el('extension-capture'), hint=el('extension-capture-hint'), install=el('extension-capture-install');
     const runtime=window.chrome?.runtime;
+    const setupHint='Install or update FGS Site Review, reload this review, then try again.';
     button.disabled=true; install.hidden=true;
     try {
       const url=exactAddress(el('full-page-url').value || currentFrameUrl || page.url);
-      if (!runtime?.sendMessage) throw Error('Install or update FGS Site Review, then come back here and try again.');
+      if (!runtime?.sendMessage) throw Error(setupHint);
+      extensionHandoff={session:imageSession,address:url,known:new Set(data.captures.map(shot=>shot.id))};
       const response=await new Promise(resolve => runtime.sendMessage('knbdankbggjcdbdjcdgacibgbjiaffhg',
         {type:'open-capture-page',url}, result => resolve(runtime.lastError ? null : result)));
-      if (!response) throw Error('Install or update FGS Site Review, then come back here and try again.');
+      if (!response) throw Error(setupHint);
       if (!response.ok) throw Error(response.error || 'Reopen this review and try again.');
       hint.textContent='On the original website, open the FGS extension, choose Capture a screenshot, then Share & copy link. The screenshot will appear in this review.';
     } catch (error) {
+      extensionHandoff=null;
       hint.textContent=error.message || 'The extension could not open this page.';
-      install.hidden=!hint.textContent.startsWith('Install or update');
+      install.hidden=hint.textContent!==setupHint;
     } finally { button.disabled=false; }
   };
   el('image-dialog').addEventListener('close',()=>{
-    if(!el('image-dialog').open){pendingShotMethod=null;imageSession++;}
+    if(!el('image-dialog').open){pendingShotMethod=null;extensionHandoff=null;imageSession++;}
   });
   function availableImage() {
     let address;

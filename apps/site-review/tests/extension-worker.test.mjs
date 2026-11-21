@@ -32,7 +32,8 @@ function harness({local = store(), state = {closed: false, switchCapture: false}
   const pages = [{id: pageId, url: 'https://example.com/home'}];
   const runtime = {id, onMessage: event(), onMessageExternal:event(), getURL: name => 'chrome-extension://' + id + '/' + name};
   const chrome = {runtime, storage: {local, session}, tabs: {query: async () => [{...tab}], get: async () => ({...tab}),
-    create: async obj => { opened.push(obj.url); return {id:100+opened.length,url:obj.url}; }, onRemoved: event(), onUpdated: event(),
+    create: async obj => { opened.push(obj.url); return {id:100+opened.length,url:obj.url}; }, update:async()=>{}, remove:async()=>{},
+    onRemoved: event(), onUpdated: event(),
     sendMessage: async (_id, message) => hidden.push(message.hidden),
     captureVisibleTab: async () => { if (state.switchCapture) tab.id++; return raw; }},
     scripting: {executeScript: async args => { injections.push(args); }}};

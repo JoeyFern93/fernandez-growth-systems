@@ -201,8 +201,14 @@ async function openConnectedPage(invite, target, forCapture = false) {
   if (target && siteKey(target) !== siteKey(new URL('https://' + invite.host))) throw Error('Choose a page on the website named in this review.');
   const {siteUrl, recordId} = await connect(invite);
   const url = target || publicPage(siteUrl, true);
-  const opened = await chrome.tabs.create({url:url.href});
-  await write(chrome.storage.session, connectedKey(opened.id), {site:siteKey(url), address:url.href, reviewId:recordId, forCapture});
+  const opened = await chrome.tabs.create({url:url.href, active:false});
+  try {
+    await write(chrome.storage.session, connectedKey(opened.id), {site:siteKey(url), address:url.href, reviewId:recordId, forCapture});
+    await chrome.tabs.update(opened.id, {active:true});
+  } catch (error) {
+    await chrome.tabs.remove(opened.id).catch(() => {});
+    throw error;
+  }
   return {};
 }
 async function inject(tabId) {
@@ -483,9 +489,10 @@ chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
     if (message?.type !== 'open-capture-page' || sender.id || sender.frameId !== 0 || !sender.tab?.id ||
         sender.origin !== REVIEW_ORIGIN || !invite) throw Error('Open the shared review to connect its website.');
     const foreground = await activeTab();
-    if (foreground.id !== sender.tab.id || parseInvite(foreground.url)?.id !== invite.id) throw Error('Open the extension from the active review.');
+    const activeInvite = parseInvite(foreground.url);
+    if (foreground.id !== sender.tab.id || activeInvite?.id !== invite.id) throw Error('Open the extension from the active review.');
     if (typeof message.url !== 'string' || message.url.length > 2048) throw Error('Choose a valid page address.');
-    await openConnectedPage(invite, publicPage(message.url,true), true);
+    await openConnectedPage(activeInvite, publicPage(message.url,true), true);
     reply({ok:true});
   })().catch(error => reply({ok:false,error:error.message || 'Could not connect this review.'}));
   return true;

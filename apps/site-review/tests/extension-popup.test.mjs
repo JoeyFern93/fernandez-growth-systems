@@ -77,6 +77,15 @@ test('screenshot stays local on preview and cancel, and explicit share copies on
   assert.deepEqual(popup.copies, [imageLink]);
 });
 
+test('opening a connected capture tab focuses the full-page screenshot action without capturing', async () => {
+  const popup=mount({status:{ok:true,host:'example.com',hasReview:true,captureRequested:true}});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(popup.node('capture-handoff').hidden,false);
+  assert.equal(popup.node('capture-area').value,'full');
+  assert.equal(popup.node('capture').focused,true);
+  assert.deepEqual(popup.messages.map(m=>m.type),['status']);
+});
+
 test('read-only links remain usable when the clipboard denies permission', async () => {
   const popup = mount({allowCopy:false});
   await new Promise(resolve => setImmediate(resolve));
