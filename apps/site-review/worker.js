@@ -1,6 +1,6 @@
-import { automaticCapture, canAutomaticallyCapture, CaptureError } from "./capture.js";
+import { automaticCapture, canAutomaticallyCapture, CaptureError, probeFramePolicy } from "./capture.js";
 
-const MAX_SCREENSHOT_BYTES = 1310720;
+import { CAPTURE_BODY_LIMIT, CAPTURE_FIELDS, CaptureStorageError, publicCapture, readCapture, storeCapture, storedImage } from "./capture-storage.js";
 const MAX_SCREENSHOTS = 10;
 const MAX_NOTES = 300;
 const MAX_PAGES = 30;
@@ -13,7 +13,6 @@ const INVITE = /^[A-Za-z0-9_-]{24}$/;
 const EXTENSION_ORIGIN = "chrome-extension://knbdankbggjcdbdjcdgacibgbjiaffhg";
 const EXTENSION_WRITE_ROUTES = new Set(["pages", "notes", "captures"]);
 const ITEM_ID = /^[0-9a-f-]{36}$/;
-const CAPTURE_FIELDS = "id, page_id AS pageId, label, width, height";
 const NOTE_FIELDS = "id, page_id AS pageId, capture_id AS captureId, x, y, name, text, context, created_at AS createdAt, resolved";
 const FGS_HOST = "www.fernandezgrowthsystems.com";
 const FGS_ALIASES = new Set(["fernandezgrowthsystems.com", FGS_HOST, "ferngrowthsystems.com", "www.ferngrowthsystems.com"]);
@@ -108,15 +107,40 @@ function publicPage(env, row) {
   return {id: row.id, url: url.href, label: row.label, frameMode: live ? "live" : "unknown",
     autoCaptureAvailable: canAutomaticallyCapture(env, url.href)};
 }
-function publicCapture(reviewId, row) {
-  return {...row, imageUrl: "/api/reviews/" + reviewId + "/captures/" + row.id + "/image"};
-}
 function publicNote(row) {
   return {...row, context: JSON.parse(row.context), resolved: !!row.resolved};
 }
+function parseAnnotation(value) {
+  if (!value || typeof value !== "object" || !["point","draw"].includes(value.kind)) {
+    fail(400, "Choose a point or draw on the page.");
+  }
+  const {kind, width, height} = value;
+  if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= 100000)) {
+    fail(400, "The marked area has an invalid size.");
+  }
+  function position(pair) {
+    if (!Array.isArray(pair) || pair.length !== 2 ||
+        !pair.every(n => Number.isFinite(n) && n >= 0 && n <= 1)) fail(400, "Keep the mark inside the page.");
+    return pair.map(n => Math.round(n * 10000) / 10000);
+  }
+  if (kind === "point") return {kind, width, height, point: position(value.point)};
+  if (!Array.isArray(value.strokes) || !value.strokes.length || value.strokes.length > 24) {
+    fail(400, "A drawing can contain up to 24 strokes.");
+  }
+  let total = 0;
+  const strokes = value.strokes.map(stroke => {
+    if (!Array.isArray(stroke) || !stroke.length || stroke.length > 256 || (total += stroke.length) > 640) {
+      fail(400, "The drawing is too detailed. Undo a stroke and try again.");
+    }
+    return stroke.map(position);
+  });
+  return {kind, width, height, strokes};
+}
 function parseContext(input, host) {
   if (input == null) return {};
-  if (typeof input !== "object" || Array.isArray(input) || JSON.stringify(input).length > 3600) {
+  if (typeof input !== "object" || Array.isArray(input)) fail(400, "Choose a valid feedback location.");
+  const {annotation, ...details} = input;
+  if (JSON.stringify(details).length > 3600) {
     fail(400, "The note's device details are too large.");
   }
   const context = {};
@@ -136,66 +160,11 @@ function parseContext(input, host) {
     }
   }
   if (input.pageUrl) context.pageUrl = publicUrl(input.pageUrl, host).href;
+  if (annotation !== undefined) {
+    context.annotation = parseAnnotation(annotation);
+    context.mode = context.annotation.kind;
+  }
   return context;
-}
-
-function dimensions(data, type) {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const ascii = (start, length) => String.fromCharCode(...data.subarray(start, start + length));
-  if (type === "image/png" && data.length >= 33 && data[0] === 137 && ascii(1, 7) === "PNG\r\n\x1a\n" && ascii(12, 4) === "IHDR") {
-    return [view.getUint32(16), view.getUint32(20)];
-  }
-  if (type === "image/jpeg" && data.length > 8 && data[0] === 255 && data[1] === 216) {
-    let pos = 2;
-    while (pos + 4 < data.length && data[pos] === 255) {
-      while (pos < data.length && data[pos] === 255) pos++;
-      const marker = data[pos++];
-      if (marker === 0xda || marker === 0xd9 || pos + 2 > data.length) break;
-      const size = view.getUint16(pos);
-      if (size < 2 || pos + size > data.length) break;
-      if ([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker) && size >= 8) {
-        return [view.getUint16(pos + 5), view.getUint16(pos + 3)];
-      }
-      pos += size;
-    }
-  }
-  if (type === "image/webp" && data.length >= 30 && ascii(0,4) === "RIFF" && ascii(8,4) === "WEBP") {
-    const chunk = ascii(12,4);
-    if (chunk === "VP8X") {
-      const uint24 = i => data[i] | data[i + 1] << 8 | data[i + 2] << 16;
-      return [1 + uint24(24), 1 + uint24(27)];
-    }
-    if (chunk === "VP8L" && data[20] === 47) {
-      const bits = view.getUint32(21, true);
-      return [1 + (bits & 16383), 1 + (bits >>> 14 & 16383)];
-    }
-    if (chunk === "VP8 " && data[23] === 157 && data[24] === 1 && data[25] === 42) {
-      return [view.getUint16(26, true) & 16383, view.getUint16(28, true) & 16383];
-    }
-  }
-  fail(400, "Upload a valid PNG, JPEG, or WebP screenshot.");
-}
-function fromBase64(encoded) {
-  if (typeof Uint8Array.fromBase64 === "function") return Uint8Array.fromBase64(encoded);
-  const decoded = atob(encoded);
-  const bytes = new Uint8Array(decoded.length);
-  for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
-  return bytes;
-}
-function checkedImage(body) {
-  if (typeof body.dataUrl !== "string") fail(400, "Choose a screenshot.");
-  const format = /^data:(image\/(?:png|jpeg|webp));base64,/.exec(body.dataUrl);
-  if (!format) fail(400, "Use a PNG, JPEG, or WebP screenshot.");
-  const encoded = body.dataUrl.slice(format[0].length);
-  if (encoded.length > Math.ceil(MAX_SCREENSHOT_BYTES / 3) * 4) fail(413, "Use a screenshot under 1.25 MiB.");
-  let bytes;
-  try { bytes = fromBase64(encoded); } catch { fail(400, "The screenshot could not be read."); }
-  if (bytes.length > MAX_SCREENSHOT_BYTES) fail(413, "Use a screenshot under 1.25 MiB.");
-  const [width, height] = dimensions(bytes, format[1]);
-  if (width < 1 || height < 1 || width > 16384 || height > 16384 || width * height > 24000000) {
-    fail(400, "Resize this screenshot before uploading.");
-  }
-  return {encoded, width, height, length: bytes.length, type: format[1]};
 }
 
 async function creationTokens(key) {
@@ -274,6 +243,17 @@ async function createReview(request, env, db) {
     created ? 201 : 200);
 }
 
+async function ensureCapturePage(db, review, url) {
+  const label = url.pathname === "/" ? "Homepage" : url.pathname.slice(0, 100);
+  await db.prepare(`INSERT INTO pages(id,review_id,url,label)
+    SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM reviews WHERE id=? AND closed=0)
+    AND (SELECT count(*) FROM pages WHERE review_id=?) < ?
+    ON CONFLICT(review_id,url) DO NOTHING`)
+    .bind(crypto.randomUUID(), review.id, url.href, label, review.id, review.id, MAX_PAGES).run();
+  const row = await db.prepare("SELECT id,url,label FROM pages WHERE review_id=? AND url=?").bind(review.id, url.href).first();
+  if (!row) fail(409, "This review is closed or has reached its page limit.");
+  return row;
+}
 async function addPage(request, env, db, review) {
   const body = await readBody(request);
   const url = publicUrl(body.url, review.host);
@@ -285,34 +265,43 @@ async function addPage(request, env, db, review) {
   return json({page: publicPage(env, page)}, result.meta.changes ? 201 : 200);
 }
 async function addCapture(request, env, db, review, auto, owner) {
-  let body = await readBody(request, auto ? 2000 : 1752000);
-  const page = await db.prepare("SELECT id,url FROM pages WHERE review_id=? AND id=?").bind(review.id, String(body.pageId || "")).first();
+  let body = await readBody(request, auto ? 4096 : CAPTURE_BODY_LIMIT);
+  const startingPageId = String(body.pageId || "");
+  let page = await db.prepare("SELECT id,url,label FROM pages WHERE review_id=? AND id=?")
+    .bind(review.id, startingPageId).first();
   if (!page) fail(404, "Page not found.");
+  const responseFor = (row, created = false) => {
+    const response = {capture: publicCapture(review.active_invite, row)};
+    if (page.id !== startingPageId) response.page = publicPage(env,page);
+    return json(response, created ? 201 : 200);
+  };
+  const target = body.url === undefined ? publicUrl(page.url) : publicUrl(body.url, review.host);
+  if (target.href !== publicUrl(page.url).href) {
+    page = await db.prepare("SELECT id,url,label FROM pages WHERE review_id=? AND url=?").bind(review.id,target.href).first();
+  }
   if (auto) {
     if (!["mobile","desktop"].includes(body.device)) fail(400, "Choose a mobile or desktop capture.");
     if (body.refresh === true && !owner) fail(403, "Use the owner link to replace the automatic preview.");
-    if (body.refresh !== true) {
-      // Previous releases also used these labels and dimensions for automatic views.
-      const mobile = body.device === "mobile";
-      const cached = await db.prepare("SELECT " + CAPTURE_FIELDS + " FROM captures WHERE review_id=? AND page_id=? AND label=? AND width=? AND height=? ORDER BY rowid DESC LIMIT 1")
-        .bind(review.id, page.id, mobile ? "Mobile screenshot" : "Desktop screenshot", mobile ? 390 : 1440, mobile ? 844 : 900).first();
-      if (cached) return json({capture: publicCapture(review.active_invite, cached)});
+    const mobile = body.device === "mobile", fullPage = body.fullPage === true;
+    if (page && body.refresh !== true) {
+      const label = fullPage ? "Full page \u00b7 " + (mobile ? "Mobile" : "Desktop") : (mobile ? "Mobile screenshot" : "Desktop screenshot");
+      const size = fullPage ? "" : " AND width=? AND height=?";
+      const dims = fullPage ? [] : [mobile ? 390 : 1440, mobile ? 844 : 900];
+      const cached = await db.prepare("SELECT " + CAPTURE_FIELDS + " FROM captures WHERE review_id=? AND page_id=? AND label=?" + size + " ORDER BY rowid DESC LIMIT 1")
+        .bind(review.id, page.id, label, ...dims).first();
+      if (cached) return responseFor(cached);
     }
     const current = await db.prepare("SELECT count(*) AS n FROM captures WHERE review_id=?").bind(review.id).first();
     if (current.n >= MAX_SCREENSHOTS) fail(409, "This review already has 10 screenshots.");
-    body = await automaticCapture(env, {reviewId: review.id, pageUrl: publicUrl(page.url).href, device: body.device});
+    body = await automaticCapture(env, {reviewId: review.id, pageUrl:target.href, device:body.device, fullPage});
   }
-  const image = checkedImage(body);
   const label = stringField(body.label, 100, "screenshot name", "Screenshot");
-  // A retry after a lost mobile response must not consume a second screenshot slot.
-  const digest = await hash([review.id, page.id, label, image.encoded].join("\0"));
-  const id = [digest.slice(0,8),digest.slice(8,12),digest.slice(12,16),digest.slice(16,20),digest.slice(20,32)].join("-");
-  const result = await db.prepare("INSERT INTO captures(id,review_id,page_id,label,width,height,media_type,byte_length,image_data) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM reviews WHERE id=? AND closed=0) AND (SELECT count(*) FROM captures WHERE review_id=?) < ? AND (SELECT COALESCE(SUM(byte_length),0) FROM captures) <= ? ON CONFLICT(id) DO NOTHING")
-    .bind(id, review.id, page.id, label, image.width, image.height, image.type, image.length, image.encoded, review.id, review.id, MAX_SCREENSHOTS, MAX_TOTAL_SCREENSHOT_BYTES-image.length).run();
-  if (!result.meta.changes && !await db.prepare("SELECT id FROM captures WHERE review_id=? AND id=?").bind(review.id, id).first()) {
-    fail(409, "The round is closed or screenshot storage is full. You can still leave a page note on an open round.");
-  }
-  return json({capture: publicCapture(review.active_invite, {id, pageId: page.id, label, width: image.width, height: image.height})}, result.meta.changes ? 201 : 200);
+  const shot = readCapture(body);
+  if (!page) page = await ensureCapturePage(db, review, target);
+  const {row, created} = await storeCapture(db, review.id, page.id, label, shot, {
+    maxCount: MAX_SCREENSHOTS, maxBytes: MAX_TOTAL_SCREENSHOT_BYTES, hash
+  });
+  return responseFor(row, created);
 }
 
 async function noteResponse(env, db, reviewId, row, startingPageId, status = 200) {
@@ -325,7 +314,7 @@ async function noteResponse(env, db, reviewId, row, startingPageId, status = 200
 }
 
 async function addNote(request, env, db, review) {
-  const body = await readBody(request);
+  const body = await readBody(request, 48 * 1024);
   if (typeof body.clientId !== "string" || !/^[A-Za-z0-9_-]{8,80}$/.test(body.clientId)) fail(400, "The note identifier is invalid. Please try again.");
   const findExisting = () => db.prepare("SELECT " + NOTE_FIELDS + " FROM notes WHERE review_id=? AND client_id=?").bind(review.id, body.clientId).first();
   const existing = await findExisting();
@@ -334,11 +323,12 @@ async function addNote(request, env, db, review) {
   const pageId = body.pageId;
   const captureId = body.captureId ?? null;
   if (!ITEM_ID.test(pageId) || (captureId !== null && !ITEM_ID.test(captureId))) fail(400, "Choose a valid page or screenshot.");
-  const x = body.x ?? null, y = body.y ?? null;
+  const context = parseContext(body.context, review.host);
+  const point = context.annotation?.point;
+  const x = point?.[0] ?? body.x ?? null, y = point?.[1] ?? body.y ?? null;
   if ((x !== null || y !== null) && (![x,y].every(v => Number.isFinite(v) && v >= 0 && v <= 1))) fail(400, "Choose a spot on the page.");
   const name = stringField(body.name, 80, "reviewer name", "Guest");
   const note = stringField(body.text, 3000, "note");
-  const context = parseContext(body.context, review.host);
   let navigatedUrl = null;
   if (!captureId && context.pageUrl) {
     const startingPage = await db.prepare("SELECT url FROM pages WHERE review_id=? AND id=?").bind(review.id, pageId).first();
@@ -433,11 +423,13 @@ async function handleApi(request, env, url) {
       captures: captures.results.map(r => publicCapture(review.active_invite, r)), notes: notes.results.map(publicNote)});
   }
   if (parts.length === 6 && route === "captures" && ITEM_ID.test(item) && action === "image" && ["GET","HEAD"].includes(method)) {
-    const asset = await db.prepare("SELECT media_type, byte_length" + (method === "HEAD" ? "" : ", image_data") + " FROM captures WHERE review_id=? AND id=?").bind(id, item).first();
-    if (!asset) fail(404, "Screenshot not found.");
-    return new Response(method === "HEAD" ? null : fromBase64(asset.image_data), {
-      headers: {"Content-Type": asset.media_type, "Content-Length": String(asset.byte_length), "Cache-Control": "private, no-store", "Cross-Origin-Resource-Policy": "same-origin"}
-    });
+    return storedImage(db, id, item, url.searchParams.get("tile"), method);
+  }
+  if (parts.length === 6 && route === "pages" && ITEM_ID.test(item) && action === "frame-policy" && method === "GET") {
+    const page = await db.prepare("SELECT url FROM pages WHERE review_id=? AND id=?").bind(id, item).first();
+    if (!page) fail(404, "This page is outside the review.");
+    const status = await probeFramePolicy(page.url, url.origin);
+    return json({blocked: status === "blocked"});
   }
   if (parts.length === 4 && route === "notes" && method === "POST") return addNote(request, env, db, review);
   if (parts.length === 4 && ["captures","auto-captures"].includes(route) && method === "POST") {
@@ -487,7 +479,7 @@ export default {
     let response;
     try { response = await routeRequest(request, env, url); }
     catch (error) {
-      const expected = error instanceof ApiError || error instanceof CaptureError;
+      const expected = error instanceof ApiError || error instanceof CaptureError || error instanceof CaptureStorageError;
       if (!expected) console.error("Site review request failed", error?.name || "Error");
       response = json({error: expected ? error.message : "Site Review is temporarily unavailable. Please try again."}, expected ? error.status : 503);
     }

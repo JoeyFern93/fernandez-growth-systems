@@ -8,34 +8,51 @@
   <script defer src="popup.js"></script>
 </head>
 <body>
-  <header><img src="icons/48.png" width="34" height="34" alt=""><h1>FGS Site Review</h1></header>
+  <header>
+    <img src="icons/48.png" width="34" height="34" alt="">
+    <h1>FGS Site Review</h1>
+    <button id="my-reviews" type="button" hidden>My reviews</button>
+  </header>
   <main>
     <p id="loading" role="status">Checking this tab…</p>
     <section id="connect" hidden>
       <h2>Use this review on the live site</h2>
       <p id="connect-site" class="source"></p>
-      <p>Open the original website, then open this extension there and choose <strong>Show feedback button</strong>. Your notes will appear in this review.</p>
+      <p>This opens the original website. Open the extension there and choose <strong>Leave feedback</strong> to add a note to this review.</p>
       <button class="primary" id="connect-review" type="button">Use this review</button>
     </section>
     <section id="home" hidden aria-labelledby="host">
       <p class="label">Current website</p>
       <h2 id="host"></h2>
-      <p class="hint">Mark something on the live page or send a screenshot to a client.</p>
-      <button class="primary" id="start" type="button">Start reviewing</button>
-      <button id="capture" type="button">Capture a screenshot</button>
+      <p id="capture-handoff" class="hint" hidden>This page is connected to the review you opened. Choose <strong>Capture a screenshot</strong>, check the preview, then choose <strong>Share &amp; copy link</strong> to add it to that review.</p>
+      <button class="primary" id="start" type="button" aria-describedby="feedback-hint">Leave feedback</button>
+      <p id="feedback-hint" class="hint">Choose what to mark, write a note, then send it. Find your notes in <strong>My reviews</strong>.</p>
+      <div class="client-actions">
+        <button id="copy-review" type="button">Copy client link</button>
+        <label class="capture-setting" for="capture-area">Screenshot area
+          <select id="capture-area"><option value="visible">Visible area</option><option value="full">Full page</option></select>
+        </label>
+        <button id="capture" type="button">Capture a screenshot</button>
+      </div>
       <div id="existing" hidden>
-        <button id="open-notes" type="button">Open review notes</button>
+        <button id="open-notes" type="button">Open notes</button>
         <details id="options">
           <summary>More options</summary>
-          <button id="copy-review" type="button">Copy reviewer link</button>
           <button id="copy-latest" type="button" hidden>Copy latest screenshot link</button>
           <button id="new-review" type="button">Start a new review</button>
         </details>
       </div>
     </section>
+    <section id="shelf" hidden aria-labelledby="shelf-heading">
+      <h2 id="shelf-heading">My reviews</h2>
+      <p class="hint">Open a review you started or joined with this extension on this Chrome profile.</p>
+      <p id="empty-shelf" hidden>Send a note or copy a client link on a website. Its review will appear here.</p>
+      <ul id="review-list" aria-label="Saved reviews"></ul>
+      <button id="shelf-back" type="button">Back</button>
+    </section>
     <section id="new-confirm" hidden>
       <h2>Start a new review?</h2>
-      <p id="new-detail">This opens a fresh set of notes for this site.</p>
+      <p>This starts a separate set of notes and gives you a new client link. You can reopen the earlier notes in <strong>My reviews</strong>.</p>
       <button id="confirm-new" class="primary" type="button">Start a new review</button>
       <button id="cancel-new" type="button">Go back</button>
     </section>
@@ -43,13 +60,14 @@
       <h2>Share this screenshot?</h2>
       <p class="source" id="capture-site"></p>
       <img id="preview-image" alt="Preview of the area captured from the current website">
+      <div id="tile-preview" role="region" aria-label="Full-page screenshot preview" tabindex="0" hidden></div>
       <p>Anyone with the review link can see this image and tap a spot to leave feedback.</p>
       <button class="primary" id="share" type="button">Share &amp; copy link</button>
       <button id="discard" type="button">Cancel</button>
     </section>
     <section id="shared" hidden>
       <h2>Screenshot shared</h2>
-      <p>Your client can open this link on a phone and tap the image to leave feedback.</p>
+      <p>Send this link to your client. They can tap a spot on the saved image and add a note. Open <strong>My reviews</strong> in the extension to read it.</p>
       <label for="share-link">Screenshot review link</label>
       <input id="share-link" type="text" readonly spellcheck="false">
       <button class="primary" id="copy-shot" type="button">Copy link</button>

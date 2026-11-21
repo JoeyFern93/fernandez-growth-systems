@@ -47,6 +47,14 @@
     .error:not(:empty) { margin:6px 0; }
     .toast { bottom:74px; right:16px; max-width:calc(100vw - 32px); padding:9px 14px; font-weight:550; }
     .toast:empty { display:none; }
+    .toast {display:flex; align-items:center; gap:10px;}
+    .mode-grid {display:grid; grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;}
+    .mode-grid button {text-align:left; font-weight:650;}
+    .mode-grid small {display:block; margin-top:3px; font-size:12px; font-weight:400;}
+    .ink {position:fixed; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible;}
+    .pin {position:fixed; width:18px; height:18px; box-sizing:border-box; border:3px solid #fff; background:#146747;
+      border-radius:50%; box-shadow:0 0 0 2px #163426; transform:translate(-50%,-50%); pointer-events:none;}
+    .shield[data-spatial="true"] {touch-action:none;}
     .sr { position:absolute; clip-path:inset(50%); width:1px; height:1px; overflow:hidden; }
     @media (max-width:480px) { .tools { width:calc(100% - 16px); } }
     @media (forced-colors:active) { .outline { border-color:Highlight; } }
@@ -65,13 +73,43 @@
   const shell = make('div', {class:'shell'});
   const launcher = button('Leave feedback', 'corner primary');
   launcher.setAttribute('aria-label', 'Leave feedback');
-  const shield = make('div', {class:'shield', tabindex:'-1', role:'group',
+  const shield = make('div', {id:'fgs-target-surface', class:'shield', tabindex:'-1', role:'group',
     'aria-label':'Choose a page element. Use arrow keys to move, Enter to select, Tab for more options, or Escape to cancel.'});
   const outline = make('div', {class:'outline', 'aria-hidden':'true'});
   const tools = make('div', {class:'tools', role:'group', 'aria-label':'Feedback target'});
-  const whole = button('Whole page');
+  const prompt = make('strong');
+  const undo = button('Undo');
+  undo.id = 'fgs-draw-undo';
+  const doneDrawing = button('Add note', 'primary');
+  doneDrawing.id = 'fgs-draw-finish';
+  const changeMode = button('Change mode');
   const cancel = button('Cancel');
-  tools.append(make('strong', {}, 'Select an item on the page'), whole, cancel);
+  tools.append(prompt, undo, doneDrawing, changeMode, cancel);
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const ink = document.createElementNS(svgNS,'svg');
+  ink.setAttribute('class','ink');
+  ink.setAttribute('viewBox','0 0 1000 1000');
+  ink.setAttribute('preserveAspectRatio','none');
+  ink.setAttribute('aria-hidden','true');
+  const pin = make('div',{class:'pin','aria-hidden':'true'});
+  const modes = make('section',{class:'panel',role:'dialog','aria-labelledby':'fgs-mode-title'});
+  const modeHeader = make('header');
+  const modeClose = button('×','close');
+  modeClose.setAttribute('aria-label','Close feedback choices');
+  modeHeader.append(make('h2',{id:'fgs-mode-title'},'What would you like to mark?'), modeClose);
+  const grid = make('div',{class:'mode-grid'});
+  const choices = {};
+  for (const [mode, label, hint] of [
+    ['page','Page','Comment on the whole page'], ['point','Point','Pin an exact spot'],
+    ['element','Element','Select text, an image or a button'], ['draw','Draw','Circle or sketch a change']
+  ]) {
+    const choice = button(label);
+    choice.id = 'fgs-mode-' + mode;
+    choice.append(make('small',{},hint));
+    grid.append(choice);
+    choices[mode] = choice;
+  }
+  modes.append(modeHeader,grid);
   const panel = make('section', {class:'panel', role:'dialog', 'aria-labelledby':'fgs-note-title'});
   const header = make('header');
   const close = button('×','close');
@@ -89,12 +127,18 @@
   panel.append(header, summary, form);
   const announcement = make('span',{class:'sr',role:'status'});
   const toast = make('div',{class:'toast',role:'status'});
-  shell.append(shield, outline, tools, launcher, panel, toast, announcement);
+  const viewNotes = button('View notes');
+  viewNotes.id = 'fgs-view-notes';
+  viewNotes.setAttribute('aria-label','View notes');
+  shell.append(shield, ink, pin, outline, tools, launcher, modes, panel, toast, announcement);
   root.append(shell);
   const selectable = 'h1,h2,h3,h4,h5,h6,p,a,button,summary,label,input,select,textarea,img,video,figure,li,table,blockquote,iframe,[role="button"],[role="link"]';
   const editable = 'input,textarea,select,[contenteditable]:not([contenteditable="false"])';
   let state = 'idle', target, active, submitId, pending = false;
   let notePath, paintRequest, toastTimer, captureTimer;
+  let mode, geometry, strokes = [], stroke, pointerId = null, anchorLabel, focusPoint;
+  let totalPoints = 0;
+  const round = value => Math.round(Math.min(1,Math.max(0,value))*10000)/10000;
   const listeners = new AbortController();
   const atPath = () => location.origin + location.pathname;
 
@@ -105,15 +149,19 @@
     state = next;
     launcher.hidden = next !== 'idle';
     panel.hidden = next !== 'compose';
+    modes.hidden = next !== 'modes';
     shield.hidden = tools.hidden = next !== 'pick';
+    ink.style.display = 'none';
+    pin.hidden = true;
     outline.hidden = true;
     toast.textContent = '';
     announcement.textContent = '';
   }
-  function notify(text) {
+  function notify(text, includeNotes = false) {
     clearTimeout(toastTimer);
     toast.textContent = text;
-    toastTimer = setTimeout(() => { toast.textContent = ''; }, 4500);
+    if (includeNotes) toast.append(viewNotes);
+    else toastTimer = setTimeout(() => { toast.textContent = ''; }, 4500);
   }
   function safeLabel(element) {
     let label = element.getAttribute('aria-label') || element.getAttribute('alt');
@@ -149,35 +197,152 @@
       .find(node => node !== host && node !== document.documentElement && node !== document.body);
     return raw?.closest(selectable) || raw;
   }
+  function snapshot() {
+    return {width:Math.min(32768,innerWidth),height:Math.min(32768,innerHeight),x:scrollX,y:scrollY};
+  }
+  function matchViewport(view) {
+    return view && view.width === Math.min(32768,innerWidth) && view.height === Math.min(32768,innerHeight) &&
+      view.x === scrollX && view.y === scrollY;
+  }
+  function position(event) {
+    return [round(event.clientX/innerWidth),round(event.clientY/innerHeight)];
+  }
+  function drawPin(point) {
+    pin.hidden = !point;
+    if (point) Object.assign(pin.style,{left:(point[0]*100)+'%',top:(point[1]*100)+'%'});
+  }
+  function renderStrokes(lines) {
+    ink.replaceChildren();
+    for (const line of lines) {
+      const points = line.map(([x,y]) => x*1000+','+y*1000);
+      if (line.length === 1) points.push((line[0][0]*1000+.01)+','+(line[0][1]*1000+.01));
+      for (const [color,width] of [['white',6],['#146747',3]]) {
+        const path = document.createElementNS(svgNS,'polyline');
+        for (const [name,value] of Object.entries({points:points.join(' '),stroke:color,fill:'none',
+          'stroke-width':width,'stroke-linecap':'round','stroke-linejoin':'round','vector-effect':'non-scaling-stroke'})) {
+          path.setAttribute(name,value);
+        }
+        ink.append(path);
+      }
+    }
+    ink.style.display = lines.length ? 'block' : 'none';
+  }
+  function updateDrawing() {
+    renderStrokes(strokes);
+    undo.disabled = doneDrawing.disabled = !strokes.length;
+  }
+  function beginStroke(point, element) {
+    if (strokes.length >= 24 || totalPoints >= 640) {
+      announceLimit();
+      return false;
+    }
+    if (!strokes.length) { geometry = snapshot(); anchorLabel = element ? safeLabel(element) : ''; }
+    stroke = [point];
+    strokes.push(stroke);
+    totalPoints++;
+    updateDrawing();
+    return true;
+  }
+  function announceLimit() {
+    prompt.textContent = 'Drawing limit reached. Choose Add note or Undo.';
+    announcement.textContent = prompt.textContent;
+  }
+  function extendStroke(point) {
+    const last = stroke?.at(-1);
+    if (!last || (last[0] === point[0] && last[1] === point[1])) return;
+    if (totalPoints >= 640 || stroke.length >= 256) {
+      announceLimit();
+      return;
+    }
+    // Keep enough detail to follow a curve without recording every subpixel.
+    if (Math.hypot((point[0]-last[0])*innerWidth,(point[1]-last[1])*innerHeight) < 2) return;
+    stroke.push(point);
+    totalPoints++;
+    schedulePaint();
+  }
+  function endStroke() {
+    if (pointerId !== null && shield.hasPointerCapture(pointerId)) shield.releasePointerCapture(pointerId);
+    pointerId = null;
+    stroke = null;
+  }
+  function finishVisual(point) {
+    if (!matchViewport(geometry)) { chooseMode(mode); return; }
+    endStroke();
+    const picked = context(null);
+    picked.mode = mode;
+    picked.annotation = {kind:mode,width:geometry.width,height:geometry.height};
+    if (mode === 'point') picked.annotation.point = point.slice();
+    else picked.annotation.strokes = strokes.map(line => line.map(p => p.slice()));
+    if (anchorLabel) picked.elementLabel = anchorLabel;
+    compose(picked);
+  }
   function paint() {
     paintRequest = undefined;
+    if (state === 'compose' && target?.annotation) {
+      const same = matchViewport({width:target.annotation.width,height:target.annotation.height,x:target.scrollX,y:target.scrollY});
+      drawPin(same && target.annotation.kind==='point' ? target.annotation.point : null);
+      renderStrokes(same && target.annotation.kind==='draw' ? target.annotation.strokes : []);
+      return;
+    }
+    if (state === 'pick' && mode !== 'element') {
+      if (!matchViewport(geometry)) {
+        chooseMode(mode);
+        announcement.textContent = 'The view changed. Place your mark on the current view.';
+      }
+      if (mode === 'draw') renderStrokes(strokes);
+      return;
+    }
     outline.hidden = state !== 'pick' || !active?.isConnected;
     if (outline.hidden) return;
     const box = active.getBoundingClientRect();
     Object.assign(outline.style, {left:box.left+'px', top:box.top+'px', width:box.width+'px', height:box.height+'px'});
   }
   function schedulePaint() {
-    if (state === 'pick' && !paintRequest) paintRequest = requestAnimationFrame(paint);
+    if ((state === 'pick' || (state === 'compose' && target?.annotation)) && !paintRequest) paintRequest = requestAnimationFrame(paint);
   }
   function pick() {
     if (pending) return;
+    endStroke();
     active = null;
+    display('modes');
+    choices.page.focus({preventScroll:true});
+  }
+  function chooseMode(value) {
+    endStroke();
+    mode = value;
+    if (mode === 'page') { compose(context(null)); return; }
+    strokes = []; totalPoints = 0; geometry = snapshot(); anchorLabel = '';
+    focusPoint = [.5,.5]; active = null;
     display('pick');
+    shield.dataset.spatial = mode==='element' ? 'false' : 'true';
+    undo.hidden = doneDrawing.hidden = mode!=='draw';
+    const hint = mode==='element' ? 'Select an item on the page.' :
+      mode==='point' ? 'Click or tap the spot you mean.' : 'Draw on the page, then choose Add note.';
+    prompt.textContent = hint;
+    const keys = mode==='element' ? 'Use arrow keys to choose an item and Enter to select.' :
+      mode==='point' ? 'Use arrow keys to move the pin and Enter to place it.' :
+        'Use arrow keys to move. Press Space to start or end a line, then Enter to add a note.';
+    shield.setAttribute('aria-label',hint+' '+keys);
+    if (mode==='draw') updateDrawing();
     shield.focus({preventScroll:true});
   }
-  function compose(element, resume = false) {
+  function compose(selection, resume = false) {
     if (!resume) {
-      target = context(element);
+      target = selection;
       notePath = atPath();
       submitId = crypto.randomUUID();
     }
     display('compose');
-    summary.textContent = target.elementLabel ? 'Selected · '+target.elementLabel : 'Whole page · '+location.pathname;
+    const label = target.annotation?.kind==='draw' ? 'Drawing' : target.annotation?.kind==='point' ? 'Pinned spot' :
+      target.element ? 'Selected item' : 'Whole page';
+    summary.textContent = label+' · '+(target.elementLabel || location.pathname);
+    if (target.annotation) paint();
     alert.textContent = '';
     note.focus({preventScroll:true});
   }
   function minimize() {
     if (pending) return;
+    endStroke();
     display('idle');
     launcher.textContent = note.value.trim() ? 'Continue feedback' : 'Leave feedback';
     launcher.setAttribute('aria-label',launcher.textContent);
@@ -193,26 +358,59 @@
     announcement.textContent = safeLabel(active);
     paint();
   }
-  launcher.addEventListener('click', event => {
-    if (!event.isTrusted) return;
+  function beginFeedback() {
+    if (pending) return;
+    if (state==='compose') { note.focus({preventScroll:true}); return; }
     if (note.value.trim() && target && notePath === atPath()) compose(null,true);
     else pick();
+  }
+  launcher.addEventListener('click', event => { if (event.isTrusted) beginFeedback(); });
+  for (const [key, choice] of Object.entries(choices)) {
+    choice.addEventListener('click', event => { if (event.isTrusted) chooseMode(key); });
+  }
+  modeClose.addEventListener('click', minimize);
+  changeMode.addEventListener('click', pick);
+  undo.addEventListener('click', () => {
+    endStroke();
+    totalPoints -= strokes.pop()?.length || 0;
+    prompt.textContent = 'Draw on the page, then choose Add note.';
+    updateDrawing();
   });
-  whole.addEventListener('click', () => compose(null));
+  doneDrawing.addEventListener('click', () => { if (strokes.length) finishVisual(); });
   cancel.addEventListener('click', minimize);
   close.addEventListener('click', minimize);
   change.addEventListener('click', pick);
   shield.addEventListener('pointermove', event => {
+    if (mode==='draw' && pointerId===event.pointerId) { extendStroke(position(event)); return; }
+    if (mode!=='element') return;
     if (event.pointerType === 'touch') return;
     active = atPoint(event);
     schedulePaint();
   });
+  shield.addEventListener('pointerdown', event => {
+    if (!event.isTrusted || mode!=='draw' || !event.isPrimary || event.button!==0) return;
+    event.preventDefault();
+    if (!beginStroke(position(event),atPoint(event))) return;
+    pointerId = event.pointerId;
+    shield.setPointerCapture(pointerId);
+  });
+  for (const type of ['pointerup','pointercancel','lostpointercapture']) {
+    shield.addEventListener(type,event => {
+      if (pointerId!==event.pointerId) return;
+      if (type==='pointerup') extendStroke(position(event));
+      endStroke();
+    });
+  }
+  shield.addEventListener('wheel',event => { if(mode!=='element') event.preventDefault(); },{passive:false});
   shield.addEventListener('click', event => {
-    if (!event.isTrusted) return;
+    if (!event.isTrusted || mode==='draw') return;
     event.preventDefault();
     event.stopPropagation();
     const element = atPoint(event);
-    if (element) compose(element);
+    if (mode==='point') {
+      anchorLabel = element ? safeLabel(element) : '';
+      finishVisual(position(event));
+    } else if (element) compose(context(element));
   });
   root.addEventListener('keydown', event => {
     // Page-level shortcuts must not consume keystrokes from the review controls.
@@ -223,12 +421,36 @@
       minimize();
       return;
     }
-    if (state === 'pick' && event.key === 'Tab') {
+    if ((state === 'modes' || state==='pick' || state==='compose') && event.key === 'Tab') {
       event.preventDefault();
-      const controls = [shield,whole,cancel];
-      controls[(controls.indexOf(root.activeElement)+(event.shiftKey ? 2 : 1))%3].focus({preventScroll:true});
+      const controls = (state==='modes' ? [modeClose,...Object.values(choices)] :
+        state==='pick' ? [shield,undo,doneDrawing,changeMode,cancel] : [close,note,change,send])
+        .filter(el=>!el.hidden && !el.disabled);
+      controls[(controls.indexOf(root.activeElement)+(event.shiftKey ? controls.length-1 : 1))%controls.length]?.focus({preventScroll:true});
     }
     if (state !== 'pick' || root.activeElement !== shield) return;
+    if (mode!=='element') {
+      if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Enter'].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key.startsWith('Arrow')) {
+        const step = event.shiftKey ? 1 : 10;
+        const dx = (Number(event.key==='ArrowRight')-Number(event.key==='ArrowLeft'))*step/innerWidth;
+        const dy = (Number(event.key==='ArrowDown')-Number(event.key==='ArrowUp'))*step/innerHeight;
+        focusPoint = [round(focusPoint[0]+dx),round(focusPoint[1]+dy)];
+        drawPin(focusPoint);
+        if (mode==='draw' && stroke) extendStroke(focusPoint);
+        announcement.textContent = 'Position '+Math.round(focusPoint[0]*100)+' percent across, '+Math.round(focusPoint[1]*100)+' percent down.';
+      } else {
+        const item = atPoint({clientX:focusPoint[0]*innerWidth,clientY:focusPoint[1]*innerHeight});
+        if (mode==='point') {
+          anchorLabel = item ? safeLabel(item) : '';
+          finishVisual(focusPoint);
+        } else if (event.key==='Enter' && strokes.length) finishVisual();
+        else if (stroke) endStroke();
+        else if (beginStroke(focusPoint.slice(),item)) drawPin(focusPoint);
+      }
+      return;
+    }
     if (['ArrowDown','ArrowRight','ArrowUp','ArrowLeft'].includes(event.key)) {
       event.preventDefault();
       event.stopPropagation();
@@ -237,7 +459,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (!active) move(1);
-      if (active) compose(active);
+      if (active) compose(context(active));
     }
   });
   for (const type of ['keypress','keyup','input','change','click']) {
@@ -264,7 +486,7 @@
       target = null;
       pending = false;
       minimize();
-      notify('Feedback saved.');
+      notify('Feedback saved.',true);
     } catch (error) {
       alert.textContent = error.message?.includes('Extension context invalidated')
         ? 'Chrome updated the extension. Copy your note, reload this page and start the review again.'
@@ -275,6 +497,13 @@
       note.readOnly = false;
       send.textContent = 'Send feedback';
     }
+  });
+  viewNotes.addEventListener('click', async event => {
+    if (!event.isTrusted) return;
+    try {
+      const result = await chrome.runtime.sendMessage({type:'open-note-board'});
+      if (!result?.ok) throw Error(result?.error || 'Could not open notes.');
+    } catch (error) { notify(error.message,true); }
   });
   window.addEventListener('scroll', schedulePaint, {capture:true, passive:true, signal:listeners.signal});
   window.addEventListener('resize', schedulePaint, {passive:true, signal:listeners.signal});
@@ -289,7 +518,10 @@
   }
   function onMessage(message, sender, respond) {
     if (sender.id !== chrome.runtime.id) return;
-    if (message?.type === 'capture-visibility') {
+    if (message?.type==='pick-feedback') {
+      beginFeedback();
+      respond({ok:true});
+    } else if (message?.type === 'capture-visibility') {
       clearTimeout(captureTimer);
       shell.hidden = message.hidden === true;
       if (shell.hidden) {

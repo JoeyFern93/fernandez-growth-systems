@@ -8,9 +8,10 @@
   <meta name="referrer" content="no-referrer">
   <title>Site Review | Fernandez Growth Systems</title>
   <link rel="icon" href="/favicon.png"><link rel="manifest" href="/site-review.webmanifest">
-  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/fgs-apple-180-v4.png">
+  <script defer src="/annotation-preview.js"></script>
   <link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/install.css">
-  <script src="/install.js" defer></script><script src="/companion.js" defer></script><script src="/review.js" defer></script><script src="/chrome-desktop.js" defer></script>
+  <script src="/install.js" defer></script><script src="/companion.js" defer></script><script src="/visual-marks.js" defer></script><script src="/review.js" defer></script><script src="/chrome-desktop.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -22,45 +23,71 @@
     <noscript>Enable JavaScript to open a website and save feedback.</noscript>
     <section id="landing" class="landing shell" hidden>
       <h1>Review a website</h1>
-      <p>Open the site, browse to the part you want to discuss, and tap <strong>Leave feedback</strong> in the corner.</p>
+      <p>Enter a website to start a review. Tap <strong>Leave feedback</strong> while browsing. Everyone using the same review link can read the feedback under <strong>Notes</strong>.</p>
       <form id="create">
         <label for="website-url">Website address</label>
         <div class="create-row"><input id="website-url" name="url" type="text" inputmode="url" autocomplete="url" autocapitalize="none" spellcheck="false" placeholder="example.com" maxlength="1800" required>
           <button class="primary" type="submit">Open website <span aria-hidden="true">→</span></button></div>
         <div class="form-error" role="alert"></div>
       </form>
-      <div class="landing-foot"><button id="start-demo" type="button" class="text-button">Try it on the FGS website ↗</button><span>No account needed.</span></div>
+      <div class="landing-foot"><button id="start-demo" type="button" class="text-button">Start a review of the FGS website</button><span>No account needed.</span></div>
       <p id="demo-error" class="form-error" role="alert"></p>
-      <button class="text-button install" data-install-review hidden>Add to home screen</button>
+      <section id="my-reviews" aria-labelledby="saved-review-heading" tabindex="-1">
+        <h2 id="saved-review-heading">My reviews</h2>
+        <p id="saved-review-hint">Reviews you manage in this browser appear here. To bring back an earlier review, open its private owner link.</p>
+        <ul id="saved-review-list"></ul>
+      </section>
+      <button type="button" class="text-button install" data-install-review hidden>How to install</button>
       <p class="desktop-alternative" data-desktop-chrome hidden><a href="/chrome/">Review directly in Chrome with the FGS extension</a></p>
     </section>
     <section id="loading" class="shell loading"><h1>Opening your review…</h1><p id="loading-message" role="status"></p><button type="button" id="reload" hidden>Try again</button> <a href="/" id="back-home" hidden>Start a new review</a></section>
     <section id="workspace" aria-label="Website review" hidden>
       <header class="reviewbar">
-        <a class="brandmark" href="/" aria-label="Start a new site review" title="Site Review home"><img src="/favicon.png" alt=""></a>
+        <a class="brandmark" href="/" aria-label="Site Review home and my reviews" title="Site Review home"><img src="/favicon.png" alt=""></a>
         <div class="site-info"><h1 id="host"></h1><span id="view-label">Website review</span></div>
         <div class="bar-actions"><button id="notes-open">Notes <span class="count" id="bar-count">0</span></button><button id="share" class="share">Share</button><button class="more" id="options" aria-label="Review options" title="Review options">•••</button></div>
       </header>
-      <div id="pick-actions" class="pick-actions" hidden><strong id="pick-label">Tap the part you want to discuss.</strong><div class="row"><button id="whole-note">Comment on the page</button><button id="cancel-pick">Cancel</button></div><details id="keyboard-pin" hidden><summary>Set pin position with keyboard</summary><div class="row"><label>Horizontal %<input type="number" min="0" max="100" id="pin-x" value="50"></label><label>Vertical %<input type="number" min="0" max="100" id="pin-y" value="50"></label><button id="set-pin">Use position</button></div></details></div>
+      <div id="pick-actions" class="pick-actions" hidden>
+        <strong id="pick-label">Tap the part you want to discuss.</strong>
+        <div class="row"><button id="draw-pan" hidden aria-pressed="false">Scroll</button><button id="undo-draw" hidden>Undo</button><button id="finish-draw" hidden>Add note</button><button id="whole-note">Page note</button><button id="cancel-pick">Cancel</button></div>
+        <details id="keyboard-pin" hidden><summary>Set pin position with keyboard</summary><div class="row"><label>Horizontal %<input type="number" min="0" max="100" id="pin-x" value="50"></label><label>Vertical %<input type="number" min="0" max="100" id="pin-y" value="50"></label><button id="set-pin">Use position</button></div></details>
+      </div>
+      <div id="page-help" class="page-help" hidden><span>Preview trouble?</span><button id="canvas-full">Full-page screenshot</button><a id="canvas-original" target="_blank" rel="noopener noreferrer">Open original site</a><button id="page-help-button" aria-label="More preview options">More options</button></div>
       <div class="canvas" aria-label="Website being reviewed">
         <div id="frame-slot"></div>
         <div id="snapshot" hidden>
-          <div class="snapshot-heading"><span>Screenshot</span><select id="capture-select" aria-label="Choose a screenshot"></select></div>
-          <div id="shot-stage"><img id="capture-image" alt=""><div id="markers"></div></div>
+          <div class="snapshot-heading"><select id="shot-page-select" aria-label="Choose a page to review"></select><select id="capture-select" aria-label="Choose a screenshot"></select><button id="shot-add-page">Another page</button></div>
+          <div id="shot-stage"><img id="capture-image" alt=""><div id="capture-tiles"></div><div id="markers"></div></div>
         </div>
         <section id="fallback" class="fallback" hidden>
           <div class="fallback-card"><h2 id="fallback-title">Open the original website</h2><p id="fallback-detail"></p>
             <a class="primary button" id="fallback-open" target="_blank" rel="noopener noreferrer">Open original site ↗</a>
-            <button class="text-button" id="fallback-screenshot">Review a screenshot</button>
+            <button id="fallback-screenshot">Review a full-page screenshot</button>
           </div>
         </section>
       </div>
       <div class="dock">
         <button class="fab" id="leave-feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l1.8-4.1A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.4 9.4h7.2m-7.2 4h4.4"/></svg>Leave feedback</button>
       </div>
-      <button id="page-help" class="page-help" hidden>Page not showing?</button>
     </section>
   </main>
+  <dialog id="feedback-tools" class="drawer" aria-labelledby="method-title">
+    <div class="dialog-head"><h2 id="method-title">Leave feedback</h2><button class="x" data-close aria-label="Close feedback choices">&times;</button></div>
+    <div class="method-grid">
+      <button id="feedback-page"><strong>Page</strong><span>Comment on the whole page</span></button>
+      <button id="feedback-point"><strong>Point</strong><span>Pin a specific spot</span></button>
+      <button id="feedback-element"><strong>Element</strong><span>Select text, an image, or a button</span></button>
+      <button id="feedback-draw"><strong>Draw</strong><span>Mark an area freehand</span></button>
+    </div>
+    <button id="method-draft" class="text-button" hidden>Continue your draft</button>
+    <div id="method-status" class="section-rule" hidden>
+      <p id="method-detail"></p>
+      <a id="method-original" target="_blank" rel="noopener noreferrer">Open original site</a>
+      <a data-desktop-chrome hidden target="_blank" rel="noopener noreferrer" href="/chrome/">Chrome extension instructions</a>
+      <button class="text-button" id="method-live" hidden>Open live preview</button>
+      <button class="text-button" id="method-shot">Choose a screenshot</button>
+    </div>
+  </dialog>
   <dialog id="composer" class="drawer composer" aria-labelledby="compose-title">
     <div class="dialog-head"><h2 id="compose-title">Leave feedback</h2><button class="x" data-close aria-label="Close feedback">×</button></div>
     <form id="note-form" class="stack">
@@ -76,7 +103,7 @@
   </dialog>
   <dialog class="drawer" id="share-dialog" aria-labelledby="share-title"><div class="dialog-head"><h2 id="share-title">Share this review</h2><button class="x" data-close aria-label="Close share links">×</button></div>
     <div class="stack"><label>Reviewer link<input id="reviewer-link" readonly></label><p id="share-detail">Anyone with this link can open the website and leave feedback.</p><button id="copy-review" class="primary">Copy reviewer link</button>
-      <section class="section-rule" id="owner-link-panel" hidden><h3>Your private owner link</h3><p>Save this link to manage the review from another device.</p><button id="copy-owner">Copy owner link</button></section>
+      <section class="section-rule" id="owner-link-panel" hidden><h3>Your private owner link</h3><p>Keep this link for yourself to manage the review from another device. Send clients the reviewer link above.</p><button id="copy-owner">Copy owner link</button></section>
     </div>
   </dialog>
   <dialog class="drawer" id="menu-dialog" aria-labelledby="options-title"><div class="dialog-head"><h2 id="options-title">Review options</h2><button class="x" data-close aria-label="Close options">×</button></div>
@@ -87,16 +114,18 @@
         <form id="add-page" class="stack"><label>Add a page<input name="url" inputmode="url" placeholder="https://example.com/about" maxlength="1800" required></label><button type="submit">Add page</button><div class="form-error" role="alert"></div></form>
         <details><summary>Connect a website for live feedback</summary><p>On a website you manage, include this script on pages that allow this review tool to embed them.</p><code id="snippet"></code><button id="copy-snippet">Copy script</button></details>
         <button id="close-round"></button><button id="rotate-link">Replace reviewer link</button>
-      </div></details></section><a href="/">Start a new review</a>
+      </div></details></section><a href="/#my-reviews">My reviews in this browser</a><a href="/">Start a new review</a>
     </div>
   </dialog>
   <dialog class="drawer" id="image-dialog" aria-labelledby="image-title"><div class="dialog-head"><h2 id="image-title">Review a screenshot</h2><button class="x" data-close aria-label="Close screenshots">×</button></div>
-    <div class="stack"><p>Choose a screenshot to pin feedback to a specific spot.</p><button id="existing-shot" hidden>View saved screenshots</button>
-      <div id="auto-controls" class="stack" hidden><label>Screenshot size<select id="auto-device"><option value="mobile">Phone</option><option value="desktop">Desktop</option></select></label><button id="auto-capture">Capture this page</button></div>
+    <div class="stack"><p id="image-intent">Choose a screenshot to pin or draw on.</p><p id="image-error" role="status"></p><button id="existing-shot" hidden>View saved screenshots</button>
+      <a id="image-original" target="_blank" rel="noopener noreferrer" hidden>Open original site to take a screenshot</a>
+      <div id="auto-controls" class="stack" hidden><label>Page to capture<input id="full-page-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" aria-describedby="capture-address-hint"></label><small id="capture-address-hint">Enter any page address on this website.</small><label>Screenshot size<select id="auto-device"><option value="mobile">Phone</option><option value="desktop">Desktop</option></select></label><button id="auto-capture" class="primary">Capture full page</button></div>
+      <div class="stack" data-desktop-chrome hidden><div id="extension-capture-options" class="stack"><button type="button" id="extension-capture">Capture with my Chrome extension</button><p id="extension-capture-hint" role="status">Opens this page on its original website. Use the FGS extension there to add a full-page screenshot to this same review.</p><a id="extension-capture-install" href="/chrome/#setup" target="_blank" rel="noopener noreferrer" hidden>Install or update the Chrome extension</a></div></div>
       <form id="upload" class="stack"><label>Upload or paste a screenshot<input name="file" type="file" accept="image/png,image/jpeg,image/webp"></label>
         <div id="tab-controls" hidden><button type="button" id="capture-tab">Choose a browser tab to capture</button></div>
         <div id="image-confirm" class="stack" hidden><img id="upload-preview" alt="Screenshot ready to share"><label>Label <small>(optional)</small><input name="label" maxlength="80"></label><p>Everyone with the review link can see this image. Check for personal details before sharing.</p><div class="row"><button type="submit" class="primary">Share screenshot</button><button type="button" id="discard-image">Cancel</button></div></div><div class="form-error" role="alert"></div>
-      </form><p id="image-error" role="status"></p>
+      </form>
     </div>
   </dialog>
   <dialog class="drawer" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 id="help-title">View this website</h2><button class="x" data-close aria-label="Close website options">×</button></div>

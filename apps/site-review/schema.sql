@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS captures (
 CREATE INDEX IF NOT EXISTS captures_review ON captures(review_id);
 CREATE INDEX IF NOT EXISTS captures_byte_length ON captures(byte_length);
 
+CREATE TABLE IF NOT EXISTS capture_image_parts (
+  capture_id TEXT NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  tile_index INTEGER NOT NULL,
+  part_index INTEGER NOT NULL,
+  image_data TEXT NOT NULL,
+  PRIMARY KEY(capture_id, tile_index, part_index)
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS notes (
   id TEXT PRIMARY KEY,
   review_id TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,

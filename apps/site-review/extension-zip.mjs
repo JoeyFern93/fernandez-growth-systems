@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // The public download contains only files the extension runs or displays.
 const releaseFiles = [
-  'manifest.json', 'worker.js', 'overlay.js', 'popup.html', 'popup.css', 'popup.js',
+  'manifest.json', 'worker.js', 'full-capture.js', 'overlay.js', 'popup.html', 'popup.css', 'popup.js',
   'icons/16.png', 'icons/32.png', 'icons/48.png', 'icons/128.png'
 ];
 

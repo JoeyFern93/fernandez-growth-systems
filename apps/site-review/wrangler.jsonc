@@ -2,6 +2,7 @@
   "name": "fgs-site-review",
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-11-20",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "d1_databases": [
     {
       "binding": "DB",
