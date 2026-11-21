@@ -427,7 +427,7 @@ try {
   await guest.waitForSelector('#composer[open]');
   await guest.type('#feedback','Please enlarge this section.');
   await guest.click('#note-form button[type=submit]');
-  const note = await until(() => db.prepare('SELECT capture_id AS captureId,x,y,name FROM notes WHERE text=?')
+  const note = await until(() => db.prepare('SELECT id,capture_id AS captureId,x,y,name FROM notes WHERE text=?')
     .get('Please enlarge this section.'),'guest screenshot note');
   assert.equal(note.captureId,imageId);
   assert(note.x >= 0 && note.x <= 1 && note.y >= 0 && note.y <= 1);
@@ -443,6 +443,16 @@ try {
     });
     assert(Math.abs(anchor.x-note.x)<.002 && Math.abs(anchor.y-note.y)<.002,
       'Reopening the shared link must place the pin at the same coordinates.');
+    await guest.click('#notes-open');
+    const showMark = await guest.$('#note-'+note.id+' button');
+    assert.match(await showMark.evaluate(el=>el.textContent),/screenshot/i);
+    await showMark.click();
+    const markerSelector='#markers [data-note-id="'+note.id+'"]';
+    await guest.waitForFunction(selector=>{
+      const rect=document.querySelector(selector)?.getBoundingClientRect();
+      return rect && rect.top>=0 && rect.bottom<=innerHeight;
+    },{timeout:5000},markerSelector);
+    if (process.env.FGS_PROOF_DIR) await guest.screenshot({path:path.join(process.env.FGS_PROOF_DIR,'phone-saved-pin.png')});
     await guest.goto(service + '/');
     await guest.waitForSelector('#my-reviews');
     assert.equal(await guest.$$eval('#saved-review-list li', els => els.length),0,
