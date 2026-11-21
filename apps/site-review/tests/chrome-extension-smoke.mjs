@@ -444,9 +444,10 @@ try {
     assert(Math.abs(anchor.x-note.x)<.002 && Math.abs(anchor.y-note.y)<.002,
       'Reopening the shared link must place the pin at the same coordinates.');
     await guest.click('#notes-open');
-    const showMark = await guest.$('#note-'+note.id+' button');
-    assert.match(await showMark.evaluate(el=>el.textContent),/screenshot/i);
-    await showMark.click();
+    const showMarkSelector='#notes-dialog[open] #note-'+note.id+' button';
+    await guest.waitForFunction(selector=>/screenshot/i.test(document.querySelector(selector)?.textContent || ''),{},showMarkSelector);
+    // Opening Notes refreshes its rows. Resolve the current button at input time.
+    await guest.locator(showMarkSelector).setTimeout(8000).click();
     const markerSelector='#markers [data-note-id="'+note.id+'"]';
     await guest.waitForFunction(selector=>{
       const rect=document.querySelector(selector)?.getBoundingClientRect();
