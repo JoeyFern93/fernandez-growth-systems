@@ -56,13 +56,14 @@
       <div class="canvas" aria-label="Website being reviewed">
         <div id="frame-slot"></div>
         <div id="snapshot" hidden>
-          <div class="snapshot-heading"><select id="shot-page-select" aria-label="Choose a page to review"></select><select id="capture-select" aria-label="Choose a screenshot"></select><button id="shot-add-page">Another page</button></div>
+          <div class="snapshot-heading"><select id="shot-page-select" aria-label="Choose a page to review"></select><select id="capture-select" aria-label="Choose a screenshot"></select><button id="shot-live" hidden>Live preview</button><button id="shot-add-page">Another page</button></div>
           <div id="shot-stage"><img id="capture-image" alt=""><div id="capture-tiles"></div><div id="markers"></div></div>
         </div>
         <section id="fallback" class="fallback" hidden>
           <div class="fallback-card"><h2 id="fallback-title">Open the original website</h2><p id="fallback-detail"></p>
             <a class="primary button" id="fallback-open" target="_blank" rel="noopener noreferrer">Open original site ↗</a>
             <button id="fallback-screenshot">Review a full-page screenshot</button>
+            <button id="fallback-live" hidden>Show live preview here</button>
           </div>
         </section>
       </div>
@@ -124,7 +125,7 @@
       <div class="stack" data-desktop-chrome hidden><div id="extension-capture-options" class="stack"><button type="button" id="extension-capture">Capture with my Chrome extension</button><p id="extension-capture-hint" role="status">Opens this page on its original website. Use the FGS extension there to add a full-page screenshot to this same review.</p><a id="extension-capture-install" href="/chrome/#setup" target="_blank" rel="noopener noreferrer" hidden>Install or update the Chrome extension</a></div></div>
       <form id="upload" class="stack"><label>Upload or paste a screenshot<input name="file" type="file" accept="image/png,image/jpeg,image/webp"></label>
         <div id="tab-controls" hidden><button type="button" id="capture-tab">Choose a browser tab to capture</button></div>
-        <div id="image-confirm" class="stack" hidden><img id="upload-preview" alt="Screenshot ready to share"><label>Label <small>(optional)</small><input name="label" maxlength="80"></label><p>Everyone with the review link can see this image. Check for personal details before sharing.</p><div class="row"><button type="submit" class="primary">Share screenshot</button><button type="button" id="discard-image">Cancel</button></div></div><div class="form-error" role="alert"></div>
+        <div id="image-confirm" class="stack" hidden><img id="upload-preview" alt="Screenshot ready to share"><label>Label <small>(optional)</small><input name="label" maxlength="80"></label><label class="row"><input type="checkbox" name="fullPage" style="width:auto;min-height:0;margin:0">This image shows the full page</label><p>Everyone with the review link can see this image. Check for personal details before sharing.</p><div class="row"><button type="submit" class="primary">Share screenshot</button><button type="button" id="discard-image">Cancel</button></div></div><div class="form-error" role="alert"></div>
       </form>
     </div>
   </dialog>

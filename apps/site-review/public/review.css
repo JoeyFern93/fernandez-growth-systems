@@ -24,6 +24,7 @@ dialog.drawer{margin:auto 15px 15px auto;width:min(410px,calc(100vw - 30px));max
 #method-status { margin-top: 14px; }
 #method-status a, #method-status button { display: inline-flex; align-items: center; min-height: 44px; margin-right: 10px; }
 #frame-slot { position:relative; }
+#frame-slot.preview-pending { position:absolute; inset:0; visibility:hidden; pointer-events:none; }
 #mark-surface, .draw-lines { position:absolute; inset:0; width:100%; height:100%; }
 .draw-lines { pointer-events:none; overflow:visible; }
 .draw-lines polyline { fill:none; stroke:#ae2242; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 0 1px #fff); }
