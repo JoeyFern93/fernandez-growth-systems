@@ -7,6 +7,92 @@
   const camera = document.getElementById('cameraTab');
   const clips = document.getElementById('clipsTab');
   let selected;
+  const replaySize = document.getElementById('replaySize');
+  const toggleControls = document.getElementById('toggleReplayControls');
+  const quickTransport = document.getElementById('quickReplayTransport');
+  const start = document.getElementById('startBtn');
+  const stop = document.getElementById('stopBtn');
+  const pairTv = document.getElementById('pairTvBtn');
+  const pause = document.getElementById('playPauseBtn');
+  const seek = document.getElementById('reviewRange');
+  const demo = document.getElementById('startDemoBtn');
+  const pairHome = document.createComment('TV display in camera settings');
+  pairTv.before(pairHome);
+  quickTransport.append(start, stop, pause, seek);
+  document.getElementById('quickDemoSlot').append(demo);
+  document.getElementById('viewer').append(document.getElementById('exitFullscreenBtn'));
+  const tvPage = new URLSearchParams(location.search).get('mode') === 'tv';
+  let tvLayout = tvPage;
+  let drawerOpen = false;
+  let sizeBeforeFullscreen = null;
+  function preferenceKey() {
+    return 'fgs-replay-view-size-' + (tvLayout ? 'tv' : 'camera');
+  }
+  function showControls() {
+    const size = replaySize.value;
+    const quick = size !== 'standard' && !drawerOpen;
+    const active = !stop.disabled;
+    stage.dataset.quickView = String(quick);
+    stage.dataset.cameraActive = String(active);
+    stage.dataset.hasReview = String(!seek.disabled);
+    start.hidden = active;
+    stop.hidden = !active;
+    demo.hidden = active || !seek.disabled;
+    pause.hidden = seek.hidden = seek.disabled;
+    if (quick && !active) {
+      if (pairTv.parentElement !== quickTransport) quickTransport.insertBefore(pairTv, pause);
+    } else if (pairTv.previousSibling !== pairHome) {
+      pairHome.after(pairTv);
+    }
+    toggleControls.hidden = size === 'standard';
+    toggleControls.textContent = quick ? 'Controls' : 'Hide controls';
+    toggleControls.setAttribute('aria-expanded', String(!quick));
+  }
+  function setSize(value) {
+    stage.dataset.replaySize = replaySize.value = value;
+    drawerOpen = false;
+    showControls();
+  }
+  function loadSize() {
+    let saved;
+    try { saved = localStorage.getItem(preferenceKey()); } catch {}
+    setSize(['standard','large','maximum'].includes(saved) ? saved : 'large');
+  }
+  loadSize();
+  replaySize.addEventListener('change', () => {
+    setSize(replaySize.value);
+    try { localStorage.setItem(preferenceKey(), replaySize.value); } catch {}
+  });
+  toggleControls.addEventListener('click', () => {
+    drawerOpen = !drawerOpen;
+    showControls();
+  });
+  const transportObserver = new MutationObserver(showControls);
+  for (const button of [stop, seek]) transportObserver.observe(button, {attributes:true, attributeFilter:['disabled']});
+  function syncFullscreen() {
+    const expanded = document.fullscreenElement === stage || stage.classList.contains('expanded');
+    if (expanded && sizeBeforeFullscreen === null) {
+      sizeBeforeFullscreen = replaySize.value;
+      setSize('maximum');
+    } else if (!expanded && sizeBeforeFullscreen !== null) {
+      setSize(sizeBeforeFullscreen);
+      sizeBeforeFullscreen = null;
+    }
+  }
+  document.addEventListener('fullscreenchange', syncFullscreen);
+  new MutationObserver(syncFullscreen).observe(stage, {attributes:true, attributeFilter:['class']});
+  window.addEventListener('fgs:remote-phase', event => {
+    if (event.detail?.phase === 'receiving' && !tvLayout) {
+      tvLayout = true;
+      loadSize();
+    }
+  });
+  window.addEventListener('fgs:remote-stopped', () => {
+    if (!tvPage && tvLayout) {
+      tvLayout = false;
+      loadSize();
+    }
+  });
 
   function select(tab) {
     selected = tab;
@@ -49,11 +135,50 @@
   syncSize();
 
   const trim = document.getElementById('trimPanel');
+  const clipPreviewDialog = document.getElementById('clipPreviewDialog');
+  const clipSize = document.getElementById('clipPreviewSizeBtn');
+  const clipPreview = clipSize.closest('.trim-preview');
+  function restoreClipPreview() {
+    if (clipPreview.parentElement !== clipPreviewDialog) return;
+    clipPreviewDialog.before(clipPreview);
+    clipSize.textContent = 'Enlarge preview';
+    clipSize.setAttribute('aria-haspopup', 'dialog');
+    if (!trim.hidden) clipSize.focus({preventScroll:true});
+  }
+  function closeClipPreview() {
+    if (typeof clipPreviewDialog.close === 'function') clipPreviewDialog.close();
+    else clipPreviewDialog.removeAttribute('open');
+    restoreClipPreview();
+  }
+  clipSize.addEventListener('click', () => {
+    if (clipPreviewDialog.hasAttribute('open')) { closeClipPreview(); return; }
+    clipPreviewDialog.append(clipPreview);
+    clipSize.textContent = 'Return to editor';
+    clipSize.removeAttribute('aria-haspopup');
+    if (typeof clipPreviewDialog.showModal === 'function') clipPreviewDialog.showModal();
+    else clipPreviewDialog.setAttribute('open', '');
+    clipSize.focus({preventScroll:true});
+  });
+  clipPreviewDialog.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeClipPreview();
+  });
+  clipPreviewDialog.addEventListener('close', () => {
+    if (!clipPreviewDialog.hasAttribute('open')) restoreClipPreview();
+  });
+  new MutationObserver(() => {
+    if (trim.hidden && clipPreviewDialog.hasAttribute('open')) closeClipPreview();
+  }).observe(trim, {attributes:true, attributeFilter:['hidden']});
+
   let wasHidden = trim.hidden;
   new MutationObserver(() => {
     if (trim.hidden === wasHidden) return;
     wasHidden = trim.hidden;
     if (!trim.hidden) {
+      drawerOpen = true;
+      showControls();
       select(clips);
       document.getElementById('clipsPanel').scrollTop = 0;
       document.getElementById('trimTitle').focus({preventScroll:true});

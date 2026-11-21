@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css">
   <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css">
   <link rel="stylesheet" href="/assets/tool-install-v1.css">
-  <link rel="stylesheet" href="css/dashboard-v11.css">
+  <link rel="stylesheet" href="css/dashboard-v11.css?v=4bdafd13c586">
   <link rel="stylesheet" href="/replay/tv/pair.css?v=a0975fc0dca4">
   <script src="js/install-v4.js" defer></script>
   <script defer src="/assets/fgs-review-bridge.js?v=d8293ba5c04f" data-review-origin="https://sitereview.fernandezgrowthsystems.com"></script>
@@ -39,7 +39,6 @@
             <button id="stopBtn" type="button" class="button button-danger" disabled>Stop</button>
           </div>
           <button id="exitFullscreenBtn" type="button" class="button button-secondary" hidden>Exit full screen</button>
-          <output id="delayBadge" class="delay-badge">10 seconds behind</output>
         </div>
         <p id="demoHelp" class="visually-hidden">Try Replay Cam with a moving timer and colored bar. Press Stop before starting your camera.</p>
         <p id="replayInstallStatus" class="help-text" role="status" hidden></p>
@@ -48,9 +47,18 @@
           <video id="sessionVideo" playsinline muted hidden></video>
           <canvas id="delayedCanvas" hidden></canvas>
           <div id="viewerMessage" class="viewer-message">
-            <strong>Ready to replay</strong><span>Start your camera, or try a moving demo without camera access.</span>
+            <strong>Ready to replay</strong><span>Start your camera to build replay history.</span>
+            <div id="quickDemoSlot"></div>
           </div>
           <div class="viewer-overlay"><span id="engineBadge">On-device</span><span id="actualBadge">No camera</span></div>
+        </div>
+        <div class="replay-view-bar" role="group" aria-label="Replay display controls">
+          <div id="quickReplayTransport"></div>
+          <output id="delayBadge" class="delay-badge" aria-label="Replay delay">10s delay</output>
+          <label class="replay-size-field" for="replaySize"><span>Size</span>
+            <select id="replaySize" aria-label="Replay size"><option value="standard">Standard</option><option value="large">Large</option><option value="maximum">Maximum</option></select>
+          </label>
+          <button id="toggleReplayControls" type="button" class="button button-secondary" aria-expanded="false" aria-controls="playbackPanel cameraPanel clipsPanel">Controls</button>
         </div>
       </div>
       <div class="panel-tabs" role="tablist" aria-label="Replay controls">
@@ -125,7 +133,7 @@
             <div class="trim-heading"><div><p class="eyebrow">SAVE AN EARLIER MOMENT</p><h3 id="trimTitle" tabindex="-1">Choose your clip</h3></div><output id="trimDuration" class="trim-duration">0:00 selected</output></div>
             <p id="trimHelp" class="help-text">Drag the left and right handles to choose the start and end. Use the arrow keys when a handle is focused.</p>
             <section class="trim-preview" aria-labelledby="trimPreviewTitle">
-              <div class="trim-preview-heading"><h4 id="trimPreviewTitle">Selected clip preview</h4><output id="trimPreviewPosition" aria-live="off">0:00 / 0:00</output></div>
+              <div class="trim-preview-heading"><h4 id="trimPreviewTitle">Selected clip preview</h4><output id="trimPreviewPosition" aria-live="off">0:00 / 0:00</output><button id="clipPreviewSizeBtn" type="button" class="button button-secondary" aria-haspopup="dialog" aria-controls="clipPreviewDialog">Enlarge preview</button></div>
               <div id="trimPreviewFrame" class="trim-preview-frame"><canvas id="trimPreviewCanvas" width="854" height="480" role="img" aria-label="Selected clip preview">Your selected video appears here.</canvas></div>
               <input id="trimPreviewSeek" class="trim-preview-seek" type="range" min="0" max="1" value="0" step="0.001" aria-label="Clip preview position" aria-describedby="trimPreviewHelp" disabled>
               <div class="trim-preview-controls"><button id="trimPreviewBtn" class="button button-secondary" type="button" disabled>Preview selection</button><span id="trimPreviewState" aria-live="off">Ready to preview</span></div>
@@ -137,6 +145,7 @@
               </div>
               <p id="trimPreviewHelp" class="help-text">Drag the edges below, then play your selection here before saving.</p>
             </section>
+            <dialog id="clipPreviewDialog" class="clip-preview-dialog" aria-labelledby="trimPreviewTitle"></dialog>
             <div class="trim-track">
               <canvas id="trimTimelineCanvas" width="1200" height="112" aria-hidden="true"></canvas>
               <div id="trimSelection" class="trim-selection" aria-hidden="true"></div>
@@ -213,10 +222,10 @@
   <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
   <script src="js/frame-times-v1.js" defer></script>
   <script src="js/frame-export-v1.js" defer></script>
-  <script src="js/app-v11.js?v=d94f673603e0" defer></script>
+  <script src="js/app-v11.js?v=7251078e22f3" defer></script>
   <script src="/replay/tv/relay-media.js?v=dc757ce63e12" defer></script>
-  <script src="/replay/tv/pair.js?v=47bfdac38e0c" defer></script>
+  <script src="/replay/tv/pair.js?v=5cff35827a90" defer></script>
   <script src="js/replay-ui.js" defer></script>
-  <script src="js/dashboard-v11.js" defer></script>
+  <script src="js/dashboard-v11.js?v=298f5a765e76" defer></script>
 </body>
 </html>

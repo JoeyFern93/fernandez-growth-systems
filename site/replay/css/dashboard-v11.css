@@ -158,3 +158,98 @@ body.fgs-replay {
   .fgs-replay .capture-toolbar .delay-badge { font-size: .64rem; padding-inline: 5px; }
   .fgs-replay .playback-panel,.fgs-replay .settings-panel,.fgs-replay .clips-panel { padding: 8px; }
 }
+
+.fgs-replay .dashboard-stage[data-replay-size] .capture-toolbar { display: none; }
+.fgs-replay .replay-view-bar,.fgs-replay #quickReplayTransport {
+  display: flex; align-items: center; min-width: 0; gap: 6px;
+}
+.fgs-replay .replay-view-bar {
+  flex: 0 0 auto; min-height: 44px; padding: 2px 4px; background: #11241a;
+  border: 1px solid var(--dash-edge); border-radius: 8px;
+}
+.fgs-replay #quickReplayTransport { flex: 1 1 auto; }
+.fgs-replay .replay-view-bar :is(button,select) { min-height: 40px; flex: 0 0 auto; }
+.fgs-replay .replay-view-bar button { min-width: 44px; }
+.fgs-replay .replay-view-bar #playPauseBtn { flex: 0 0 auto; min-width: 44px; }
+.fgs-replay #quickReplayTransport #reviewRange { flex: 1 1 40px; min-width: 0; margin: 0; height: 38px; }
+.fgs-replay .video-column { gap: 4px; }
+.fgs-replay .viewer #exitFullscreenBtn { position: absolute; top: 8px; right: 8px; }
+.fgs-replay #quickDemoSlot { margin-top: 6px; }
+.fgs-replay #quickDemoSlot button { white-space: nowrap; }
+.fgs-replay .viewer:has(.viewer-message[hidden]) #quickDemoSlot { display: none; }
+.fgs-replay .replay-view-bar .delay-badge { margin-inline: 5px 9px; padding: 0; font-size: .78rem; background: transparent; }
+.fgs-replay #replayStage[data-camera-active="false"][data-has-review="false"] .viewer-overlay { display: none; }
+.fgs-replay .playback-panel .review-time-labels { display: none; }
+.fgs-replay .dashboard-stage[data-has-review="false"] #playbackPanel > :is(.timeline-track,.fine-controls,.review-actions) { display: none; }
+.fgs-replay .playback-panel .review-actions { display: flex; margin-top: 5px; }
+.fgs-replay .playback-panel .timeline-track { margin-top: 4px; height: clamp(26px,4dvh,38px); }
+.fgs-replay .replay-size-field {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  font-size: .78rem; font-weight: 700; color: var(--dash-soft);
+}
+.fgs-replay .replay-size-field select { width: auto; }
+@media (max-width:550px) {
+  .fgs-replay .replay-size-field span { display: none; }
+  .fgs-replay .replay-view-bar,.fgs-replay #quickReplayTransport { gap: 3px; }
+  .fgs-replay .replay-view-bar :is(button,select) { padding-inline: 5px; min-height: 40px; font-size: .73rem; }
+  .fgs-replay .replay-view-bar .delay-badge { font-size: .68rem; margin-inline: 0 2px; }
+}
+/* Opening the controls drawer keeps the picture and its transport on screen. */
+@media (min-width:900px) and (min-height:591px) {
+  .fgs-replay #replayStage:is([data-replay-size="large"],[data-replay-size="maximum"]) {
+    grid-template-columns: minmax(0,1fr) clamp(245px,22vw,335px);
+    grid-template-rows: auto minmax(0,1fr) minmax(135px,35%);
+    grid-template-areas: "video tabs" "video settings" "video playback";
+  }
+}
+@media (max-width:899px), (max-height:590px) {
+  .fgs-replay #replayStage:is([data-replay-size="large"],[data-replay-size="maximum"]) {
+    grid-template-columns: minmax(0,1fr);
+    grid-template-rows: minmax(0,1fr) auto clamp(86px,20dvh,175px);
+    grid-template-areas: "video" "tabs" "settings";
+  }
+}
+@media (orientation:landscape) and (max-height:590px) {
+  .fgs-replay #replayStage:is([data-replay-size="large"],[data-replay-size="maximum"]) {
+    grid-template-columns: minmax(0,1fr) clamp(158px,23vw,235px);
+    grid-template-rows: auto minmax(0,1fr); grid-template-areas: "video tabs" "video settings";
+  }
+}
+.fgs-replay #replayStage[data-quick-view="true"] {
+  grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); grid-template-areas: "video";
+}
+.fgs-replay #replayStage[data-quick-view="true"] > :is(.panel-tabs,.playback-panel,.settings-panel,.clips-panel) { display: none; }
+.fgs-replay:has(#replayStage[data-replay-size="maximum"][data-quick-view="true"]) { grid-template-rows: minmax(0,1fr); }
+.fgs-replay:has(#replayStage[data-replay-size="maximum"][data-quick-view="true"]) .app-header { display: none; }
+.fgs-replay:has(#replayStage[data-replay-size="maximum"][data-quick-view="true"]) .app-shell { padding: 0; }
+.fgs-replay #replayStage[data-replay-size="maximum"][data-quick-view="true"] .viewer { border-radius: 0; border: 0; }
+
+.fgs-replay .clip-preview-dialog:not([open]) { display:none; }
+.fgs-replay .clip-preview-dialog[open] {
+  position:fixed; inset:0; z-index:150; box-sizing:border-box; margin:0;
+  width:100%; height:100%; height:100dvh; max-width:none; max-height:none;
+  overflow:auto; border:0; background:#091a12; color:#eff6ec;
+  padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+}
+.fgs-replay .clip-preview-dialog .trim-preview {
+  display:grid; height:100%; min-height:15rem; margin:0; gap:6px;
+  grid-template-areas:"heading" "frame" "seek" "play" "steps";
+  grid-template-rows:auto minmax(6rem,1fr) auto auto auto;
+}
+.fgs-replay .clip-preview-dialog .trim-preview-heading { grid-area:heading; align-items:center; margin:0; }
+.fgs-replay .clip-preview-dialog .trim-preview-frame { grid-area:frame; min-height:0; max-height:none; background:#030906; }
+.fgs-replay .clip-preview-dialog #trimPreviewCanvas { width:100%; height:100%; max-width:100%; max-height:none; object-fit:contain; }
+.fgs-replay .clip-preview-dialog .trim-preview-seek { grid-area:seek; margin:0; }
+.fgs-replay .clip-preview-dialog .trim-preview-controls { grid-area:play; }
+.fgs-replay .clip-preview-dialog .trim-frame-controls { grid-area:steps; margin:0; }
+.fgs-replay .clip-preview-dialog #trimPreviewHelp { display:none; }
+@media (orientation:landscape) and (max-height:590px) {
+  .fgs-replay .clip-preview-dialog .trim-preview {
+    grid-template-columns:minmax(0,1fr) clamp(150px,25%,230px);
+    grid-template-rows:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"frame heading" "frame play" "frame steps" "seek seek";
+  }
+  .fgs-replay .clip-preview-dialog .trim-preview-heading,
+  .fgs-replay .clip-preview-dialog .trim-frame-controls { align-content:start; }
+  .fgs-replay .clip-preview-dialog .trim-preview-controls .button { min-width:0; }
+}
