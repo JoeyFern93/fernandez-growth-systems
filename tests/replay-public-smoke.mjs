@@ -68,7 +68,7 @@ function instrument(side, service) {
   };
   const sample=document.createElement('canvas');sample.width=80;sample.height=24;
   const ctx=sample.getContext('2d',{willReadFrequently:true});
-  function marker(id) {
+  function marker(id, direction) {
     const el=document.getElementById(id);
     // The live source is intentionally hidden behind the main replay display.
     if (!el || (el instanceof HTMLCanvasElement && el.hidden) ||
@@ -82,7 +82,8 @@ function instrument(side, service) {
     function decode(b) {
       return b.includes(-1)||b[0]!==1||b[1]!==0||b[2]!==1||b[6]!==1-b[5]||b[7]!==0?null:b[3]*4+b[4]*2+b[5];
     }
-    const value=decode(bits)??decode(bits.reverse());
+    const value=direction==='mirror' ? decode(bits.slice().reverse()) : (decode(bits)??decode(bits.slice().reverse()));
+    id=id+'/'+(direction||'either');
     if (!seen.has(id)) seen.set(id,new Set());
     if (value!==null) seen.get(id).add(value);
     return seen.get(id).size;
@@ -126,6 +127,7 @@ export default async function scenario({tv,phone}) {
     phase='paired phone camera';
     await phone.navigate(invite);
     await phone.until("window.FGSReplayRelay && typeof document.getElementById('phone-start')?.onclick==='function'",'phone controls',16000);
+    await phone.until("window.FGSPhoneCamera && !document.getElementById('phone-camera-settings').open && document.getElementById('phone-rotate')",'updated compact phone camera',10000);
     await phone.click('phone-start');
     await phone.until("__smoke.counts().sourceRequests===1 && document.getElementById('phone-preview').srcObject",'simulated camera',16000);
     phase='relay consent';
@@ -138,11 +140,17 @@ export default async function scenario({tv,phone}) {
     await tv.get("(()=>{const el=document.getElementById('delayRange');el.value=1;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));})()");
     phase='delayed replay motion';
     await tv.until("Math.max(__smoke.marker('delayedVideo'),__smoke.marker('delayedCanvas'))>=3",'changing delayed camera markers',20000);
+    phase='compact replay controls';
+    const layout=await tv.get("(()=>{const viewer=document.getElementById('viewer');const size=document.getElementById('replaySize');const area=()=>viewer.clientWidth*viewer.clientHeight;const change=v=>{size.value=v;size.dispatchEvent(new Event('change',{bubbles:true}));};const initial=size.value;const large=area();change('standard');const standard=area();change('large');return {initial,large,standard,compact:document.getElementById('toggleReplayControls').getAttribute('aria-expanded')==='false'};})()");
+    if(layout.initial!=='large'||!layout.compact||layout.large<layout.standard*1.15)throw Error('Replay sizing');
+    phase='mirrored delayed phone video';
+    await phone.click('phone-mirror');
+    await tv.until("Math.max(__smoke.marker('delayedVideo','mirror'),__smoke.marker('delayedCanvas','mirror'))>=3",'mirrored delayed frames',25000);
     const sender=await phone.get('__smoke.counts()'), receiver=await tv.get('__smoke.counts()');
     if(receiver.created!==1 || receiver.sourceRequests!==0 || (await tv.get('__smoke.directFrames()'))!==0 || sender.accepted<1 || receiver.received<1)throw Error();
-    statistics={rooms:receiver.created,encryptedPacketsSent:sender.accepted,encryptedPacketsReceived:receiver.received,delayedMotion:true};
+    statistics={rooms:receiver.created,encryptedPacketsSent:sender.accepted,encryptedPacketsReceived:receiver.received,delayedMotion:true,mirroredDelayedFrames:true,defaultLayout:layout};
     phase='normal disconnect';
-    await tv.click('pairTvBtn');await tv.until("document.getElementById('tv-pair-dialog').open",'disconnect menu',3500);await tv.click('tv-end');
+    await phone.click('phone-stop');
     await phone.until('__smoke.counts().ended','simulated camera released',13000);
   }catch{failure=phase;}
   finally{
