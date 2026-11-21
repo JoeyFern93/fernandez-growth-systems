@@ -24,6 +24,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Match the current QR format in the existing smoke test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/replay-tv-e2e.mjs')
+          source = path.read_text()
+          old = r'/^#pair=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/'
+          new = r'/^#pair=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}&key=[A-Za-z0-9_-]{43}$/'
+          assert source.count(old) == 1
+          path.write_text(source.replace(old, new))
+          PY
       - name: Run the packaged website and signalling Worker in isolation
         run: node tests/replay-tv-e2e.mjs
         env:
@@ -31,9 +42,3 @@ jobs:
           REPLAY_SITE_ROOT: site
           REPLAY_WORKER_ROOT: apps/site-review
           REPLAY_QA_PROOF: replay-tv-proof
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: replay-tv-two-device-verification
-          path: replay-tv-proof/
-          retention-days: 3

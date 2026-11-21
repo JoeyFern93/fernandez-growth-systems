@@ -748,6 +748,7 @@
   }
   function updateCompressedPlayback(generation) {
     if (generation !== state.generation || !state.running || state.engine !== 'compressed') return;
+    if (state.sourceMode === 'remote' && (state.remoteMuted || document.visibilityState === 'hidden')) return;
     if (state.recorder?.state !== 'paused' && now() - state.lastDataAt > 10000) {
       startFallbackReplay('The video encoder stopped supplying replay frames.');
       return;
@@ -952,7 +953,7 @@
       showViewerMessage('Building compatibility replay', `This browser uses 180p replay with up to 3 seconds of delay and about 6 seconds of review history.`);
       if (reason) showToast(`${reason} Using lower-resolution replay with a short 6-second history.`, 9000);
     } catch {
-      stopCamera();
+      stopCamera('startup-error', 'The TV received video, but its replay buffer could not start. Close other tabs and reconnect.');
       showViewerMessage('Replay could not start', 'Close other tabs and try again.');
     }
   }
@@ -1179,6 +1180,56 @@
       showToast(message);
     }
   }
+  function remotePhase(phase, message) {
+    window.dispatchEvent(new CustomEvent('fgs:remote-phase', { detail: { phase, message } }));
+  }
+  function waitForPhoneVideo(track) {
+    const video = ui.live;
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let visibleWait = 0;
+      let lastCheck = now();
+      let blocked = false;
+      const cleanup = () => {
+        done = true;
+        clearInterval(timer);
+        for (const name of ['playing', 'loadeddata', 'resize']) video.removeEventListener(name, check);
+        track.removeEventListener('unmute', check);
+        state.cancelRemoteStart = null;
+        state.resumeRemoteStart = null;
+      };
+      const fail = error => { if (!done) { cleanup(); reject(error); } };
+      function check() {
+        if (done) return;
+        if (track.readyState === 'ended') { fail(new Error('The phone stopped sending video before the first frame arrived.')); return; }
+        if (!track.muted && !video.paused && video.readyState >= 2 && video.videoWidth > 0) {
+          cleanup(); resolve(); return;
+        }
+        const tick = now();
+        if (document.visibilityState !== 'hidden' && !blocked) visibleWait += Math.min(1000, tick - lastCheck);
+        lastCheck = tick;
+        if (visibleWait >= 45000) fail(new Error('The TV did not receive a playable frame. Keep the phone camera page open and unlocked, then reconnect.'));
+      }
+      function play() {
+        if (done) return;
+        blocked = false;
+        video.play().then(check).catch(error => {
+          if (done) return;
+          if (error.name === 'NotAllowedError') {
+            blocked = true;
+            remotePhase('playback-blocked', 'The TV browser needs a tap to play the phone video.');
+          } else fail(error);
+        });
+      }
+      const timer = setInterval(check, 250);
+      state.cancelRemoteStart = () => fail(new Error('Phone video startup was canceled.'));
+      state.resumeRemoteStart = play;
+      for (const name of ['playing', 'loadeddata', 'resize']) video.addEventListener(name, check);
+      track.addEventListener('unmute', check);
+      remotePhase('waiting-video', 'Waiting for the first video frame. Keep the camera page open on your phone.');
+      play();
+    });
+  }
   async function startRemote(stream) {
     if (state.running || state.starting) throw new Error('Stop the current camera or demo before connecting a phone.');
     if (state.trim || state.clip || state.session) throw new Error('Finish reviewing or saving the current recording first.');
@@ -1196,14 +1247,37 @@
     showViewerMessage('Connecting phone camera', 'Waiting for the first video frame from your phone.');
     const disconnected = () => {
       if (request !== state.cameraRequest || state.sourceMode !== 'remote') return;
-      stopCamera();
-      showViewerMessage('Phone camera disconnected', 'Connect the phone again to start a new replay.');
+      const message = 'The phone stopped sending video. Open the camera page on the phone and reconnect.';
+      stopCamera('ended', message);
+      showViewerMessage('Phone camera disconnected', message);
     };
-    track.addEventListener('ended',disconnected,{ once:true });
-    state.removeRemoteListener = () => track.removeEventListener('ended',disconnected);
+    const interrupted = () => {
+      state.remoteMuted = true;
+      if (!state.running) return;
+      const message = 'Phone video paused. Keep the phone unlocked and return to the camera page to resume.';
+      showViewerMessage('Waiting for phone video', message);
+      remotePhase('interrupted', message);
+    };
+    const resumed = () => {
+      state.remoteMuted = false;
+      state.lastDataAt = now();
+      if (state.running) {
+        if (state.replayReady) ui.viewerMessage.hidden = true;
+        else showViewerMessage('Building replay buffer', 'Phone video resumed. The delayed replay is warming up.');
+        remotePhase('receiving', 'The TV is receiving phone video.');
+      }
+    };
+    state.remoteMuted = track.muted;
+    track.addEventListener('ended', disconnected, { once:true });
+    track.addEventListener('mute', interrupted);
+    track.addEventListener('unmute', resumed);
+    state.removeRemoteListener = () => {
+      track.removeEventListener('ended', disconnected);
+      track.removeEventListener('mute', interrupted);
+      track.removeEventListener('unmute', resumed);
+    };
     try {
-      await ui.live.play();
-      await waitForCameraMetadata();
+      await waitForPhoneVideo(track);
       if (request !== state.cameraRequest || track.readyState !== 'live') throw new Error('The phone disconnected before replay started.');
       const settings = track.getSettings?.() || {};
       state.sourceFps = Number(settings.frameRate) || 0;
@@ -1213,20 +1287,37 @@
         (state.sourceFps ? ` · ${rateLabel(state.sourceFps)} FPS` : '');
       ui.cameraStatus.textContent = 'Connected phone';
       applyMirror(); startReplayEngine(); updateControls(); requestWakeLock();
+      if (state.sourceMode !== 'remote' || request !== state.cameraRequest) throw new Error('The TV could not start its video replay engine.');
+      remotePhase('receiving', 'The TV is receiving phone video.');
     } catch (error) {
-      if (request === state.cameraRequest) stopCamera();
+      if (request === state.cameraRequest) stopCamera('startup-error', error.message);
       throw error;
     }
   }
+  function resumeRemotePlayback() {
+    if (state.sourceMode !== 'remote') return;
+    if (state.resumeRemoteStart) { state.resumeRemoteStart(); return; }
+    if (!state.running || !ui.live.paused) return;
+    const request = state.cameraRequest;
+    ui.live.play().then(() => {
+      if (request !== state.cameraRequest) return;
+      state.lastDataAt = now();
+      remotePhase('receiving', 'The TV is receiving phone video.');
+    }).catch(() => {
+      if (request === state.cameraRequest) remotePhase('playback-blocked', 'Tap to resume phone video on the TV.');
+    });
+  }
   window.FGSReplayCamera = Object.freeze({
     startRemote,
+    resumeRemote: resumeRemotePlayback,
     endRemote(stream) {
-      if (state.sourceMode === 'remote' && (!stream || stream === state.remoteSource)) stopCamera();
+      if (state.sourceMode === 'remote' && (!stream || stream === state.remoteSource)) stopCamera('external');
     },
     get isRemote() { return state.sourceMode === 'remote'; }
   });
-  function stopCamera() {
+  function stopCamera(reason = 'user', message = '') {
     const wasRemote = state.sourceMode === 'remote';
+    state.cancelRemoteStart?.(); state.remoteMuted = false;
     state.removeRemoteListener?.(); state.removeRemoteListener = null; state.remoteSource = null;
     state.cameraRequest += 1;
     state.running = false;
@@ -1257,7 +1348,9 @@
       state.reviewPaused = ui.sessionVideo.paused;
       updateControls();
     }
-    if (wasRemote) window.dispatchEvent(new Event('fgs:remote-stopped'));
+    if (wasRemote) window.dispatchEvent(new CustomEvent('fgs:remote-stopped', {
+      detail: { reason: typeof reason === 'string' ? reason : 'user', message }
+    }));
   }
   function applyMirror() {
     ui.delayedVideo.classList.toggle('mirrored', state.mirrored);
@@ -2139,6 +2232,13 @@
       ui.sessionVideo.pause();
       if (state.sessionReview) state.reviewPaused = true;
     }
+    if (state.sourceMode === 'remote') {
+      if (document.visibilityState === 'visible') {
+        state.lastDataAt = now();
+        if (state.running) { resumeRemotePlayback(); requestWakeLock(); }
+      }
+      return;
+    }
     if (document.visibilityState === 'hidden' && (state.running || state.starting)) {
       const demo = state.sourceMode === 'demo';
       stopCamera();
@@ -2147,7 +2247,7 @@
     } else if (document.visibilityState === 'visible' && state.running) requestWakeLock();
   });
   window.addEventListener('pagehide', () => {
-    stopCamera();
+    stopCamera('pagehide');
     if (state.downloadUrl) URL.revokeObjectURL(state.downloadUrl);
     state.downloadUrl = '';
     ui.download.hidden = true;
