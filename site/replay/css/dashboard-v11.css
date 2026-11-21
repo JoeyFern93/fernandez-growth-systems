@@ -224,6 +224,19 @@ body.fgs-replay {
 .fgs-replay:has(#replayStage[data-replay-size="maximum"][data-quick-view="true"]) .app-shell { padding: 0; }
 .fgs-replay #replayStage[data-replay-size="maximum"][data-quick-view="true"] .viewer { border-radius: 0; border: 0; }
 
+@media (max-width:420px) {
+  .fgs-replay .replay-size-field {
+    position: relative; display: grid; place-items: center; min-width: 46px; height: 40px;
+    border: 1px solid #66816c; border-radius: 7px; background: #183026; color: var(--dash-ink);
+  }
+  .fgs-replay .replay-size-field span { display: inline; font-size: .74rem; }
+  .fgs-replay .replay-size-field span::after { content: ' ▾'; }
+  .fgs-replay .replay-size-field select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+  .fgs-replay .replay-size-field:focus-within { outline: 2px solid #d2eab6; }
+  .fgs-replay .replay-view-bar .delay-badge[data-seconds] { font-size: 0; }
+  .fgs-replay .replay-view-bar .delay-badge[data-seconds]::after { content: attr(data-seconds) 's'; font-size: .7rem; }
+}
+
 .fgs-replay .clip-preview-dialog:not([open]) { display:none; }
 .fgs-replay .clip-preview-dialog[open] {
   position:fixed; inset:0; z-index:150; box-sizing:border-box; margin:0;

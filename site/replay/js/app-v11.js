@@ -154,6 +154,8 @@
     const seconds = Number(ui.delay.value);
     ui.delayValue.textContent = plural(seconds, 'second');
     ui.delayBadge.textContent = `${seconds}s delay`;
+    ui.delayBadge.dataset.seconds = seconds;
+    ui.delayBadge.setAttribute('aria-label', `Replay delay, ${plural(seconds, 'second')}`);
     ui.delayBadge.title = `Replay delay: ${plural(seconds, 'second')}`;
   }
   function updateControls() {
