@@ -1,0 +1,23 @@
+name: Verify published Replay Studio
+on:
+  workflow_dispatch:
+  push:
+    branches: [cloudflare-migration-20261111]
+    paths:
+      - 'site/replay-studio/**'
+      - '.github/workflows/replay-studio-public.yml'
+permissions:
+  contents: read
+concurrency:
+  group: published-replay-studio-smoke
+  cancel-in-progress: false
+jobs:
+  public-routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/replay-studio-public.mjs

@@ -1,0 +1,14 @@
+.quality-panel {color:inherit;border:1px solid rgba(130,152,134,.48);border-radius:.65rem;padding:.55rem .8rem;margin:.35rem 0;min-width:0}
+.quality-panel summary {cursor:pointer;font-weight:650}
+.quality-panel dl {margin:.65rem 0;display:grid;gap:.35rem;font-size:.88rem}
+.quality-panel dl div {display:grid;grid-template-columns:minmax(5.4rem,23%) minmax(0,1fr);gap:.45rem;align-items:baseline}
+.quality-panel dd {margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.quality-panel dt,.quality-panel p {opacity:.84}
+.quality-panel p {font-size:.78rem;line-height:1.45;margin:.55rem 0}
+.quality-original {border-top:1px solid rgba(130,152,134,.4);padding-top:.55rem}
+.quality-original button,.quality-original a {font:inherit;font-size:.88rem}
+.quality-original output {display:block;font-size:.83rem;margin-top:.35rem}
+.quality-original a {color:inherit;margin-inline-start:.55rem;text-decoration:underline}
+.quality-file {margin-top:.55rem}
+.quality-file output {display:block;font-size:.82rem;margin-top:.3rem}
+.quality-file-probe {position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}

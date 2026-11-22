@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1F563B">
+  <meta name="description" content="Review practice on a delay, pair a phone with a TV, and compare two camera angles. Replay Studio includes a Volleyball Mode demo and on-device clip exports.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark">
+  <title>Replay Studio | Fernandez Growth Systems</title>
+  <link rel="canonical" href="https://www.fernandezgrowthsystems.com/replay-studio/">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://sitereview.fernandezgrowthsystems.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="/favicon-v5.ico" sizes="any">
+  <link rel="icon" href="/favicon-v5.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/fgs-apple-180-v4.png">
+  <link rel="stylesheet" href="css/app-v10.css?v=16745283f035">
+  <link rel="preload" href="../assets/brand/fonts/Nunito-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css?v=8832ab1a9e06">
+  <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css?v=465557656770">
+  <link rel="stylesheet" href="/assets/tool-install-v1.css?v=4122f70c207f">
+  <link rel="stylesheet" href="css/dashboard-v11.css?v=56e78b7ca374">
+  <link rel="stylesheet" href="/replay-studio/tv/pair.css?v=7a29e5dfe7ee">
+  <link rel="stylesheet" href="/replay-studio/tv/quality.css?v=eb51917b3520">
+  <script defer src="/replay-studio/tv/quality.js?v=6f2a107c63c5"></script>
+  <script src="js/install-v4.js?v=bb7d2d97f6eb" defer></script>
+  <script defer src="/assets/fgs-review-bridge.js?v=d8293ba5c04f" data-review-origin="https://sitereview.fernandezgrowthsystems.com"></script>
+</head>
+<body class="fgs-replay" data-tool-name="Replay Studio">
+  <a class="skip-link" href="#main">Skip to replay controls</a>
+  <header class="app-header">
+    <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><img src="../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg" width="32" height="32" alt=""></a><div class="studio-switcher">
+      <h1>Replay Studio</h1>
+      <details id="studioModeMenu">
+        <summary aria-label="Replay Studio modes and tools">Modes</summary>
+        <nav aria-label="Replay Studio modes">
+          <a href="./tv/">Pair a phone with the TV</a>
+          <a href="./multicam/">Two-camera replay</a>
+          <a href="./volleyball/">Volleyball demo</a>
+          <a href="./device-test/">Check a recording</a>
+          <a href="/replay/">Open original Replay Cam</a>
+        </nav>
+      </details>
+    </div><span id="connectionBadge" class="badge">Ready</span></div>
+    <div class="header-actions"><button id="installBtn" type="button" class="button button-secondary" hidden>How to install</button><button id="fullscreenBtn" type="button" class="button button-secondary">Full screen</button></div>
+  </header>
+  <main class="app-shell" id="main" tabindex="-1">
+    <section id="replayStage" class="replay-stage dashboard-stage" aria-label="Camera and replay workspace">
+      <div class="video-column">
+        <div class="capture-toolbar">
+          <div class="primary-controls">
+            <button id="startBtn" type="button" class="button button-primary">Start camera</button>
+            <button id="startDemoBtn" type="button" class="button button-secondary" aria-describedby="demoHelp">Try demo</button>
+            <button id="stopBtn" type="button" class="button button-danger" disabled>Stop</button>
+          </div>
+          <button id="exitFullscreenBtn" type="button" class="button button-secondary" hidden>Exit full screen</button>
+        </div>
+        <p id="demoHelp" class="visually-hidden">Try Replay Studio with a moving timer and colored bar. Press Stop before starting your camera.</p>
+        <p id="replayInstallStatus" class="help-text" role="status" hidden></p>
+        <div id="viewer" class="viewer" tabindex="0" aria-label="Camera replay">
+          <video id="delayedVideo" autoplay playsinline muted></video>
+          <video id="sessionVideo" playsinline muted hidden></video>
+          <canvas id="delayedCanvas" hidden></canvas>
+          <div id="viewerMessage" class="viewer-message">
+            <strong>Ready to replay</strong><span>Start your camera to build replay history.</span>
+            <div id="quickDemoSlot">
+              <nav id="studioStartLinks" aria-label="More replay modes"><a href="./multicam/">Two cameras</a><a href="./volleyball/">Volleyball demo</a></nav>
+            </div>
+          </div>
+          <div class="viewer-overlay"><span id="engineBadge">On-device</span><span id="actualBadge">No camera</span></div>
+        </div>
+        <div class="replay-view-bar" role="group" aria-label="Replay display controls">
+          <div id="quickReplayTransport"></div>
+          <output id="delayBadge" class="delay-badge" aria-label="Replay delay">10s delay</output>
+          <label class="replay-size-field" for="replaySize"><span>Size</span>
+            <select id="replaySize" aria-label="Replay size"><option value="standard">Standard</option><option value="large">Large</option><option value="maximum">Maximum</option></select>
+          </label>
+          <button id="toggleReplayControls" type="button" class="button button-secondary" aria-expanded="false" aria-controls="playbackPanel cameraPanel clipsPanel">Controls</button>
+        </div>
+      </div>
+      <div class="panel-tabs" role="tablist" aria-label="Replay controls">
+        <button id="playbackTab" type="button" role="tab" aria-controls="playbackPanel" aria-selected="false" tabindex="-1">Playback</button>
+        <button id="cameraTab" type="button" role="tab" aria-controls="cameraPanel" aria-selected="true">Camera &amp; delay</button>
+        <button id="clipsTab" type="button" role="tab" aria-controls="clipsPanel" aria-selected="false" tabindex="-1">Clips &amp; help</button>
+      </div>
+      <section id="playbackPanel" class="review-controls playback-panel" aria-labelledby="reviewLabel">
+        <div class="review-heading">
+            <label id="reviewLabel" for="reviewRange">Video timeline</label>
+            <output id="reviewPosition" for="reviewRange">Start camera to build history</output>
+          </div>
+          <div id="timelineTrack" class="timeline-track" aria-hidden="true">
+            <canvas id="timelineCanvas" width="1200" height="112"></canvas>
+            <div id="timelinePlayhead" class="timeline-playhead"></div>
+          </div>
+          <input id="reviewRange" type="range" min="0" max="1" value="0" step="0.001" disabled aria-label="Review recorded video" aria-describedby="reviewHelp">
+          <div class="range-labels review-time-labels"><span id="historyStart">Oldest</span><span id="historyEnd">Newest</span></div>
+          <div class="review-actions" role="group" aria-label="Replay review controls">
+            <button id="rewindBtn" class="button button-secondary" type="button" aria-label="Back 5 seconds" disabled>−5s</button>
+            <button id="playPauseBtn" class="button button-secondary" type="button" aria-pressed="false" disabled>Pause replay</button>
+            <button id="forwardBtn" class="button button-secondary" type="button" aria-label="Forward 5 seconds" disabled>+5s</button>
+            <button id="returnDelayBtn" class="button button-secondary" type="button" disabled>Back to delay</button>
+          </div>
+          <div class="fine-controls">
+            <div class="frame-steps" role="group" aria-label="Step through frames"><button id="prevFrameBtn" type="button" class="button button-secondary" disabled>Previous frame</button><button id="nextFrameBtn" type="button" class="button button-secondary" disabled>Next frame</button></div>
+            <div class="review-speed">
+            <label for="playbackSpeed">Playback speed</label>
+            <select id="playbackSpeed" disabled><option value="0.125">0.125x</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1× — normal</option></select>
+          </div>
+            <button id="recordClipBtn" class="button button-success" type="button" disabled>Save clip</button>
+          </div>
+        <p id="reviewHelp" class="visually-hidden">Drag the timeline to pause and rewatch. Use the frame buttons for single-frame inspection. Back to delay follows your practice again.</p>
+      </section>
+      <section id="cameraPanel" class="settings-panel" role="tabpanel" aria-labelledby="cameraTab">
+        <h2>Camera setup</h2>
+        <div class="camera-fields">
+          <label>Camera<select id="cameraSelect"><option value="">Default camera</option></select></label>
+          <label>Camera quality<select id="captureResolution"><option value="640x360">360p</option><option value="1280x720" selected>720p</option><option value="1920x1080">1080p</option></select></label>
+          <label>Replay quality<select id="replayResolution"><option value="426x240">240p</option><option value="640x360">360p</option><option value="854x480" selected>480p</option><option value="1280x720">720p</option></select></label>
+          <label>Camera frame rate<select id="captureFps"><option value="max" selected>Maximum on this camera</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="240">240 FPS</option></select></label>
+        </div>
+        <p id="frameRateStatus" class="fps-readout" role="status">Start the camera to measure its frame rate.</p>
+        <div class="camera-actions"><button id="flipBtn" type="button" class="button button-secondary" disabled>Switch camera</button><button id="mirrorBtn" type="button" class="button button-secondary" aria-pressed="false">Mirror: off</button><button id="pairTvBtn" type="button" class="button button-secondary" aria-haspopup="dialog">TV display</button></div>
+        <details class="cast-help">
+          <summary>Cast or mirror this screen</summary>
+          <p>The TV shows the delayed replay and controls from this device. Connect both devices to the same Wi-Fi and start mirroring before starting the camera.</p>
+          <ul>
+            <li><strong>Android with Google Cast</strong> &mdash; In Google Home, open Devices, press and hold your TV, then choose <strong>Cast</strong> and <strong>Cast my screen</strong>. If asked, share Replay Studio or the browser you use for it.</li>
+            <li><strong>iPhone or iPad with AirPlay</strong> &mdash; Open Control Center, tap <strong>Screen Mirroring</strong> and select your TV.</li>
+            <li><strong>Computer with Google Cast</strong> &mdash; In Chrome, open the three-dot menu, choose <strong>Cast, save, and share</strong>, then <strong>Cast</strong>. Select this tab as the source and choose your TV.</li>
+          </ul>
+          <p>Return to Replay Studio and tap <strong>Try demo</strong>. When the moving timer appears on the TV, tap <strong>Stop</strong>, then <strong>Start camera</strong>. Choose <strong>Full screen</strong> for a larger view.</p>
+        </details>
+        <div class="delay-control">
+        <label for="delayRange">Replay delay <strong id="delayValue">10 seconds</strong></label>
+        <input id="delayRange" type="range" min="1" max="120" value="10" step="1">
+        <div class="range-labels"><span>1 sec</span><span>120 sec</span></div>
+        <div class="delay-presets" role="group" aria-label="Quick replay delay">
+          <button class="preset" type="button" data-delay="5" aria-pressed="false">5 sec</button>
+          <button class="preset" type="button" data-delay="10" aria-pressed="true">10 sec</button>
+          <button class="preset" type="button" data-delay="20" aria-pressed="false">20 sec</button>
+          <button class="preset" type="button" data-delay="30" aria-pressed="false">30 sec</button>
+        </div>
+        <p id="restartNote" class="inline-note" hidden>Release the slider to apply the new delay.</p>
+      </div>
+        <p class="help-text settings-help">Camera settings apply the next time you start. Replay quality controls the resolution used in compatibility mode.</p>
+      </section>
+      <section id="clipsPanel" class="clips-panel" role="tabpanel" aria-labelledby="clipsTab" hidden>
+        <h2>Clips &amp; recording</h2>
+        <section id="trimPanel" class="trim-panel" aria-labelledby="trimTitle" hidden>
+            <div class="trim-heading"><div><p class="eyebrow">SAVE AN EARLIER MOMENT</p><h3 id="trimTitle" tabindex="-1">Choose your clip</h3></div><output id="trimDuration" class="trim-duration">0:00 selected</output></div>
+            <p id="trimHelp" class="help-text">Drag the left and right handles to choose the start and end. Use the arrow keys when a handle is focused.</p>
+            <section class="trim-preview" aria-labelledby="trimPreviewTitle">
+              <div class="trim-preview-heading"><h4 id="trimPreviewTitle">Selected clip preview</h4><output id="trimPreviewPosition" aria-live="off">0:00 / 0:00</output><button id="clipPreviewSizeBtn" type="button" class="button button-secondary" aria-haspopup="dialog" aria-controls="clipPreviewDialog">Enlarge preview</button></div>
+              <div id="trimPreviewFrame" class="trim-preview-frame"><canvas id="trimPreviewCanvas" width="854" height="480" role="img" aria-label="Selected clip preview">Your selected video appears here.</canvas></div>
+              <input id="trimPreviewSeek" class="trim-preview-seek" type="range" min="0" max="1" value="0" step="0.001" aria-label="Clip preview position" aria-describedby="trimPreviewHelp" disabled>
+              <div class="trim-preview-controls"><button id="trimPreviewBtn" class="button button-secondary" type="button" disabled>Preview selection</button><span id="trimPreviewState" aria-live="off">Ready to preview</span></div>
+              <div class="trim-frame-controls">
+                <button id="trimPrevFrameBtn" class="button button-secondary" type="button" disabled>Previous frame</button>
+                <button id="trimNextFrameBtn" class="button button-secondary" type="button" disabled>Next frame</button>
+                <label for="trimPreviewSpeed">Preview speed</label>
+                <select id="trimPreviewSpeed" disabled><option value="0.125">0.125x</option><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option></select>
+              </div>
+              <p id="trimPreviewHelp" class="help-text">Drag the edges below, then play your selection here before saving.</p>
+            </section>
+            <dialog id="clipPreviewDialog" class="clip-preview-dialog" aria-labelledby="trimPreviewTitle"></dialog>
+            <div class="trim-track">
+              <canvas id="trimTimelineCanvas" width="1200" height="112" aria-hidden="true"></canvas>
+              <div id="trimSelection" class="trim-selection" aria-hidden="true"></div>
+              <input id="trimStartRange" class="trim-range trim-start" type="range" min="0" max="1" value="0" step="0.05" aria-label="Clip start time" aria-describedby="trimHelp trimStartTime" disabled>
+              <input id="trimEndRange" class="trim-range trim-end" type="range" min="0" max="1" value="1" step="0.05" aria-label="Clip end time" aria-describedby="trimHelp trimEndTime" disabled>
+            </div>
+            <div class="trim-time-labels"><span>Start <output id="trimStartTime" for="trimStartRange">0:00</output></span><span>End <output id="trimEndTime" for="trimEndRange">0:00</output></span></div>
+            <div class="trim-actions"><button id="trimExportBtn" class="button button-success" type="button" disabled>Save selected clip</button><button id="trimCancelBtn" class="button button-secondary" type="button">Cancel</button></div>
+            <progress id="trimProgress" max="100" value="0" aria-label="Creating selected clip" hidden></progress>
+            <p id="trimStatus" class="help-text" role="status" aria-live="polite">Preview your selection, then save it to this device.</p>
+            <button id="trimCancelExportBtn" class="button button-secondary" type="button" hidden>Cancel clip export</button>
+          </section>
+        <a id="downloadLink" class="button button-success button-block" hidden>Download clip</a>
+        <div class="clip-length-field"><label for="clipLength">Initial clip length</label><select id="clipLength"><option value="5">5 seconds</option><option value="8" selected>8 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option></select></div>
+        <p class="help-text">Choose Save clip in Playback to trim a moment from the available timeline.</p>
+        <section class="session-recording" aria-labelledby="sessionRecordingTitle">
+        <div class="session-recording-heading"><div><h3 id="sessionRecordingTitle">Keep a longer session</h3><p id="sessionStatus" class="help-text" role="status" aria-live="polite">Not recording a session</p></div><button id="sessionRecordBtn" class="button button-secondary" type="button" disabled>Start recording</button></div>
+        <p class="help-text session-recording-help">Optional. Records from the moment you start, up to 10 minutes or 128 MB. Recent replay footage is kept automatically while the camera is on.</p>
+        <div class="session-file-actions"><a id="sessionDownloadLink" class="button button-secondary" hidden>Download session</a><button id="reviewSessionBtn" class="button button-secondary" type="button" hidden>Review recorded session</button><button id="returnRecentBtn" class="button button-secondary" type="button" hidden>Back to recent footage</button></div>
+      </section>
+        <details class="card guide-card">
+        <summary>How to use Replay Studio</summary>
+        <ol><li>Place your device where it can see the whole skill.</li><li>Choose a delay that gives you time to return to the screen.</li><li>Tap <strong>Start camera</strong> and allow camera access when your browser asks.</li><li>Wait for the replay to appear, then practice and watch.</li><li>Drag the <strong>Video timeline</strong> backward to pause and inspect a skill. Tap <strong>Save clip</strong> to trim that available footage, or <strong>Back to delay</strong> to practice again.</li></ol>
+        <p class="help-text">If the camera is blocked, check this site's camera permission in your browser. Open Replay Studio directly in Safari or Chrome.</p>
+        <p class="help-text">Use the timeline with a finger, mouse, or arrow keys. Full screen keeps the review controls beside or below the video. Available delay, history, full screen, and clip recording depend on your device and browser. Compatibility mode uses a shorter history at lower quality. Switching apps or locking your screen stops the session and clears the rolling history; start again when you return.</p>
+      </details>
+        
+
+    <details id="quality-panel" class="quality-panel">
+
+      <summary>Video diagnostics</summary>
+
+      <dl><div><dt>Transport</dt><dd id="quality-transport">Disconnected</dd></div><div><dt>Codec</dt><dd id="quality-codec">—</dd></div><div><dt>TV input</dt><dd id="quality-capture">Waiting for video</dd></div><div><dt>Replay</dt><dd id="quality-replay">Waiting for video</dd></div><div><dt>Connection</dt><dd id="quality-channel">Waiting for packets</dd></div></dl>
+
+      <p>Changed frames per second compares small images while this panel is open. Still scenes can read zero. Sampled frames count callbacks. Decoder queue measures buffered media ahead of playback.</p><div class="quality-file"><button id="quality-inspect" type="button">Check saved file</button><output id="quality-export"></output></div><button id="quality-readings" type="button">Download readings</button>
+
+    </details>
+    <section class="card diagnostics-card" aria-labelledby="statusTitle">
+        <p class="eyebrow">STATUS</p><h2 id="statusTitle">Session details</h2>
+        <dl><div><dt>Camera</dt><dd id="cameraStatus">Stopped</dd></div><div><dt>Replay</dt><dd id="replayStatus">Waiting</dd></div><div><dt>Buffer</dt><dd id="bufferStatus">0 seconds</dd></div></dl>
+      </section>
+        <section class="card privacy-card" aria-labelledby="privacyTitle">
+        <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Where your video goes</h2>
+        <p>Ordinary replay runs on this device. In a private TV room, your phone sends silent video to the paired display. If direct video stalls, the phone can automatically send encrypted video through the Fernandez Growth Systems relay. Select Direct only on the phone to opt out. Keep the phone link private because it contains the video key. Screen mirroring shares what you see with the TV you select.</p>
+        <p>Recent replay clears when you stop. Download clips and completed session recordings before closing or refreshing this page. Downloaded videos become normal files on this device, so follow your organization's recording, consent, and deletion policies.</p>
+      </section>
+        <a href="/tools" class="home-link">All FGS tools</a>
+      </section>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="replayInstallHelp" class="tool-install-dialog" aria-labelledby="installHeading">
+    <div class="tool-install-dialog-inner">
+      <button id="closeInstallHelp" class="tool-install-close" type="button" aria-label="Close installation help" autofocus>&times;</button>
+      <h2 id="installHeading">How to install Replay Studio</h2>
+      <section data-install-device="android" hidden>
+        <h3>Chrome on Android</h3>
+        <ol>
+          <li>Open this page in Chrome and tap the three-dot menu.</li>
+          <li>Tap <strong>Install and create shortcut</strong>, then <strong>Install</strong>. Some versions show <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+          <li>Confirm the installation. Look for Replay Studio on your device.</li>
+        </ol>
+        <p>If Chrome only offers <strong>Create shortcut</strong>, that option adds a home screen link that opens in Chrome.</p>
+      </section>
+      <section data-install-device="ios" hidden>
+        <h3>Safari on iPhone or iPad</h3>
+        <ol>
+          <li>Open this page in Safari and tap <strong>Share</strong>. In some layouts, tap the page menu first.</li>
+          <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Turn on <strong>Open as Web App</strong> if you see it, then tap <strong>Add</strong>.</li>
+        </ol>
+      </section>
+      <section data-install-device="desktop" hidden>
+        <h3>On a computer</h3>
+        <p><strong>Chrome</strong> &mdash; Open the three-dot menu, choose <strong>Cast, save, and share</strong>, then <strong>Install page as app</strong>.</p>
+        <p><strong>Edge</strong> &mdash; Open the three-dot menu, then choose <strong>More tools</strong>, <strong>Apps</strong>, and <strong>Install this site as an app</strong>.</p>
+        <p><strong>Safari on Mac</strong> &mdash; Open the <strong>File</strong> menu and choose <strong>Add to Dock</strong>.</p>
+        <p>If your browser has no install option, you can bookmark Replay Studio and use it here.</p>
+      </section>
+    </div>
+  </dialog>
+  <video id="liveVideo" autoplay playsinline muted hidden></video>
+  <canvas id="processingCanvas" hidden></canvas>
+  <canvas id="clipCanvas" hidden></canvas>
+  <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
+  <script src="js/frame-times-v1.js?v=2d651db02d37" defer></script>
+  <script src="js/frame-export-v1.js?v=07b6b1a13a68" defer></script>
+  <script src="js/app-v11.js?v=898b2be56147" defer></script>
+  <script src="/replay-studio/tv/relay-media.js?v=517561d29f42" defer></script>
+  <script src="/replay-studio/tv/pair.js?v=dd617a821d2b" defer></script>
+  <script src="js/replay-ui.js?v=5994a7be705f" defer></script>
+  <script src="js/dashboard-v11.js?v=0a590ab9277a" defer></script>
+</body>
+</html>

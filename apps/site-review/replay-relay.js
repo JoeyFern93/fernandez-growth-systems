@@ -4,6 +4,8 @@ const MAX_DAY_BYTES = 400 * 1024 * 1024;
 const RUN_MS = 30 * 60000;
 const MAX_ROOMS = 4;
 export const relaySchema = [
+  `CREATE TABLE IF NOT EXISTS replay_tv_readiness (
+     id TEXT PRIMARY KEY REFERENCES replay_pairs(id) ON DELETE CASCADE, direct TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS replay_relays (
      id TEXT PRIMARY KEY REFERENCES replay_pairs(id) ON DELETE CASCADE, status TEXT NOT NULL,
      formats TEXT NOT NULL, mime TEXT, latest INTEGER NOT NULL DEFAULT -1,
@@ -60,9 +62,25 @@ export async function replayRelay({request,db,id,role,action,url,now,pair,body,f
   if(!pair.phone_hash && role!=='tv') fail(409,'Pair the phone before sharing video.');
   const lookup=()=>db.prepare('SELECT status,formats,mime,latest,last_at,expires FROM replay_relays WHERE id=?').bind(id).first();
   const row=await lookup();
-  if(action==='relay' && request.method==='GET') return {data:status(row,pair.expires)};
+  if(action==='relay' && request.method==='GET') {
+    const readiness=await db.prepare('SELECT direct FROM replay_tv_readiness WHERE id=?').bind(id).first();
+    return {data:{...status(row,pair.expires),direct:readiness?.direct || 'waiting'}};
+  }
   if(action==='relay') {
     const input=await body(request);
+    // No media or device time is stored here. A late moving-frame acknowledgement
+    // cannot reverse a committed fallback, even if the two requests cross in flight.
+    if(input.action==='direct') {
+      if(role!=='tv') fail(403,'Only the display can confirm received video.');
+      if(!['moving','fallback','relay-moving'].includes(input.state)) fail(400,'Choose a display state.');
+      if(input.state==='relay-moving' && row?.status!=='active') fail(409,'The relay must be active.');
+      await db.prepare(`INSERT INTO replay_tv_readiness(id,direct)
+        SELECT id,? FROM replay_pairs WHERE id=? AND ended=0 AND (expires>? OR EXISTS
+          (SELECT 1 FROM replay_relays WHERE id=replay_pairs.id AND status='active' AND expires>?))
+        ON CONFLICT(id) DO UPDATE SET direct=excluded.direct WHERE direct='moving' OR excluded.direct='relay-moving'`)
+        .bind(input.state,id,now,now).run();
+      return {data:{status:'ok'}};
+    }
     if(input.action==='stop') {
       await db.batch([db.prepare("UPDATE replay_relays SET status='ended',writer=NULL WHERE id=?").bind(id),
         db.prepare('DELETE FROM replay_relay_chunks WHERE pair_id=?').bind(id)]);

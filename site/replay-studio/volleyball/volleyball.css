@@ -1,0 +1,28 @@
+@font-face{font-family:Nunito;src:url('../../assets/brand/fonts/Nunito-Variable.woff2') format('woff2');font-weight:200 900;font-display:swap}
+:root{color-scheme:dark;font:16px/1.4 Nunito,system-ui,sans-serif;background:#0c1915;color:#f1f6ec}
+*{box-sizing:border-box}
+body{margin:0}
+main{width:min(100%,1370px);margin:auto;padding:clamp(12px,2.3vw,34px)}
+header,figcaption,.timeline,.settings,.group{display:flex;align-items:center}
+header,figcaption{justify-content:space-between}
+header{gap:12px;margin-bottom:12px}
+a{color:#c5dfa9;text-underline-offset:.2em;font-size:.9rem}
+h1{font-size:clamp(1.4rem,3vw,2rem);margin:.08rem 0 0;letter-spacing:-.04em;line-height:1.1}
+figure{margin:0;background:#050a08;position:relative;min-width:0;overflow:hidden;border:1px solid #375142;border-radius:12px}
+figcaption{position:absolute;z-index:1;left:0;right:0;top:0;padding:8px 12px;gap:8px;background:linear-gradient(#07130edb,transparent);font-size:.88rem;color:#fff;font-weight:800;pointer-events:none}
+canvas,video{display:block;width:100%;height:min(62vh,calc((100vw - 24px)*.5625));object-fit:contain;background:#07100d}
+#viewer.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+#viewer.pair canvas{height:min(61vh,calc((100vw - 44px)*.28125))}
+.timeline,.settings{gap:8px;flex-wrap:wrap;margin-top:10px}
+.timeline{flex-wrap:nowrap;background:#14261c;border:1px solid #365242;border-radius:10px;padding:5px 8px}
+input[type=range]{flex:1;min-width:35px;accent-color:#cde9af}
+output{font-size:.83rem;font-variant-numeric:tabular-nums;color:#d6dfd1}
+button,select,.file-button{cursor:pointer;font:inherit;font-size:.9rem;font-weight:750;border-radius:7px;padding:6px 10px;border:1px solid #4d6856;background:#192f23;color:inherit}
+button[aria-pressed=true],#play{background:#d0e8b9;color:#12271b;border-color:#d0e8b9}
+button:disabled,select:disabled{opacity:.48;cursor:default}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,.file-button:focus-within{outline:3px solid #fcd778;outline-offset:2px}
+.group{gap:3px}.settings label{font-size:.85rem;color:#c6d6c9}.settings select{margin-left:3px}
+.file-button{position:relative;overflow:hidden}.file-button input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+p{font-size:.87rem;color:#bbccbc;margin:.55rem 0}
+[hidden]{display:none!important}
+@media(max-width:580px){#viewer.pair{grid-template-columns:1fr}#viewer.pair canvas{height:min(27vh,56vw)}.file-button{font-size:.8rem}output{font-size:.7rem}}

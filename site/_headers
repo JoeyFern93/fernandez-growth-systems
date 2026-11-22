@@ -33,6 +33,13 @@
 /replay/sw.js
   Cache-Control: no-cache
 
+/replay-studio/*
+  X-Robots-Tag: noindex, nofollow
+  Permissions-Policy: camera=(self), microphone=(), geolocation=()
+
+/replay-studio/sw.js
+  Cache-Control: no-cache
+
 /tools-directory-sw.js
   Cache-Control: no-cache
 

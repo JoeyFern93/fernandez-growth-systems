@@ -1,0 +1,37 @@
+{
+  "name": "Replay Studio – Fernandez Growth Systems",
+  "short_name": "Replay Studio",
+  "description": "Delayed sports replay, phone-to-TV camera pairing and synced camera angles.",
+  "id": "/replay-studio/",
+  "start_url": "/replay-studio/",
+  "scope": "/replay-studio/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14241D",
+  "theme_color": "#1F563B",
+  "categories": [
+    "sports",
+    "utilities",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icons/fgs-192-v4.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/fgs-512-v4.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/fgs-maskable-512-v4.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

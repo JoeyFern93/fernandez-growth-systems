@@ -45,6 +45,24 @@ const lines=['v=0','o=- 123 1 IN IP4 127.0.0.1','s=private device nickname','t=0
 const offer={type:'offer',sdp:lines.join('\r\n')+'\r\n'};
 const answer={type:'answer',sdp:offer.sdp.replace('sendonly','recvonly').replace('actpass','active')};
 
+test('two-angle invites allow one native video plus one private control channel and have no relay',async()=>{
+  const tv=token(),phone=token(),room=await(await call('','POST',{tvToken:tv,purpose:'multicam'})).json();
+  assert.match(room.id,/^~[A-Za-z0-9_-]{21}$/);
+  const path='/'+room.id;
+  assert.equal((await call(path+'/claim','POST',{invite:room.invite,phoneToken:phone})).status,200);
+  const control='m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:1\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n';
+  const multiOffer={type:'offer',sdp:offer.sdp+control};
+  assert.equal((await call(path+'/offer','POST',offer,phone)).status,400);
+  assert.equal((await call(path+'/offer','POST',{type:'offer',sdp:multiOffer.sdp+control},phone)).status,400);
+  assert.equal((await call(path+'/offer','POST',multiOffer,phone)).status,200);
+  const received=await(await call(path,'GET',undefined,tv)).json();
+  assert.ok(received.offer.sdp.includes('a=sctp-port:5000'));
+  assert.equal((await call(path+'/ice-servers','GET',undefined,phone)).status,403);
+  assert.equal((await call(path+'/relay','POST',{action:'start',mimeType:'image/jpeg'},phone)).status,403);
+  const normal=await pairedDevices();
+  assert.equal((await call(normal.path+'/offer','POST',multiOffer,normal.phone)).status,400);
+});
+
 test('only the production Replay origins may signal; preflights and request limits are restricted',async()=>{
   assert.equal((await call('','POST',{tvToken:token()},null,'https://elsewhere.example')).status,403);
   const options=async(origin,method)=>worker.fetch(new Request(endpoint,{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':method,'Access-Control-Request-Headers':'Content-Type'}}),{DB});
@@ -107,6 +125,10 @@ test('expired credentials cannot join and reuse of a TV token generates a fresh 
   assert.equal((await call(path+'/claim','POST',{invite:pair.invite,phoneToken:token()})).status,403);
 });
 test('creation budgets bound active signaling rows and preserve retries for existing TVs',async t=>{
+  // All simulated requests belong to the same ten-minute quota window,
+  // including when a real test run crosses the wall-clock boundary.
+  const now=Date.now();
+  t.mock.method(Date,'now',()=>now);
   t.after(()=>DB.prepare("DELETE FROM replay_pairs WHERE id GLOB 'quota_network_*' OR id GLOB 'quota_global_*'").run());
   const tv=token(),first=await(await call('','POST',{tvToken:tv})).json();
   const ip='203.0.113.24';
@@ -170,6 +192,17 @@ test('the TV requests encrypted sharing, the phone consents, and only the TV can
   const {id,path,tv,phone}=await pairedDevices(), route=path+'/relay';
   const request={action:'request',formats:['video/webm;codecs=vp8','image/jpeg']};
   const start={action:'start',mimeType:'video/webm;codecs=vp8'};
+  const report=(state,role)=>call(route,'POST',{action:'direct',state},role);
+  const receipt=async()=>(await (await call(route,'GET',undefined,phone)).json()).direct;
+  assert.equal(await receipt(),'waiting');
+  assert.equal((await report('moving',phone)).status,403);
+  assert.equal((await report('moving',token())).status,403);
+  assert.equal((await report('relay-moving',tv)).status,409);
+  assert.equal((await report('moving',tv)).status,200);
+  assert.equal(await receipt(),'moving');
+  assert.equal((await report('fallback',tv)).status,200);
+  await report('moving',tv);
+  assert.equal(await receipt(),'fallback');
   const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
   const iv=randomBytes(12), clear=Buffer.from('Replay recording test frame 01');
   const sealed=Buffer.concat([iv,Buffer.from(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,clear))]);
@@ -180,6 +213,9 @@ test('the TV requests encrypted sharing, the phone consents, and only the TV can
   assert.equal((await call(route,'POST',{action:'start',mimeType:'video/mp4'},phone)).status,409);
   assert.equal((await relayPacket(path,phone,0,sealed)).status,410);
   assert.equal((await call(route,'POST',start,phone)).status,200);
+  assert.equal((await report('relay-moving',tv)).status,200);
+  await report('fallback',tv);
+  assert.equal(await receipt(),'relay-moving');
   assert.equal((await relayPacket(path,tv,0,sealed)).status,403);
   assert.equal((await relayPacket(path,phone,0)).status,403);
   assert.equal((await relayPacket(path,token(),0)).status,403);

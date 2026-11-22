@@ -58,14 +58,21 @@ async function body(request,limit=1200) {
 function publicState(pair) {
   return {status:pair.answer ? 'answered' : pair.offer ? 'offered' : pair.phone_hash ? 'paired' : 'waiting',expiresAt:pair.expires};
 }
-function description(value,kind) {
+function description(value,kind,angleRoom=false) {
   if(value.type!==kind || typeof value.sdp!=='string' || value.sdp.length>MAX_SDP) fail(400,'Choose a valid video connection description.');
   const lines=value.sdp.replace(/\r\n/g,'\n').replace(/\n$/,'').split('\n');
   if(lines.length>512 || lines[0]!=='v=0' || lines.some(line=>line.length>2048 || !/^[a-z]=[\x20-\x7e]*$/.test(line))) {
     fail(400,'The video connection description is invalid.');
   }
   const media=lines.filter(line=>line.startsWith('m='));
-  if(media.length!==1 || !/^m=video \d{1,5} (?:UDP|TCP)\/TLS\/RTP\/SAVPF?(?: \d{1,3})+$/.test(media[0]) ||
+  const validVideo = /^m=video \d{1,5} (?:UDP|TCP)\/TLS\/RTP\/SAVPF?(?: \d{1,3})+$/;
+  const validControl = /^m=application \d{1,5} UDP\/DTLS\/SCTP webrtc-datachannel$/;
+  const validMedia = angleRoom
+    ? media.length===2 && media.filter(line=>validVideo.test(line)).length===1 &&
+      media.filter(line=>validControl.test(line)).length===1 &&
+      lines.includes('a=sctp-port:5000')
+    : media.length===1 && validVideo.test(media[0]);
+  if(!validMedia ||
       !lines.some(line=>/^a=fingerprint:sha-(?:256|384|512) (?:[a-f0-9]{2}:){15,}[a-f0-9]{2}$/i.test(line)) ||
       !lines.some(line=>/^a=ice-ufrag:\S+$/.test(line)) || !lines.some(line=>/^a=ice-pwd:\S+$/.test(line)) ||
       !lines.some(line=>line.startsWith('o=')) || !lines.some(line=>line.startsWith('t='))) {
@@ -73,15 +80,18 @@ function description(value,kind) {
   }
   // Keep the negotiated transport and codec parameters. Discard optional titles, URLs,
   // contacts and unknown attributes. SDP necessarily contains temporary ICE details.
-  return lines.filter(line=>/^[vostcmb]=/.test(line) || (line.startsWith('a=') && SDP_ATTRIBUTES.test(line.slice(2))))
+  return lines.filter(line=>/^[vostcmb]=/.test(line) || (line.startsWith('a=') && SDP_ATTRIBUTES.test(line.slice(2))) ||
+      (angleRoom && /^(?:a=sctp-port:5000|a=max-message-size:\d{1,10})$/.test(line)))
     .map(line=>line.startsWith('s=') ? 's=-' : line).join('\r\n')+'\r\n';
 }
 async function createPair(request,db,now) {
-  const {tvToken}=await body(request);
+  const {tvToken,purpose}=await body(request);
   requireToken(tvToken);
   const expiry = now+TTL;
   const [idSeed,tvHash,invite]=await Promise.all([digest('id',tvToken),digest('role',tvToken),digest('invite/'+expiry,tvToken)]);
-  const id=idSeed.slice(0,22), inviteHash=await digest('claim',invite);
+  // The reserved prefix cannot occur in ordinary base64url room identifiers.
+  const id=purpose==='multicam' ? '~'+idSeed.slice(0,21) : idSeed.slice(0,22);
+  const inviteHash=await digest('claim',invite);
   const ip=request.headers.get('CF-Connecting-IP');
   const bucket=ip ? await digest('network',Math.floor(now/TTL)+'/'+ip) : tvHash;
   const [,result]=await db.batch([
@@ -184,6 +194,8 @@ async function handle(request,env,id,action,now,url,helpers) {
   }
   if(row.ended) fail(410,'This pairing has ended.');
   const role=tv?'tv':'phone';
+  const angleRoom=id.startsWith('~');
+  if(angleRoom && ['ice-servers','relay','relay-chunk'].includes(action)) fail(403,'Multi-camera rooms use direct connections only.');
   if(action==='candidates') return candidates(request,db,id,role,url,now);
   if(action==='ice-servers') return {data:await helpers.turnIceServers(env,db,id,role,now)};
   if(action==='relay' || action==='relay-chunk') return helpers.replayRelay({request,db,id,role,action,url,now,pair:row,body,fail});
@@ -194,7 +206,7 @@ async function handle(request,env,id,action,now,url,helpers) {
     return {data};
   }
   if(action==='offer' ? !phone : !tv) fail(403,'This device cannot send that description.');
-  const sdp=description(await body(request,MAX_SDP*2),action);
+  const sdp=description(await body(request,MAX_SDP*2),action,angleRoom);
   if(row[action]) {
     if(row[action]!==sdp) fail(409,'This device already sent a different connection description.');
     return {data:publicState(row)};
@@ -212,7 +224,7 @@ export async function replayPair(request,env,url,helpers) {
   headers.set('Access-Control-Allow-Origin',origin);
   try {
     const path=url.pathname.slice(PREFIX.length);
-    const match=/^\/([A-Za-z0-9_-]{22})(?:\/(claim|offer|answer|end|candidates|ice-servers|relay|relay-chunk))?$/.exec(path);
+    const match=/^\/([~A-Za-z0-9_-][A-Za-z0-9_-]{21})(?:\/(claim|offer|answer|end|candidates|ice-servers|relay|relay-chunk))?$/.exec(path);
     if(path && !match) fail(404,'Pairing route not found.');
     const id=match?.[1], action=match?.[2];
     if(action==='relay-chunk' ? !/^\?seq=(?:0|[1-9]\d{0,6})$/.test(url.search) :

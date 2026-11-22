@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src blob:; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Volleyball Mode · FGS Replay Studio</title>
+  <link rel="stylesheet" href="volleyball.css">
+  <script defer src="court.js"></script>
+  <script defer src="player.js"></script>
+</head>
+<body>
+  <main>
+    <header><div><a href="../">Replay Studio</a><h1>Volleyball Mode</h1></div>
+      <label class="file-button">Open local rally<input id="file" type="file" accept="video/*"></label></header>
+    <section id="viewer" aria-label="Replay">
+      <figure><figcaption><span id="caption">Baseline · Follow Play</span><span id="source">Mock rally</span></figcaption>
+        <canvas id="primary" width="960" height="540" aria-label="Mock volleyball rally, primary angle"></canvas>
+        <video id="video" playsinline preload="metadata" hidden></video></figure>
+      <figure id="second" hidden><figcaption>Sideline · Full Court</figcaption>
+        <canvas id="secondary" width="960" height="540" aria-label="Wide mock sideline at the same time"></canvas></figure>
+    </section>
+    <div class="timeline">
+      <button id="play">Play</button><input id="scrub" aria-label="Replay time" type="range" min="0" max="16" step=".001" value="3.6">
+      <output id="time" for="scrub">3.60 / 16.00 s</output>
+    </div>
+    <div class="settings">
+      <div class="group" role="group" aria-label="View"><button id="wide" aria-pressed="false">Full Court</button><button id="follow" aria-pressed="true">Follow Play</button></div>
+      <label>Angle <select id="angle"><option value="baseline">Baseline</option><option value="sideline">Raised sideline</option><option value="both">Both angles</option></select></label>
+      <label>Analysis <select id="fps"><option value="30">30 FPS</option><option value="60">60 FPS</option></select></label>
+      <button id="reset" hidden>Return to mock rally</button>
+    </div>
+    <p id="note" aria-live="polite">16-second mock rally with synthetic ball and player tracks. Choose a local recording to watch it in Full Court.</p>
+  </main>
+</body></html>

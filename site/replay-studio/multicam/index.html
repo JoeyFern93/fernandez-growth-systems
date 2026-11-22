@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Two-angle replay · FGS Replay Studio</title>
+<link rel="stylesheet" href="./style.css"><script defer src="../tv/qrcode.js"></script>
+<script defer src="../volleyball/court.js"></script><script type="module" src="./tv.mjs"></script>
+</head><body><main>
+<header><div><a class="back" href="../">FGS Replay Studio</a><h1>Two-angle replay</h1></div>
+<button id="demo">Try synced demo</button></header>
+<div class="tools"><label>View <select id="layout"><option value="both">Side by side</option><option value="baseline">Baseline</option><option value="sideline">Sideline</option></select></label>
+<label>Delay <select id="delay"><option value="1">1 s</option><option value="3" selected>3 s</option><option value="5">5 s</option><option value="10">10 s</option></select></label>
+<span id="mode">Direct · same Wi-Fi · prototype</span></div>
+<div id="angles">
+<section id="baseline"><header><h2>Baseline</h2><button class="invite">Invite phone</button></header><div class="picture"><canvas width="640" height="360"></canvas><span class="missing">No camera paired</span></div><p class="status" aria-live="polite">Waiting for a phone</p></section>
+<section id="sideline"><header><h2>Sideline</h2><button class="invite">Invite phone</button></header><div class="picture"><canvas width="640" height="360"></canvas><span class="missing">No camera paired</span></div><p class="status" aria-live="polite">Waiting for a phone</p></section>
+</div>
+<input id="timeline" type="range" aria-label="Shared replay position" min="0" max="20000" value="20000" step="1" disabled>
+<div class="tools"><button id="pause" disabled>Pause</button><button id="step" disabled>Next frame</button><button id="follow" disabled>Back to delay</button>
+<output id="position">Waiting for capture timestamps</output><output id="alignment"></output></div>
+<details><summary>Save matching clips</summary><p>Mark one interval on the shared timeline. Each phone trims its own original and shows a download link.</p><div class="tools"><button id="mark-in">Mark start</button><button id="mark-out">Mark end</button><button id="save" disabled>Prepare both clips</button><output id="clip-status"></output></div></details>
+<dialog id="invite-dialog"><h2 id="invite-title"></h2><div id="qr"></div><p id="invite-note">Scan on a phone on the same Wi-Fi. This private invite expires in 10 minutes.</p>
+<div class="tools"><a id="phone-link">Open phone link</a><button id="close">Close</button></div></dialog>
+</main></body></html>
