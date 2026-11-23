@@ -1,6 +1,7 @@
 (() => {
   'use strict';
-  const apiRoot = 'https://sitereview.fernandezgrowthsystems.com/api/replay-pair';
+  const apiRoot = document.querySelector('meta[name="replay-pair-api"]')?.content === '/api/replay-pair'
+    ? location.origin + '/api/replay-pair' : 'https://sitereview.fernandezgrowthsystems.com/api/replay-pair';
   const phoneStart = document.getElementById('phone-start');
   const tvButton = document.getElementById('pairTvBtn');
   if (!phoneStart && !tvButton) return;
@@ -8,6 +9,99 @@
   let active = null;
   let qrLib = null;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const firstFrameWait = 12000, stallWait = 4500, relayFrameWait = 18000;
+  const current = s => active===s && !s.ended;
+  function expiry(s, until) {
+    clearTimeout(s.expiryTimer);
+    s.expires=until;
+    s.expiryTimer=setTimeout(()=>fail(s,new Error('This private room expired.')),Math.max(0,until-Date.now()));
+  }
+  function transport(s, label) {
+    s.transport=label;
+    window.FGSReplayQuality?.transport?.(label);
+  }
+  function frameStatus(s, value) {
+    s.directStatus=value;
+    if(s.sendingFrameStatus || !current(s))return;
+    s.sendingFrameStatus=true;
+    const send=async()=>{
+      let attempts=0;
+      while(current(s) && (!s.relaying || s.directStatus==='relay-moving') && s.sentFrameStatus!==s.directStatus && attempts<3) {
+        const state=s.directStatus;
+        try {
+          await api('/'+s.id+'/relay','POST',s.key,{action:'direct',state});
+          s.sentFrameStatus=state;attempts=0;
+        } catch(error) {
+          attempts++;
+          if(error.status===410 || error.status===403 || error.status===404 || error.status===400)break;
+          if(!current(s) || Date.now()>=s.expires)break;
+          await sleep(1500);
+        }
+      }
+      s.sendingFrameStatus=false;
+    };
+    send();
+  }
+  // Inspect the actual dashboard decoder. A playing event or an ICE connection
+  // can occur with a single frozen frame. Neither constitutes frame progress.
+  function observeDisplay(s, relay=false) {
+    s.cancelFrames?.();
+    const video=el('liveVideo'), began=Date.now();
+    let previous,decoded,frames=0,last=began,callback,interval,closed=false,readingStats=false;
+    function observe(stamp) {
+      if(closed || !current(s) || video.paused || !video.videoWidth || !Number.isFinite(stamp) || stamp===previous)return;
+      previous=stamp;
+      last=Date.now();
+      if(++frames<2 || s.usable)return;
+      s.usable=true;
+      if(relay)frameStatus(s,'relay-moving');
+      else {s.hadDirectFrames=true;transport(s,'Direct WebRTC');frameStatus(s,'moving');}
+      if(s.started)tvConnected(s);
+    }
+    function presented(_,meta) {
+      if(closed)return;
+      observe(meta.rtpTimestamp ?? meta.mediaTime);
+      callback=video.requestVideoFrameCallback(presented);
+    }
+    if(video.requestVideoFrameCallback)callback=video.requestVideoFrameCallback(presented);
+    interval=setInterval(async()=>{
+      if(closed || !current(s))return;
+      if(!video.requestVideoFrameCallback) {
+        const quality=video.getVideoPlaybackQuality?.();
+        if(quality)observe(quality.totalVideoFrames-quality.droppedVideoFrames);
+        else if(Number.isFinite(video.webkitDecodedFrameCount))observe(video.webkitDecodedFrameCount);
+      }
+      // Chromium can suspend presentation callbacks while the clip dialog or
+      // fullscreen replay covers the live element. Confirm an established
+      // stream's decoder has also stopped before initiating a handoff.
+      if(s.peer && !readingStats && Date.now()-last>1000 && (s.usable || !video.requestVideoFrameCallback)){
+        readingStats=true;
+        try {
+          const reports=await s.peer.getStats();
+          if(closed || !current(s))return;
+          for(const row of reports.values()) {
+            if(row.type!=='inbound-rtp' || (row.kind || row.mediaType)!=='video' || !Number.isFinite(row.framesDecoded))continue;
+            if(row.framesDecoded>0 && decoded!==undefined && row.framesDecoded>decoded){
+              if(s.usable)last=Date.now();
+              else observe(row.framesDecoded);
+            }
+            decoded=row.framesDecoded;
+          }
+        } catch { /* A closing peer can discard pending stats. */ }
+        finally {readingStats=false;}
+      }
+      if(closed || !current(s))return;
+      if(Date.now()-last < (s.usable ? stallWait : relay ? relayFrameWait : firstFrameWait))return;
+      s.cancelFrames();
+      if(relay)fail(s,new Error('The internet relay did not deliver playable video.'));
+      else offerRelay(s,'The display stopped receiving direct video.');
+    },250);
+    s.cancelFrames=()=>{
+      closed=true;clearInterval(interval);
+      if(callback!==undefined)video.cancelVideoFrameCallback?.(callback);
+      s.cancelFrames=null;
+    };
+  }
   const hasDirect = () => typeof RTCPeerConnection === 'function';
   const supported = role => window.isSecureContext && (hasDirect() || (role==='tv'
     ? window.FGSReplayRelay?.receiveFormats().length : window.FGSReplayRelay?.sendFormats().length));
@@ -27,7 +121,7 @@
         credentials:'omit', cache:'no-store', referrerPolicy:'no-referrer', keepalive, signal:abort?.signal});
     } finally { clearTimeout(timer); }
     if (!response.ok) {
-      const messages = {403:'This pairing link is no longer valid.', 404:'This code has expired.', 409:'This code is already in use.', 410:'This code has expired.', 429:'Pairing is busy. Try again in a moment.'};
+      const messages = {403:'This pairing link is no longer valid.', 404:'This code has expired.', 409:'This code is already in use.', 410:'This code has expired.', 429:'The pairing service is busy.'};
       const err = new Error(messages[response.status] || 'The pairing service could not be reached.');
       err.status = response.status;
       throw err;
@@ -49,8 +143,10 @@
     s.ended = true;
     if (active === s) active = null;
     closePeer(s);
-    clearTimeout(s.relayHintTimer);
+    clearTimeout(s.expiryTimer);clearTimeout(s.frameDeadline);
+    s.cancelFrames?.();
     s.relayController?.abort();
+    transport(s,'Disconnected');
     if (s.role === 'phone') {
       s.capture?.stop();
       stopTracks(s.media);
@@ -59,10 +155,10 @@
         el('phone-preview').hidden = true;
         el('phone-stop').hidden = true;
         el('phone-options').hidden = true;
-        el('phone-relay').hidden = true;
       }
     } else if (s.media) {
       window.FGSReplayCamera?.endRemote(s.media);
+      if (s.handoffPrevious && s.handoffPrevious !== s.media) window.FGSReplayCamera?.endRemote(s.handoffPrevious);
       if (tvButton) tvButton.textContent = 'TV display';
     }
     if (notifyServer && s.id && s.key) {
@@ -74,11 +170,11 @@
     end(s);
     const message = error.name === 'NotAllowedError' ? 'Allow camera access in your browser settings.' :
       error.name === 'NotFoundError' ? 'This phone could not find an available camera.' :
-      error instanceof TypeError ? 'Pairing could not reach the service. Check your internet connection.' :
+      error instanceof TypeError ? 'Pairing could not reach the service.' :
       error.message || 'The room connection was lost.';
     if (s.role === 'tv') tvState(message, 'retry');
     else {
-      el('phone-status').textContent = message + (message.includes('new code') ? '' : ' Create a new room on the display for a fresh phone link or QR code.');
+      el('phone-status').textContent = message + (error.name==='NotAllowedError' ? '' : ' Open a new TV room to retry.');
       phoneStart.hidden = true;
     }
   }
@@ -89,113 +185,118 @@
       onError:error=>{if(!s.ended && !s.relayController.signal.aborted)fail(s,error);}};
   }
   function offerRelay(s, message) {
-    if(s.ended || s.relaying || s.relayPending || s.closing)return;
-    if(!s.videoKey || !window.FGSReplayRelay || Date.now()>=s.expires) {
-      fail(s,new Error(message+' Open TV display on both updated browsers and scan a new code to try the relay.'));
+    if(!current(s) || s.relaying || s.relayPending || s.interrupted || s.closing)return;
+    if(s.directOnly || !s.videoKey || !window.FGSReplayRelay || Date.now()>=s.expires) {
+      fail(s,new Error(s.directOnly ? message+' Direct only is selected.' : message));
       return;
     }
-    clearTimeout(s.connectionTimer);
-    s.interrupted=true;
-    if(s.role==='phone') {
-      el('phone-status').textContent=message+' Use the internet relay to send video to the same room.';
-      el('phone-options').hidden=true;
-      el('phone-relay').hidden=false;
-    } else {
-      tvState(message+' Keep this room open. On the paired phone, tap Use internet relay.', 'relay');
+    s.interrupted=true;s.usable=false;
+    clearTimeout(s.frameDeadline);clearTimeout(s.connectionTimer);clearTimeout(s.disconnectTimer);
+    s.cancelFrames?.();
+    if(s.role==='phone')switchToRelay(s);
+    else {
+      if (s.media) s.keepReplay = !!window.FGSReplayCamera?.prepareRemoteHandoff?.(s.media);
+      frameStatus(s,'fallback');
+      tvState('Switching to internet relay.'+switchNotice(s),'relay');
     }
   }
+  function showTransport(s,mime) {
+    transport(s,mime==='image/jpeg'?'JPEG relay · low quality':'Encrypted video relay');
+  }
+  function switchNotice(s) {
+    if (s.role !== 'tv' || !s.hadDirectFrames) return '';
+    return s.keepReplay ? ' Earlier replay remains available.' : ' TV replay history starts over at the switch.';
+  }
   async function monitorRelay(s) {
-    if (!s.videoKey || !window.FGSReplayRelay) return;
     const path='/'+s.id+'/relay';
     let registered=false;
-    while (!s.ended && (!s.relaying || s.role==='tv' && !s.relayStarted) && Date.now()<s.expires) {
+    while (current(s) && (!s.relaying || s.role==='phone' && !s.relayConfirmed) && Date.now()<s.expires) {
       try {
         if(s.role==='tv' && !registered){
-          const formats=window.FGSReplayRelay.receiveFormats();
-          if(!formats.length)return;
-          await api(path,'POST',s.key,{action:'request',formats});
+          const formats=window.FGSReplayRelay?.receiveFormats() || [];
+          if(formats.length)await api(path,'POST',s.key,{action:'request',formats});
           registered=true;
         }
         const state=await api(path,'GET',s.key);
-        if(s.ended)return;
+        if(!current(s))return;
         if(state.status==='ended'){fail(s,new Error('The other device ended this pairing.'));return;}
         if(s.role==='phone') {
           s.formats=state.formats || [];
-          if(s.interrupted) el('phone-relay').hidden=false;
-        } else if(state.status==='active' && !s.relayStarted) {
-          s.relayStarted=true; s.relaying=true; s.notified=false;
+          if(s.relaying && state.direct==='relay-moving'){
+            s.relayConfirmed=true;clearTimeout(s.frameDeadline);
+            el('phone-status').textContent=s.transport+' · The TV is receiving video.'+switchNotice(s);
+            return;
+          }
+          if(state.direct==='fallback')offerRelay(s,'The TV could not receive direct video.');
+          if(state.direct==='moving' && !s.interrupted && !s.relayPending && !s.usable){
+            s.usable=true;s.hadDirectFrames=true;
+            clearTimeout(s.frameDeadline);
+            transport(s,'Direct WebRTC');
+            el('phone-status').textContent='Direct WebRTC · The TV is receiving video.';
+          }
+        } else if(state.status==='active') {
+          s.relaying=true;s.notified=false;s.usable=false;
+          clearTimeout(s.frameDeadline);s.cancelFrames?.();
+          if (s.media) s.keepReplay = !!window.FGSReplayCamera?.prepareRemoteHandoff?.(s.media);
+          if (s.keepReplay) s.handoffPrevious = s.media;
           closePeer(s);
-          if(s.media)window.FGSReplayCamera?.endRemote(s.media);
-          s.media=null; s.connected=false; s.started=false;
+          if(s.media && !s.keepReplay) { window.FGSReplayCamera?.endRemote(s.media); s.media=null; }
+          s.connected=false;s.started=false;
           s.relayController=new AbortController();
-          s.expires=state.expiresAt;
-          tvState('Phone approved the encrypted relay. Waiting for its video…','connecting');
+          expiry(s,state.expiresAt);showTransport(s,state.mimeType);
+          tvState('Switching to internet relay. Waiting for video.'+switchNotice(s),'connecting');
+          s.frameDeadline=setTimeout(()=>fail(s,new Error('The internet relay did not deliver playable video.')),relayFrameWait);
           const options=relayOptions(s,state.mimeType);
           options.onStream=async stream=>{
-            if (s.ended) { stopTracks(stream); return; }
+            if(!current(s)){stopTracks(stream);return;}
             s.media=stream;
+            observeDisplay(s,true);
             try {
-              await window.FGSReplayCamera.startRemote(stream);
-              if(s.ended)return;
-              s.started=true;s.connected=true;tvConnected(s);
-            } catch(error) {if(!s.ended)fail(s,error);}
+              await window.FGSReplayCamera.startRemote(stream,s.keepReplay);
+              if(!current(s))return;
+              s.handoffPrevious=null;
+              s.started=true;s.connected=true;
+              if(s.usable)tvConnected(s);
+            } catch(error){if(current(s))fail(s,error);}
           };
           await window.FGSReplayRelay.receive(options);
           return;
         }
       } catch(error) {
-        if (s.ended)return;
-        if(s.relayStarted){fail(s,error);return;}
-        if(error.status===410){
-          if(Date.now()<s.expires-2000 || !s.connected || s.interrupted)fail(s,new Error('This pairing has ended. Open a new code on the TV.'));
-          return;
-        }
-        if(error.status===403 || error.status===404)return;
+        if(!current(s))return;
+        if(s.relaying || [410,403,404].includes(error.status)){fail(s,error);return;}
       }
-      await sleep(s.connected && !s.interrupted ? 6500 : 1200);
+      await sleep(s.usable && !s.interrupted ? 2500 : 850);
     }
   }
-  async function consentToRelay() {
-    const s=active;
-    if(!s || s.role!=='phone' || s.ended || s.relaying || s.relayPending || !s.media || !s.videoKey)return;
-    const button=el('relay-consent');
+  async function switchToRelay(s) {
+    if(!current(s) || s.role!=='phone' || s.directOnly || s.relaying || s.relayPending || !s.media)return;
     s.relayPending=true;
-    button.disabled=true;
-    el('phone-status').textContent='Relay approved. Waiting for this display to get ready.';
+    el('phone-options').hidden=true;
+    el('phone-status').textContent='Switching to internet relay.'+switchNotice(s);
+    closePeer(s);
     try {
-      // The existing room monitor receives format registration from the display.
-      const deadline=Math.min(s.expires,Date.now()+25000);
-      while(!s.ended && active===s && !s.formats?.length && Date.now()<deadline) await sleep(250);
-      if(s.ended || active!==s)return;
-      if(!s.formats?.length){
-        el('phone-status').textContent='The display did not get ready. Bring the room back to the foreground on the display, then tap Use internet relay again.';
-        return;
-      }
-      const mime=window.FGSReplayRelay.sendFormats().find(f=>s.formats.includes(f));
-      if(!mime){el('phone-status').textContent='These browsers cannot share a relay video format. Open the room in an updated browser or use screen mirroring.';return;}
+      const deadline=Math.min(s.expires,Date.now()+14000);
+      while(current(s) && !s.formats?.length && Date.now()<deadline)await sleep(200);
+      if(!current(s))return;
+      const mime=window.FGSReplayRelay.sendFormats().find(f=>s.formats?.includes(f));
+      if(!mime)throw new Error('The display did not offer a compatible relay format.');
       const agreed=await api('/'+s.id+'/relay','POST',s.key,{action:'start',mimeType:mime});
-      if(s.ended)return;
-      s.relaying=true;s.expires=agreed.expiresAt||s.expires;
-      closePeer(s);
+      if(!current(s))return;
+      s.relaying=true;
+      expiry(s,agreed.expiresAt || s.expires);
       s.relayController=new AbortController();
-      el('phone-relay').hidden=true;
-      el('phone-options').hidden=true;
-      el('phone-status').textContent='Sending encrypted video to the TV. Keep this page open.';
+      showTransport(s,mime);
+      s.frameDeadline=setTimeout(()=>fail(s,new Error('The TV did not confirm relay video.')),relayFrameWait+4000);
+      el('phone-status').textContent=s.transport+' · Sending video to the TV.';
       await window.FGSReplayRelay.send(relayOptions(s,mime));
-    } catch(error) {
-      if(s.ended)return;
-      if(!s.relaying && (error.status===429 || error.status===409 || error.status>=500)){
-        el('phone-status').textContent=error.status===429?'The relay is busy. Keep this pairing open and try again shortly.':'The relay is getting ready. Keep the TV open and try again.';
-      } else fail(s,error);
-    }
-    finally{
-      s.relayPending=false;
-      if(active===s)button.disabled=false;
-    }
+    } catch(error){
+      if(current(s))fail(s,error);
+    } finally{s.relayPending=false;}
   }
   async function poll(s, property) {
     const route = '/' + s.id;
-    while (!s.ended && !s.relaying && Date.now() < s.expires) {
+    while (!s.ended && !s.relaying && !s.interrupted && Date.now() < s.expires) {
       let data;
       try { data = await api(route, 'GET', s.key); }
       catch (error) {
@@ -209,7 +310,7 @@
       if (!s.ended && data?.[property]) return data[property];
       await sleep(1600);
     }
-    if(s.relaying || s.ended)return null;
+    if(s.relaying || s.interrupted || s.ended)return null;
     throw new Error('This pairing code has expired. Show a new code on the TV.');
   }
   function sendCandidates(s, peer) {
@@ -275,42 +376,31 @@
     return {type:result.type, sdp:result.sdp};
   }
   async function peerFor(s) {
-    let iceServers=[{urls:'stun:stun.cloudflare.com:3478'}];
+    const localPreview=!!document.querySelector('meta[name="replay-preview-local"]');
+    let iceServers=localPreview ? [] : [{urls:'stun:stun.cloudflare.com:3478'}];
     try {
       const config=await api('/'+s.id+'/ice-servers','GET',s.key);
-      if(Array.isArray(config.iceServers) && config.iceServers.length) iceServers=config.iceServers;
+      if(Array.isArray(config.iceServers) && (config.iceServers.length || localPreview)) iceServers=config.iceServers;
     } catch { /* Keep discovery available when optional configuration is offline. */ }
-    if(s.ended || s.relaying)throw new Error('The direct connection is no longer needed.');
+    if(s.ended || s.relaying || s.interrupted)throw new Error('The direct connection is no longer needed.');
     const peer = new RTCPeerConnection({iceServers});
     s.peer = peer;
+    window.FGSReplayQuality?.peer?.(peer,s.role);
     sendCandidates(s,peer);
     function changed() {
-      if (s.ended || s.relaying || s.peer!==peer) return;
+      if (s.ended || s.relaying || s.peer!==peer || s.interrupted) return;
       const state = peer.connectionState || peer.iceConnectionState;
       if (state === 'connected' || state === 'completed') {
-        s.connected = true;
-        s.interrupted=false;
-        clearTimeout(s.disconnectTimer); s.disconnectTimer=null; clearTimeout(s.connectionTimer);
-        if (s.role === 'phone') {
-          if(s.relayPending)return;
-          el('phone-status').textContent = 'Connected. Your camera is sending video to the TV.';
-          if (!s.manualRelay) {
-            el('phone-relay').hidden=true;
-            el('phone-options').hidden=!s.videoKey;
-          }
-        }
-        else if (s.started) tvConnected(s);
+        s.connected=true;
+        clearTimeout(s.disconnectTimer);s.disconnectTimer=null;
       } else if (state === 'failed' || state === 'closed') {
         offerRelay(s, s.connected ? 'The direct video connection was interrupted.' : 'The phone and TV paired, but a direct video connection did not open.');
       } else if (state === 'disconnected' && !s.disconnectTimer) {
-        s.disconnectTimer = setTimeout(() => offerRelay(s,'The direct video connection was interrupted.'), 9000);
+        s.disconnectTimer = setTimeout(() => offerRelay(s,'The direct video connection was interrupted.'), stallWait);
       }
     }
     peer.onconnectionstatechange = peer.oniceconnectionstatechange = changed;
     return peer;
-  }
-  function watchConnection(s) {
-    if (!s.connected && !s.ended) s.connectionTimer = setTimeout(() => offerRelay(s,'The devices paired, but the direct video connection timed out.'), 19000);
   }
   function loadQr() {
     if (!qrLib) qrLib = new Promise((resolve,reject) => {
@@ -339,14 +429,15 @@
     if (!dialog.open) dialog.showModal();
   }
   function tvConnected(s) {
-    if (s.ended || s.notified) return;
+    if (!current(s) || !s.usable || s.notified) return;
+    clearTimeout(s.frameDeadline);
     s.notified=true;
-    tvButton.textContent=s.relaying?'Phone connected · relay':'Phone connected';
+    tvButton.textContent=s.transport+(s.relaying && s.hadDirectFrames && !s.keepReplay?' · New TV buffer':'');
     el('tv-pair-dialog').close();
   }
   async function openTv() {
     if (active?.role==='tv') {
-      if (active.connected) tvState('The phone is sending video. Use the dashboard to set the delay or review a frame.', 'connected');
+      if (active.usable) tvState(active.transport+' · The TV is receiving video.'+(active.relaying?switchNotice(active):''), 'connected');
       else if (!el('tv-pair-dialog').open) el('tv-pair-dialog').showModal();
       return;
     }
@@ -356,8 +447,9 @@
     tvState('Creating your private TV room.', 'loading');
     try {
       const session=await api('', 'POST', null, {tvToken:s.key});
-      s.id=session.id; s.expires=session.expiresAt;
+      s.id=session.id;
       if (s.ended) { api('/'+s.id+'/end','POST',s.key).catch(()=>{}); return; }
+      expiry(s,session.expiresAt);
       const link=new URL('/replay/tv/phone.html', location.origin);
       link.hash='pair='+s.id+'.'+session.invite+'&key='+s.videoKey;
       tvState('Open the private phone link or scan the QR code, then tap Start camera. The phone can use a different network. Share the link only with the person using the camera.', 'code');
@@ -372,20 +464,21 @@
           el('tv-pair-status').textContent='The QR code is unavailable. Copy the private phone link and open it on the camera phone.';
       });
       const offer=await poll(s,'offer');
-      if (s.ended || s.relaying || !offer) return;
+      if (s.ended || s.relaying || s.interrupted || !offer) return;
       if (!hasDirect()) { offerRelay(s,'Phone found. This display uses the encrypted relay.');return; }
-      tvState('Phone found. Connecting its camera…','connecting');
+      tvState('Connecting directly.','connecting');
       const peer=await peerFor(s);
       peer.ontrack=async event => {
-        if (s.ended || event.track.kind!=='video') return;
+        if (!current(s) || s.interrupted || s.peer!==peer || event.track.kind!=='video') return;
         s.media=new MediaStream([event.track]);
+        observeDisplay(s);
         try {
           if (!window.FGSReplayCamera) throw new Error('Reload Replay Cam to receive this phone camera.');
           // The dashboard opens its delayed player from this stream without requesting a TV camera.
           await window.FGSReplayCamera.startRemote(s.media);
-          if (s.ended) return;
+          if (!current(s) || s.interrupted || s.peer!==peer) return;
           s.started=true;
-          if (s.connected) tvConnected(s);
+          if (s.usable) tvConnected(s);
         } catch (error) { if(!s.ended && !s.relaying)offerRelay(s,error.message||'The TV did not receive camera frames.'); }
       };
       await peer.setRemoteDescription(offer);
@@ -393,9 +486,9 @@
       const answer=await localDescription(peer,await peer.createAnswer());
       if (s.ended) return;
       await api('/'+s.id+'/answer','POST',s.key,answer);
-      watchConnection(s);
+
     } catch (error) {
-      if(s.ended || s.relaying)return;
+      if(s.ended || s.relaying || s.interrupted)return;
       if(s.monitoring && !error.status && Date.now()<s.expires)offerRelay(s,'The TV could not open direct video.');
       else fail(s,error);
     }
@@ -424,7 +517,7 @@
       }
       if(link.getAttribute('href')===href) el('tv-copy-status').textContent=message;
     };
-    function dismiss() { if (active && !active.connected) end(active); dialog.close(); }
+    function dismiss() { if (active && !active.usable) end(active); dialog.close(); }
     const play=document.createElement('button');play.type='button';play.id='tv-play';play.textContent='Play phone video';play.hidden=true;
     el('tv-close').before(play);
     play.onclick=()=>window.FGSReplayCamera?.resumeRemote?.();
@@ -439,6 +532,14 @@
       play.hidden=phase!=='playback-blocked';
       if(phase==='playback-blocked')tvState(message||'Tap Play phone video on this display.','play');
       else if(phase==='waiting-video' && dialog.open && !active.interrupted) el('tv-pair-status').textContent='Phone paired. Waiting for the first video frame…';
+    });
+    window.addEventListener('fgs:remote-track-ended',event=>{
+      const s=active;
+      if(s?.role!=='tv' || !current(s) || s.relaying || s.directOnly || !s.videoKey ||
+         !window.FGSReplayRelay || Date.now()>=s.expires || event.detail.stream!==s.media)return;
+      if(!window.FGSReplayCamera?.prepareRemoteHandoff?.(s.media))return;
+      event.preventDefault();
+      offerRelay(s,'The direct video track ended.');
     });
     window.addEventListener('fgs:remote-stopped',event=>{
       const s=active;
@@ -464,12 +565,14 @@
       if (active) return;
       const secret=params.get('key');
       const s={role:'phone',id:match[1],key:token(),videoKey:/^[A-Za-z0-9_-]{43}$/.test(secret||'')?secret:null,capture};
-      active=s; phoneStart.disabled=true;
+      s.directOnly=el('phone-direct-only').checked;
+      active=s;phoneStart.disabled=true;
+      el('phone-connection-choice').hidden=true;
       try {
         el('phone-status').textContent='Connecting to your TV…';
         const session=await api('/'+s.id+'/claim','POST',null,{invite:match[2],phoneToken:s.key});
         if (s.ended) return;
-        s.expires=session.expiresAt;
+        expiry(s,session.expiresAt);
         el('phone-status').textContent='Allow camera access to start sending video.';
         phoneStart.hidden=true; el('phone-stop').hidden=false;
         const lost=()=>fail(s,new Error('The camera stopped.'));
@@ -477,47 +580,40 @@
           await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:240}}});
         if (s.ended) { stopTracks(stream);return; }
         s.media=stream;
-        el('phone-options').hidden=!s.videoKey;
+        el('phone-options').hidden=s.directOnly || !s.videoKey;
         const track=stream.getVideoTracks()[0];
         if (!track) throw new Error('The phone camera did not provide a video track.');
         if (!capture) {
           track.addEventListener('ended',lost,{once:true});
           const preview=el('phone-preview'); preview.srcObject=stream; preview.hidden=false; preview.play().catch(()=>{});
         }
-        el('phone-status').textContent='Camera ready. Waiting for the TV…';
+        el('phone-status').textContent='Connecting directly.';
         monitorRelay(s);
-        if(!hasDirect()){offerRelay(s,'This phone uses the encrypted relay to send video.');return;}
-        s.relayHintTimer=setTimeout(()=>{
-          if (!s.ended && !s.connected && !s.relaying && s.videoKey)offerRelay(s,'The TV is taking longer to receive video.');
-        },9500);
+        if(!hasDirect()){offerRelay(s,'This phone could not open a direct connection.');return;}
+        // Runs independently of ICE. The TV confirms advancing decoded frames.
+        s.frameDeadline=setTimeout(()=>offerRelay(s,'The TV did not confirm direct video.'),firstFrameWait+2500);
         const peer=await peerFor(s);
-        if(s.ended || s.relaying) return;
+        if(s.ended || s.relaying || s.interrupted) return;
         const outgoing=capture?.directStream() || stream;
         const sending=peer.addTransceiver(outgoing.getVideoTracks()[0],{direction:'sendonly',streams:[outgoing]});
         capture?.setSender(sending.sender);
         const offer=await localDescription(peer,await peer.createOffer());
-        if (s.ended || s.relaying) return;
+        if (s.ended || s.relaying || s.interrupted) return;
         await api('/'+s.id+'/offer','POST',s.key,offer);
         const answer=await poll(s,'answer');
-        if (s.ended || s.relaying || !answer) return;
+        if (s.ended || s.relaying || s.interrupted || !answer) return;
         await peer.setRemoteDescription(answer);
         receiveCandidates(s,peer);
-        watchConnection(s);
+  
       } catch (error) {
-        if(s.ended || s.relaying)return;
+        if(s.ended || s.relaying || s.interrupted)return;
         if(s.media && !error.status && Date.now()<s.expires)offerRelay(s,'The phone could not open direct video.');
         else fail(s,error);
       }
     };
     phoneStart.disabled=false;
     el('phone-stop').onclick=()=>{end(active);el('phone-status').textContent='Camera disconnected. Create a new room on the display for another phone link or QR code.';};
-    el('relay-consent').onclick=consentToRelay;
-    el('phone-options').onclick=()=>{
-      if(!active?.media)return;
-      active.manualRelay=true;
-      offerRelay(active,'Your phone is paired.');
-      el('relay-consent').focus();
-    };
+    el('phone-options').onclick=()=>{if(active?.media)offerRelay(active,'Manual relay selected.');};
   }
   window.addEventListener('pagehide',()=>end(active));
   if (phoneStart) {

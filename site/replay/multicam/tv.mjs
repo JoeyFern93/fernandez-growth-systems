@@ -1,3 +1,4 @@
+import {renderMock} from './demo-court.mjs';
 import {ClockMap,AngleBuffer} from './clock.mjs';
 import {call,token,negotiate} from './signaling.mjs';
 const by=id=>document.getElementById(id),names=['baseline','sideline'];
@@ -131,9 +132,9 @@ function blank(slot,message){
 }
 function draw(slot,time){
   if(slot.node.hidden)return;
-  if(demo && globalThis.FGSVolleyball){
+  if(demo){
     slot.canvas.hidden=false;slot.missing.hidden=true;slot.rendered='demo';
-    FGSVolleyball.renderMock(slot.canvas,time/1000,{angle:slot.name,view:slot.name==='baseline'?'follow':'full'});return;
+    renderMock(slot.canvas,time/1000,{angle:slot.name,view:slot.name==='baseline'?'follow':'full'});return;
   }
   const frame=slot.buffer.nearest(time);
   if(!frame){blank(slot,demo?'Demo asset unavailable':'Angle unavailable at this time');return;}

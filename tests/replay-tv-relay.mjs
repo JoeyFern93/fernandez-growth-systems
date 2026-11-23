@@ -103,29 +103,18 @@ export default async function runRelay({tv,phone,site,api,db,requests,rounds,wor
     assert(await device.get('!!window.FGSReplayRelay'),role+' did not load the shared relay client');
   }
   assert.equal((await phone.get('__inspectMedia()')).requests.length,0);
-  await phone.click('phone-start');
-  const hasCamera=await phone.until("__inspectMedia().then(s=>s.tracks.some(t=>t.state==='live'))",'phone camera ready');
-  assert(hasCamera);
+  assert.equal(requests.filter(r=>r.op==='relay-chunk' && r.verb==='POST').length,0);
   const began=Date.now();
+  await phone.click('phone-start');
+  await phone.until("__inspectMedia().then(s=>s.tracks.some(t=>t.state==='live'))",'phone camera ready');
   if(tvWithoutRtc){
-    await phone.until("!document.getElementById('phone-options').hidden",'manual fallback button');
-    await phone.click('phone-options');
-  }
-  await phone.until("(()=>{const b=document.getElementById('phone-relay');return b && !b.hidden && !b.disabled && b.getBoundingClientRect().height>0;})()",'encrypted relay option',65000);
-  const offeredAfter=Math.round((Date.now()-began)/1000);
-  await delay(1200);
-  const beforeOptIn=requests.filter(r=>r.op==='relay-chunk' && r.verb==='POST').length;
-  assert.equal(beforeOptIn,0,'camera media must stay on the phone until opting in');
-  assert.equal(rounds.length,1,'no second QR scan may be required');
-  const session=rounds[0], lookup=()=>db.prepare('SELECT status,mime,latest FROM replay_relays WHERE id=?').bind(session.id).first();
-  assert.notEqual((await lookup())?.status,'active','the service must wait for phone consent');
-  await phone.shot('phone-relay-choice');
-  await phone.click('relay-consent');
-  if(tvWithoutRtc){
-    await delay(1800);
+    await phone.until("document.getElementById('phone-status').textContent.includes('Switching')",'automatic handoff while registration is pending',25000);
+    assert.equal(requests.filter(r=>r.op==='relay-chunk' && r.verb==='POST').length,0);
     await tv.get('window.__releaseDisplayFormats()');
   }
-  await tv.until("(()=>{const a=__readMarker('liveVideo');return a.length>=3 && a;})()",'changing phone marker in the received TV video',65000);
+  await tv.until("(()=>{const a=__readMarker('liveVideo');return a.length>=2 && a;})()",'two different markers in received video',45000);
+  const movingAfterMs=Date.now()-began;
+  const session=rounds[0], lookup=()=>db.prepare('SELECT status,mime,latest FROM replay_relays WHERE id=?').bind(session.id).first();
   const media=await tv.get('__inspectMedia()');
   assert(media.requests.length===0,'the receiver must never prompt for a camera');
   assert(!media.received.some(flow=>flow.frames>0),'no frames can come from the blocked peer');
@@ -159,7 +148,7 @@ export default async function runRelay({tv,phone,site,api,db,requests,rounds,wor
   assert.equal((await db.prepare('SELECT count(*) AS n FROM replay_relay_chunks WHERE pair_id=?').bind(session.id).first()).n,0);
   assert.equal(rounds.length,1);
   assert.deepEqual(taskErrors,[]);
-  const proof={mode:status.mime,tvWithoutRtc,fallbackOfferedAfterSeconds:offeredAfter,preConsentUploads:beforeOptIn,verifiedCiphertexts:matched,liveOpticalMarkers:source,delayedOpticalMarkers:replay,directDecodedFrames:0,frameStep:{previous,stepped},cameraAfterDisconnect:stopped,pairAfterDisconnect:ended.status,storedPacketsAfterDisconnect:0};
+  const proof={mode:status.mime,tvWithoutRtc,timeToTwoDistinctMarkersMs:movingAfterMs,tapsAfterStart:0,verifiedCiphertexts:matched,liveOpticalMarkers:source,delayedOpticalMarkers:replay,directDecodedFrames:0,frameStep:{previous,stepped},cameraAfterDisconnect:stopped,pairAfterDisconnect:ended.status,storedPacketsAfterDisconnect:0};
   await writeFile(path.join(output,'results.json'),JSON.stringify(proof,null,2));
   console.log(JSON.stringify(proof,null,2));
   await Promise.all([tv.navigate('about:blank'),phone.navigate('about:blank')]);

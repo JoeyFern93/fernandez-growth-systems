@@ -1,12 +1,13 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-21-player-phone-controls-v4';
+const CACHE_NAME = CACHE_PREFIX + 'v12-fd72718784c5';
 const APP_SHELL = [
-  './', './css/app-v10.css', './css/dashboard-v11.css?v=8eabeb1debc0', './js/dashboard-v11.js?v=298f5a765e76',
-  './js/frame-times-v1.js', './js/frame-export-v1.js', './js/app-v11.js?v=3d2377a7a9f6', './js/replay-ui.js',
-  './tv/pair.js?v=5cff35827a90', './tv/relay-media.js?v=dc757ce63e12', './tv/pair.css?v=a0975fc0dca4', './manifest-v3.webmanifest', './js/install-v4.js',
-  '../favicon-v5.ico', '../favicon-v5.svg', '../favicon-v5-32.png', '../assets/tool-install-v1.css',
-  '../assets/brand/website/fgs-brand-v3.css', '../assets/brand/replay-brand-v3.css',
+  './tv/quality.js?v=df1580f4c305', './tv/quality.css?v=eb51917b3520',
+  './', './css/app-v10.css?v=1691ba92efd2', './css/dashboard-v11.css?v=bb7adb4edd7a', './js/dashboard-v11.js?v=4b4ca30c573a',
+  './js/frame-times-v1.js?v=2d651db02d37', './js/frame-export-v1.js?v=ff4b11081252', './js/app-v11.js?v=4e17475aa163', './js/replay-ui.js?v=5994a7be705f',
+  './tv/pair.js?v=795bf789d274', './tv/relay-media.js?v=517561d29f42', './tv/pair.css?v=7a29e5dfe7ee', './manifest-v3.webmanifest', './js/install-v4.js?v=32944f14ecd6',
+  '../favicon-v5.ico', '../favicon-v5.svg', '../favicon-v5-32.png', '../assets/tool-install-v1.css?v=4122f70c207f',
+  '../assets/brand/website/fgs-brand-v3.css?v=8832ab1a9e06', '../assets/brand/replay-brand-v3.css?v=465557656770',
   '../assets/brand/fonts/Nunito-Variable.woff2', '../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg',
   './icons/fgs-192-v4.png', './icons/fgs-512-v4.png', './icons/fgs-maskable-512-v4.png', './icons/fgs-apple-180-v4.png'
 ];

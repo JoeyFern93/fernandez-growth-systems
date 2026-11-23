@@ -115,7 +115,7 @@
   el('save').onclick = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(results, null, 2)], {type:'application/json'}));
     const link = document.createElement('a');
-    link.download = 'replay-studio-frame-check.json'; link.href = url; link.click();
+    link.download = 'replay-frame-check.json'; link.href = url; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
   function drawTimer() {

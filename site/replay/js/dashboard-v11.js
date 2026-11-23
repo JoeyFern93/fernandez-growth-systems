@@ -1,6 +1,16 @@
 (() => {
   'use strict';
   const stage = document.getElementById('replayStage');
+  const replayMenu = document.getElementById('replayModeMenu');
+  document.addEventListener('click', event => {
+    if (replayMenu.open && !replayMenu.contains(event.target)) replayMenu.open = false;
+  });
+  replayMenu.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && replayMenu.open) {
+      replayMenu.open = false;
+      replayMenu.querySelector('summary').focus();
+    }
+  });
   const compact = matchMedia('(max-width:899px), (max-height:590px)');
   const tabs = [...stage.querySelectorAll('[role="tab"]')];
   const playback = document.getElementById('playbackTab');
@@ -25,8 +35,8 @@
   let tvLayout = tvPage;
   let drawerOpen = false;
   let sizeBeforeFullscreen = null;
-  function preferenceKey() {
-    return 'fgs-replay-view-size-' + (tvLayout ? 'tv' : 'camera');
+  function preferenceKey(prefix = 'fgs-replay-view-size-') {
+    return prefix + (tvLayout ? 'tv' : 'camera');
   }
   function showControls() {
     const size = replaySize.value;
@@ -55,7 +65,7 @@
   }
   function loadSize() {
     let saved;
-    try { saved = localStorage.getItem(preferenceKey()); } catch {}
+    try { saved = localStorage.getItem(preferenceKey()) ?? localStorage.getItem(preferenceKey('fgs-studio-replay-view-size-')); } catch {}
     setSize(['standard','large','maximum'].includes(saved) ? saved : 'large');
   }
   loadSize();

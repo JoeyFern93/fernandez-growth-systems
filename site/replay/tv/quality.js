@@ -219,7 +219,7 @@
           const type=instance.mimeType||chunks[0].type;
           originalUrl=URL.createObjectURL(new Blob(chunks,{type}));
           download.href=originalUrl;
-          download.download='FGS-studio-phone-original-'+new Date().toISOString().replace(/[:.]/g,'-')+(type.includes('mp4')?'.mp4':'.webm');
+          download.download='FGS-phone-original-'+new Date().toISOString().replace(/[:.]/g,'-')+(type.includes('mp4')?'.mp4':'.webm');
           download.hidden=false;
           set('original',size(cfg.width,cfg.height)+' source · '+((performance.now()-started)/1000).toFixed(1)+' s elapsed · '+(bytes/1048576).toFixed(1)+' MiB');
         }else set('original','No frames were saved');
@@ -284,7 +284,7 @@
       readings:observations.slice()};
     const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;
-    link.download='FGS-replay-studio-'+record.deviceRole+'-readings.json';link.click();
+    link.download='FGS-replay-'+record.deviceRole+'-readings.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),15000);
   });
   field('record')?.addEventListener('click',recordOriginal);

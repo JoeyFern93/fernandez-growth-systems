@@ -33,11 +33,18 @@
   const ebmlMasters = new Set([0x18538067,0x1549a966,0x1654ae6b,0xae,0x1f43b675,0xa0]);
   class FrameTimes {
     constructor() {
-      this.times=[]; this.pending=new Uint8Array(); this.skip=0; this.format='';
+      this.offset=0; this.times=[]; this.pending=new Uint8Array(); this.skip=0; this.format='';
       this.timeScale=1000000; this.cluster=0; this.track=null; this.id=null; this.type=null;
       this.mp4Scale=0; this.defaultDuration=0; this.disabled=false;
     }
+    startSegment(offset) {
+      const times=this.times;
+      Object.assign(this,new FrameTimes());
+      this.times=times;
+      this.offset=offset;
+    }
     insert(t) {
+      t+=this.offset;
       if(!Number.isFinite(t) || this.times.length>=600000) return;
       const values=this.times;
       if(!values.length || t>values[values.length-1]) values.push(t);

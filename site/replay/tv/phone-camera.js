@@ -18,10 +18,11 @@
     input.muted = true;
     input.hidden = true;
     preview.after(input);
-    let source, rendered, sender, onLost, outputBounds;
+    let source, rendered, sender, onLost;
     let angle = 0, flipped = false, busy = false, stopped = false, relayMime = '';
     let lensChoice = lens.value, resolution = size.value, rate = fps.value;
-    let frameCallback, timer, lastPaint = -Infinity;
+    let relayEdge = 1280, relayFps = 30, nextRelayTime = null, lastInputTime = null;
+    let frameCallback, timer, lastPaint = -Infinity, lastMediaTime = -1, lastDecoded;
     function track() { return source?.getVideoTracks()[0]; }
     function settings() { return track()?.getSettings?.() || {}; }
     function capabilities() {
@@ -70,8 +71,8 @@
       if (label) info.unshift(label);
       readout.textContent = info.length ? 'Camera reports ' + info.join(' · ') + '.' : 'Camera active. This device does not report capture settings.';
       if (relayMime) readout.textContent += relayMime === 'image/jpeg'
-        ? ' Image relay sends up to about 3 fps, with a 960-pixel limit on the longer edge.'
-        : ' TV relay playback supports up to 15 fps, with a 960-pixel limit on the longer edge.';
+        ? ' Low-quality image relay targets up to 3 frames/s at a 960-pixel long edge.'
+        : ' Encrypted video relay targets up to 30 frames/s at a 1280-pixel long edge. See diagnostics for measured quality.';
     }
     async function listCameras() {
       if (!devices?.enumerateDevices) return;
@@ -94,16 +95,33 @@
       } catch { /* The facing-camera preferences remain available. */ }
     }
 
-    function paint(force = false) {
+    function paint(force = false, mediaTime = input.currentTime) {
       if (!context || !source || !input.videoWidth || input.readyState < 2) return;
-      if (!force && relayMime && performance.now() - lastPaint < 1000 / (relayMime === 'image/jpeg' ? 4 : 15) - 2) return;
+      if (!Number.isFinite(mediaTime) || (!force && mediaTime === lastMediaTime)) return;
+      if (lastInputTime !== null && (mediaTime < lastInputTime || mediaTime - lastInputTime > 1)) nextRelayTime = null;
+      lastInputTime = mediaTime;
+      if (relayMime) {
+        const period = 1 / (relayMime === 'image/jpeg' ? 3 : relayFps);
+        if (force || nextRelayTime === null) {
+          nextRelayTime = mediaTime + period;
+        } else {
+          // Gate on capture time. Uneven callback scheduling must not discard
+          // every other 30 Hz frame when sending a 30 Hz camera stream.
+          const earlyTolerance = 0.001;
+          if (mediaTime + earlyTolerance < nextRelayTime) return;
+          const periods = 1 + Math.floor((mediaTime + earlyTolerance - nextRelayTime) / period);
+          nextRelayTime += periods * period;
+        }
+      }
       const w = input.videoWidth, h = input.videoHeight;
       const sideways = angle % 180 !== 0;
       const width = sideways ? h : w, height = sideways ? w : h;
-      const shrink = relayMime ? Math.min(1, 960 / Math.max(width, height)) : 1;
-      const cw = outputBounds?.width || Math.max(2, Math.round(width * shrink / 2) * 2);
-      const ch = outputBounds?.height || Math.max(2, Math.round(height * shrink / 2) * 2);
-      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+      const maxEdge = relayMime === 'image/jpeg' ? 960 : relayEdge;
+      const shrink = relayMime ? Math.min(1, maxEdge / Math.max(width, height)) : 1;
+      const cw = Math.max(2, Math.round(width * shrink / 2) * 2);
+      const ch = Math.max(2, Math.round(height * shrink / 2) * 2);
+      const resized = canvas.width !== cw || canvas.height !== ch;
+      if (resized) { canvas.width = cw; canvas.height = ch; }
       const scale = Math.min(cw / width, ch / height);
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.fillStyle = '#000';
@@ -113,10 +131,12 @@
       context.rotate(angle * Math.PI / 180);
       context.drawImage(input, -w / 2, -h / 2, w, h);
       lastPaint = performance.now();
+      lastMediaTime = mediaTime;
+      if (resized) rendered?.getVideoTracks()[0]?.dispatchEvent(new CustomEvent('fgs-resize', {detail:{width:cw, height:ch}}));
     }
-    function frame() {
+    function frame(_time, metadata) {
       if (stopped || !rendered) return;
-      paint();
+      paint(false, metadata.mediaTime);
       frameCallback = input.requestVideoFrameCallback(frame);
     }
     function composedStream() {
@@ -126,10 +146,31 @@
         canvas.width = angle % 180 ? h : w;
         canvas.height = angle % 180 ? w : h;
         rendered = canvas.captureStream();
+        rendered.getVideoTracks()[0].addEventListener('fgs-relay-profile', event => {
+          if (stopped || !relayMime || relayMime === 'image/jpeg') return;
+          const {edge, fps} = event.detail || {};
+          if (!(edge >= 2 && edge <= 1280 && fps >= 1 && fps <= 30)) return;
+          relayEdge = edge; relayFps = fps;
+          paint(true);
+        });
         if (input.requestVideoFrameCallback) frameCallback = input.requestVideoFrameCallback(frame);
-        // Some mobile browsers throttle frame callbacks on an auxiliary video.
+        // Hidden auxiliary videos can stop scheduling compositor callbacks even
+        // when their decoder advances. Paint only on a new decoded sample.
+        const counter = () => {
+          const q = input.getVideoPlaybackQuality?.();
+          return q ? q.totalVideoFrames - q.droppedVideoFrames : input.webkitDecodedFrameCount;
+        };
         const period = input.requestVideoFrameCallback ? 100 : 1000 / 60;
-        timer = setInterval(() => { if (performance.now() - lastPaint >= period - 1) paint(); }, period);
+        timer = setInterval(() => {
+          const decoded = counter();
+          if (input.requestVideoFrameCallback && performance.now() - lastPaint < 250) {
+            lastDecoded = decoded; return;
+          }
+          if (Number.isFinite(decoded) && decoded === lastDecoded) return;
+          if (input.requestVideoFrameCallback && !Number.isFinite(decoded)) return;
+          lastDecoded = decoded;
+          paint();
+        }, period);
       }
       paint(true);
       return rendered;
@@ -170,6 +211,7 @@
       if (!candidate.getVideoTracks()[0]) { stopTracks(candidate); throw new Error('No video track'); }
       const previous = source;
       source = candidate;
+      nextRelayTime = lastInputTime = null; lastMediaTime = -1;
       input.srcObject = candidate;
       input.play().catch(() => {});
       candidate.getVideoTracks()[0].addEventListener('ended', () => {
@@ -184,6 +226,7 @@
         throw error;
       }
       if (previous !== candidate) stopTracks(previous);
+      window.FGSReplayQuality?.capture(input, source);
     }
     async function acquire(choice, strict) {
       return devices.getUserMedia({audio:false, video:constraints(choice, strict)});
@@ -256,7 +299,7 @@
         await track().applyConstraints({...track().getConstraints?.(), advanced:[{zoom:value}]});
       }, 'Zoom updated.', 'This camera could not apply that zoom.');
     };
-    input.addEventListener('resize', refresh);
+    input.addEventListener('resize', () => { if (rendered) paint(true); refresh(); });
     devices?.addEventListener?.('devicechange', listCameras);
     refresh();
     return {
@@ -271,19 +314,13 @@
       directStream,
       setSender(value) { sender = value; },
       forRelay(mime) {
-        relayMime = mime;
-        // MP4 encoders can require one fixed size for a recording session.
-        if (mime.startsWith('video/mp4') && canCompose) {
-          const s = settings(), w = input.videoWidth || s.width || 1280, h = input.videoHeight || s.height || 720;
-          const scale = Math.min(1, 960 / Math.max(w,h));
-          const width = Math.max(2,Math.round(w * scale / 2) * 2), height = Math.max(2,Math.round(h * scale / 2) * 2);
-          outputBounds = angle % 180 ? {width:height,height:width} : {width,height};
-        }
+        relayMime = mime; relayEdge = 1280; relayFps = 30;
         refresh();
         return canCompose ? composedStream() : source;
       },
       stop() {
         stopped = true; sender = null;
+        window.FGSReplayQuality?.capture(null, null);
         devices?.removeEventListener?.('devicechange', listCameras);
         clearInterval(timer);
         if (frameCallback !== undefined) input.cancelVideoFrameCallback?.(frameCallback);

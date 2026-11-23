@@ -7,13 +7,15 @@
   <meta name="robots" content="noindex">
   <meta name="theme-color" content="#14241d">
   <link rel="icon" href="/replay/icons/fgs-192-v4.png">
-  <link rel="stylesheet" href="/replay/tv/pair.css?v=a0975fc0dca4">
-  <link rel="stylesheet" href="/replay/tv/phone-controls.css?v=9303e7695254">
+  <link rel="stylesheet" href="/replay/tv/pair.css?v=7a29e5dfe7ee">
+  <link rel="stylesheet" href="/replay/tv/phone-controls.css?v=4f83cdbd73e2">
   <title>Phone camera | Replay Cam</title>
-  <script defer src="/replay/tv/relay-media.js?v=dc757ce63e12"></script>
-  <script defer src="/replay/tv/phone-camera.js?v=463fb609e559"></script>
-  <script defer src="/replay/tv/phone-view.js?v=62c370200835"></script>
-  <script defer src="/replay/tv/pair.js?v=5cff35827a90"></script>
+  <link rel="stylesheet" href="/replay/tv/quality.css?v=eb51917b3520">
+  <script defer src="/replay/tv/quality.js?v=df1580f4c305"></script>
+  <script defer src="/replay/tv/relay-media.js?v=517561d29f42"></script>
+  <script defer src="/replay/tv/phone-camera.js?v=ccdc90c7a849"></script>
+  <script defer src="/replay/tv/phone-view.js?v=f66199e9189d"></script>
+  <script defer src="/replay/tv/pair.js?v=795bf789d274"></script>
 </head>
 <body class="replay-phone">
   <main class="phone-shell">
@@ -26,16 +28,16 @@
       <button type="button" id="phone-preview-expand" aria-label="Expand camera preview" aria-controls="phone-preview" aria-expanded="false" hidden>Expand</button>
     </div>
     <div class="phone-tools">
-        <p id="phone-status" role="status">Start the camera to join your TV room. Wi-Fi or mobile data works.</p>
+        <p id="phone-status" role="status">Join your private TV room.</p>
+        <div id="phone-connection-choice">
+          <p id="phone-connection-note">Start camera tries a direct connection first. If direct video fails to start or later stops, your phone may use the encrypted internet relay for up to 30 minutes. Cellular uses mobile data.</p>
+          <label><input id="phone-direct-only" type="checkbox"> Direct only</label>
+        </div>
         <div class="phone-session-actions">
-          <button type="button" id="phone-start" disabled>Start camera</button>
-          <button type="button" id="phone-options" hidden>Relay options</button>
+          <button type="button" id="phone-start" aria-describedby="phone-connection-note" disabled>Start camera</button>
+          <button type="button" id="phone-options" hidden>Use internet relay</button>
           <button type="button" id="phone-stop" hidden>Disconnect</button>
         </div>
-        <section id="phone-relay" aria-label="Encrypted video relay" hidden>
-          <p>Share encrypted video through Fernandez Growth Systems for up to 30 minutes. Cellular uses mobile data.</p>
-          <button id="relay-consent" type="button">Use internet relay</button>
-        </section>
         <div class="phone-transform">
           <button type="button" id="phone-rotate" aria-describedby="phone-angle">Rotate 90°</button>
           <output id="phone-angle" for="phone-rotate" aria-label="Current rotation">0°</output>
@@ -58,17 +60,17 @@
           <div class="phone-quality">
             <label class="phone-field" for="phone-resolution">Resolution
               <select id="phone-resolution">
-                <option value="auto" selected>Auto</option>
+                <option value="auto">Auto</option>
                 <option value="480">480p</option>
                 <option value="720">720p</option>
-                <option value="1080">1080p</option>
+                <option value="1080" selected>1080p</option>
               </select>
             </label>
             <label class="phone-field" for="phone-fps">Frame rate
               <select id="phone-fps">
-                <option value="auto" selected>Auto</option>
+                <option value="auto">Auto</option>
                 <option value="30">30 fps</option>
-                <option value="60">60 fps</option>
+                <option value="60" selected>60 fps</option>
                 <option value="120">120 fps</option>
                 <option value="240">240 fps</option>
               </select>
@@ -79,6 +81,31 @@
         </div>
       </details>
     <p id="phone-camera-status" role="status"></p>
+    
+
+    <details id="quality-panel" class="quality-panel">
+
+      <summary>Video diagnostics</summary>
+
+      <dl><div><dt>Transport</dt><dd id="quality-transport">Disconnected</dd></div><div><dt>Codec</dt><dd id="quality-codec">—</dd></div><div><dt>Camera request</dt><dd id="quality-requested">Start the camera</dd></div><div><dt>Camera input</dt><dd id="quality-capture">Waiting for video</dd></div><div><dt>Encoder input</dt><dd id="quality-preview">Waiting for video</dd></div><div><dt>Connection</dt><dd id="quality-channel">Waiting for packets</dd></div></dl>
+
+      <p>Changed frames per second compares small images while this panel is open. Still scenes can read zero. Sampled frames count callbacks. Decoder queue measures buffered media ahead of playback.</p>
+
+      <div class="quality-original">
+
+        <strong>Phone original</strong>
+
+        <p>Record up to two minutes from the camera at its current resolution. Video stays on this phone.</p>
+
+        <button id="quality-record" type="button" disabled>Record original</button>
+
+        <a id="quality-download" hidden>Download original</a>
+
+        <output id="quality-original"></output>
+
+      </div><div class="quality-file"><button id="quality-inspect" type="button">Check saved file</button><output id="quality-export"></output></div><button id="quality-readings" type="button">Download readings</button>
+
+    </details>
     <details class="cast-help">
       <summary>Cast or mirror from this phone</summary>
       <p>To show the delayed replay on your TV, connect both devices to the same Wi-Fi and start mirroring before starting a new camera session.</p>

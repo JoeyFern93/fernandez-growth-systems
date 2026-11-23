@@ -1,0 +1,29 @@
+# Keep existing Replay Studio bookmarks, TV links, and camera invites working.
+# The retired Studio service worker must continue to be served at its original URL.
+/replay-studio /replay/ 301
+/replay-studio/ /replay/ 301
+/replay-studio/index.html /replay/ 301
+/replay-studio/tv /replay/tv/ 301
+/replay-studio/tv/ /replay/tv/ 301
+/replay-studio/tv/index.html /replay/tv/ 301
+/replay-studio/multicam /replay/multicam/ 301
+/replay-studio/multicam/ /replay/multicam/ 301
+/replay-studio/multicam/index.html /replay/multicam/ 301
+/replay-studio/device-test /replay/device-test/ 301
+/replay-studio/device-test/ /replay/device-test/ 301
+/replay-studio/device-test/index.html /replay/device-test/ 301
+/replay-studio/volleyball /volleyball/ 301
+/replay-studio/volleyball/ /volleyball/ 301
+/replay-studio/volleyball/index.html /volleyball/ 301
+/replay/volleyball /volleyball/ 301
+/replay/volleyball/ /volleyball/ 301
+/replay/volleyball/index.html /volleyball/ 301
+/replay-studio/manifest.webmanifest /replay/manifest.webmanifest 301
+/replay-studio/tv/* /replay/tv/:splat 301
+/replay-studio/multicam/* /replay/multicam/:splat 301
+/replay-studio/device-test/* /replay/device-test/:splat 301
+/replay-studio/volleyball/* /volleyball/:splat 301
+/replay/volleyball/* /volleyball/:splat 301
+/replay-studio/css/* /replay/css/:splat 301
+/replay-studio/icons/* /replay/icons/:splat 301
+/replay-studio/js/* /replay/js/:splat 301

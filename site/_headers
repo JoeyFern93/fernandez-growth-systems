@@ -37,6 +37,10 @@
   X-Robots-Tag: noindex, nofollow
   Permissions-Policy: camera=(self), microphone=(), geolocation=()
 
+/volleyball/*
+  X-Robots-Tag: noindex, nofollow
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
 /replay-studio/sw.js
   Cache-Control: no-cache
 

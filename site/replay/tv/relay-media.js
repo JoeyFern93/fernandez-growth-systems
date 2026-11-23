@@ -63,7 +63,25 @@
   }
   async function transmitter(session) {
     const key = await importVideoKey(session.key);
-    let seq = 0;
+    let seq = 0, nextPost = 0, nextBudget = 0;
+    // 1.35 Mb/s per room with a single packet of burst room. Capacity is shared across rooms.
+    const bytesPerMs = 1350000 / 8000;
+    const minPostInterval = session.mimeType === jpeg ? 145 : 305;
+    async function pace(bytes) {
+      const now = performance.now();
+      const due = Math.max(now, nextPost, nextBudget);
+      if (due > now) {
+        await new Promise((resolve,reject) => {
+          const complete = () => { session.signal.removeEventListener('abort',cancel); resolve(); };
+          const timer = setTimeout(complete,due-now);
+          const cancel = () => { clearTimeout(timer); reject(new DOMException('Aborted','AbortError')); };
+          session.signal.addEventListener('abort',cancel,{once:true});
+          if (session.signal.aborted) cancel();
+        });
+      }
+      session.signal.throwIfAborted();
+      nextBudget = performance.now() + bytes / bytesPerMs;
+    }
     return async blob => {
       for (let pos = 0; pos < blob.size; pos += maxPlainBytes) {
         const plain = await blob.slice(pos, pos + maxPlainBytes).arrayBuffer();
@@ -71,35 +89,92 @@
         const cipher = await crypto.subtle.encrypt(encryptionOptions(session, seq, iv), key, plain);
         const bytes = new Uint8Array(iv.length + cipher.byteLength);
         bytes.set(iv); bytes.set(new Uint8Array(cipher), iv.length);
+        await pace(bytes.length);
         await request(session, seq, bytes);
+        nextPost = performance.now() + minPostInterval;
+        window.FGSReplayQuality?.packet(bytes.length, 'Upload');
         seq++;
       }
     };
   }
   function recorderLoop(session, upload) {
     return new Promise((resolve, reject) => {
-      const recorder = new MediaRecorder(session.stream, {mimeType:session.mimeType, videoBitsPerSecond:600000});
-      let pending = Promise.resolve(), count = 0, finished = false;
+      const track = session.stream.getVideoTracks()[0];
+      const monitor = decoder();
+      let recorder, pending = Promise.resolve(), queued = 0, pendingBytes = 0, epoch = 0, finished = false, shape = '';
+      const profiles = [
+        {edge:1280, fps:30, bitrate:1100000},
+        {edge:960, fps:22, bitrate:720000},
+        {edge:854, fps:16, bitrate:480000},
+        {edge:640, fps:12, bitrate:320000}
+      ];
+      let level = 0, windowStart = performance.now(), windowBytes = 0;
+      function adjustProfile(bytes) {
+        windowBytes += bytes;
+        const elapsed = performance.now()-windowStart;
+        if (elapsed < (level ? 3500 : 1300)) return;
+        const overBudget = windowBytes*8/elapsed > 1330 || queued >= 2;
+        windowBytes = 0; windowStart = performance.now();
+        if (!overBudget || level === profiles.length-1) return;
+        const profile = profiles[++level];
+        track.dispatchEvent(new CustomEvent('fgs-relay-profile',{detail:profile}));
+        window.FGSReplayQuality?.profile(profile);
+        if (recorder?.state === 'recording') recorder.stop();
+      }
       function finish(error) {
         if (finished) return;
         finished = true;
         session.signal.removeEventListener('abort', stop);
-        recorder.ondataavailable = recorder.onerror = recorder.onstop = null;
-        if (recorder.state !== 'inactive') recorder.stop();
+        track.removeEventListener('fgs-resize', resize);
+        monitor.removeEventListener('resize', resize);
+        monitor.pause(); monitor.srcObject = null;
+        if (recorder?.state === 'recording') recorder.stop();
         if (error && !session.signal.aborted) reject(error); else resolve();
       }
       const stop = () => finish();
-      recorder.onerror = e => finish(e.error || new Error('The phone stopped producing relay video.'));
-      recorder.onstop = () => finish(new Error('Relay recording stopped on the phone.'));
-      recorder.ondataavailable = e => {
-        if (!e.data.size || finished) return;
-        if (++count > 6) { finish(new Error('The connection is too slow for relay video.')); return; }
-        pending = pending.then(() => finished ? undefined : upload(e.data))
-          .then(() => { count--; }, finish);
-      };
+      function resize(event) {
+        const dimensions = event.detail || track.getSettings();
+        const width = event.type === 'resize' ? monitor.videoWidth : dimensions.width;
+        const height = event.type === 'resize' ? monitor.videoHeight : dimensions.height;
+        if (!width || !height) return;
+        const current = width + 'x' + height;
+        if (shape && current !== shape && recorder?.state === 'recording') recorder.stop();
+        shape = current;
+      }
+      function record() {
+        if (finished) return;
+        try {
+          const currentEpoch = ++epoch;
+          const options = {mimeType:session.mimeType, videoBitsPerSecond:profiles[level].bitrate};
+          try { recorder = new MediaRecorder(session.stream,{...options,videoKeyFrameIntervalDuration:700}); }
+          catch { recorder = new MediaRecorder(session.stream,options); }
+          recorder.onerror = e => finish(e.error || new Error('The phone stopped producing relay video.'));
+          recorder.onstop = record;
+          recorder.ondataavailable = e => {
+            if (!e.data.size || finished) return;
+            adjustProfile(e.data.size);
+            queued++;
+            pendingBytes += e.data.size;
+            if (pendingBytes > 2*1024*1024 || queued > 16) { finish(new Error('The relay cannot keep up with this connection.')); return; }
+            // A replacement encoder begins with a complete initialization segment. Send any
+            // in-flight blob in full, then skip stale queued blobs from the previous profile.
+            pending = pending.then(() => finished || currentEpoch !== epoch ? undefined : upload(e.data))
+              .then(() => { queued--; pendingBytes -= e.data.size; }, finish);
+          };
+          recorder.start(700);
+        } catch (error) { finish(error); }
+      }
+      window.FGSReplayQuality?.outgoing?.(track,monitor);
+      monitor.srcObject = session.stream;
+      monitor.addEventListener('resize', resize);
+      monitor.play().catch(() => {});
+      const initial = track.getSettings();
+      if (initial.width && initial.height) shape = initial.width + 'x' + initial.height;
+      track.addEventListener('fgs-resize', resize);
       session.signal.addEventListener('abort', stop, {once:true});
       if (session.signal.aborted) { finish(); return; }
-      try { recorder.start(850); } catch (error) { finish(error); }
+      window.FGSReplayQuality?.profile(profiles[0]);
+      record();
     });
   }
   function decoder() {
@@ -107,21 +182,23 @@
     video.muted = true; video.playsInline = true; video.autoplay = true;
     return video;
   }
-  function dimensions(canvas, width, height) {
-    const scale = Math.min(1, 960 / Math.max(width, height));
+  function dimensions(canvas, width, height, limit = Infinity) {
+    const scale = Math.min(1, limit / Math.max(width, height));
     const w = Math.max(2, Math.round(width * scale)), h = Math.max(2, Math.round(height * scale));
     if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; }
   }
   async function send(session) {
+    window.FGSReplayQuality?.codec(session.mimeType);
     const upload = await transmitter(session);
     if (session.mimeType !== jpeg) return recorderLoop(session, upload);
     const video = decoder(), canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+    window.FGSReplayQuality?.outgoing?.(session.stream.getVideoTracks()[0],video);
     video.srcObject = session.stream;
     try {
       await video.play();
       while (!session.signal.aborted) {
         if (video.videoWidth) {
-          dimensions(canvas,video.videoWidth,video.videoHeight);
+          dimensions(canvas,video.videoWidth,video.videoHeight,960);
           ctx.drawImage(video,0,0,canvas.width,canvas.height);
           const blob = await new Promise(resolve => canvas.toBlob(resolve,jpeg,.62));
           if (blob && blob.size <= maxPlainBytes) await upload(blob);
@@ -143,28 +220,56 @@
     });
   }
   async function receive(session) {
+    window.FGSReplayQuality?.codec(session.mimeType);
     const key = await importVideoKey(session.key);
     const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
     const video = decoder();
-    let mediaUrl, sourceBuffer, output, drawing, decodes = 0;
+    let mediaUrl, sourceBuffer, output, poll, callback, decodes = 0;
+    let previousFrame = -1, lastPresentation = -1, manualOutput = false, initialized = false;
     function draw(frame, w, h) {
       if (!w || !h || session.signal.aborted) return;
       dimensions(canvas,w,h);
-      ctx.drawImage(frame,0,0,canvas.width,canvas.height);
-      if (!output) {
-        output = canvas.captureStream(15);
-        Promise.resolve(session.onStream(output)).catch(session.onError);
+      let first = !output;
+      if (first) {
+        output = canvas.captureStream(0);
+        manualOutput = !!output.getVideoTracks()[0].requestFrame;
+        if (!manualOutput) {
+          output.getTracks().forEach(track => track.stop());
+          output = canvas.captureStream();
+        }
       }
+      ctx.drawImage(frame,0,0,w,h);
+      if (manualOutput) output.getVideoTracks()[0].requestFrame();
+      if (first) Promise.resolve(session.onStream(output)).catch(session.onError);
+    }
+    function presented(now, metadata) {
+      if (session.signal.aborted) return;
+      if (metadata.mediaTime !== lastPresentation) draw(video,video.videoWidth,video.videoHeight);
+      lastPresentation = metadata.mediaTime;
+      callback = video.requestVideoFrameCallback(presented);
+    }
+    async function openDecoder() {
+      if (callback !== undefined) video.cancelVideoFrameCallback?.(callback);
+      clearInterval(poll);
+      video.pause(); video.removeAttribute('src'); video.load();
+      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+      const source = new MediaSource();
+      mediaUrl = URL.createObjectURL(source);
+      await waitFor(source, 'sourceopen', session.signal, () => { video.src = mediaUrl; });
+      sourceBuffer = source.addSourceBuffer(session.mimeType);
+      // MP4 and WebM encoders may restart their timestamps at zero after rotation.
+      previousFrame = lastPresentation = -1;
+      video.play().catch(error => { if (!session.signal.aborted && error.name !== 'AbortError') session.onError(error); });
+      if (video.requestVideoFrameCallback) callback = video.requestVideoFrameCallback(presented);
+      else poll = setInterval(() => {
+        const quality = video.getVideoPlaybackQuality?.();
+        const frame = quality ? quality.totalVideoFrames - quality.droppedVideoFrames : video.currentTime;
+        if (video.readyState >= 2 && frame !== previousFrame) draw(video,video.videoWidth,video.videoHeight);
+        previousFrame = frame;
+      }, 1000 / 30);
     }
     try {
-      if (session.mimeType !== jpeg) {
-        const source = new MediaSource();
-        mediaUrl = URL.createObjectURL(source);
-        await waitFor(source, 'sourceopen', session.signal, () => { video.src = mediaUrl; });
-        sourceBuffer = source.addSourceBuffer(session.mimeType);
-        video.play().catch(error => { if (!session.signal.aborted) session.onError(error); });
-        drawing = setInterval(() => { if (video.readyState >= 2) draw(video,video.videoWidth,video.videoHeight); },66);
-      }
+      if (session.mimeType !== jpeg) await openDecoder();
       let lastPacket = Date.now();
       for (let seq = 0; !session.signal.aborted;) {
         const wire = await request(session,seq);
@@ -174,11 +279,24 @@
         }
         const plain = await crypto.subtle.decrypt(encryptionOptions(session,seq,wire.subarray(0,12)),key,wire.subarray(12));
         lastPacket = Date.now(); seq++;
+        window.FGSReplayQuality?.packet(wire.length, 'Download');
         if (sourceBuffer) {
+          const head = new Uint8Array(plain,0,Math.min(8,plain.byteLength));
+          const init = (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3)
+            || (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70);
+          if (init && initialized) await openDecoder();
+          if (init) initialized = true;
           if (++decodes % 10 === 0 && video.currentTime > 15 && sourceBuffer.buffered.length && sourceBuffer.buffered.start(0) < video.currentTime - 10) {
             await waitFor(sourceBuffer,'updateend',session.signal,() => sourceBuffer.remove(0,video.currentTime - 8));
           }
           await waitFor(sourceBuffer,'updateend',session.signal,() => sourceBuffer.appendBuffer(plain));
+          // Jump only when streaming backlog has crossed several complete chunks.
+          if (sourceBuffer.buffered.length && video.readyState >= 2) {
+            const edge = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+            const ahead = edge - video.currentTime;
+            if (ahead > 3.5) video.currentTime = Math.max(sourceBuffer.buffered.start(0), edge - 1);
+            window.FGSReplayQuality?.queue(ahead);
+          }
         } else {
           const img = new Image(), imageUrl = URL.createObjectURL(new Blob([plain],{type:jpeg}));
           try {
@@ -188,7 +306,8 @@
         }
       }
     } finally {
-      clearInterval(drawing);
+      clearInterval(poll);
+      if (callback !== undefined) video.cancelVideoFrameCallback?.(callback);
       output?.getTracks().forEach(track => track.stop());
       video.pause(); video.removeAttribute('src'); video.load();
       if (mediaUrl) URL.revokeObjectURL(mediaUrl);

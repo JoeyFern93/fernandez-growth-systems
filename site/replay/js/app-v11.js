@@ -47,7 +47,7 @@
     trim: null, thumbnails: [], lastThumbnailAt: 0,
     session: null, sessionBlob: null, sessionUrl: '', sessionReview: false,
     sessionDuration: 0, sessionThumbnails: [], encoderStartedAt: 0, fallbackStartedAt: 0,
-    replayContentAspect: 0, sessionContentAspect: 0
+    restartEncoderIfResized: null, replaySizes: [], sessionAspects: []
   };
   const MAX_QUEUED_BYTES = 32 * 1024 * 1024;
   const HISTORY_BUDGET_BITS = 64 * 1024 * 1024 * 8;
@@ -65,9 +65,7 @@
   function replayCanvasSize(maxWidth, maxHeight) {
     const w = ui.live.videoWidth, h = ui.live.videoHeight;
     if (!w || !h) return {width: maxWidth, height: maxHeight};
-    // Match the initial source orientation within the selected quality budget.
-    // Later rotations still draw the entire frame into the existing recording.
-    const scale = Math.min(Math.max(maxWidth,maxHeight) / Math.max(w,h),
+    const scale = Math.min(1, Math.max(maxWidth,maxHeight) / Math.max(w,h),
       Math.min(maxWidth,maxHeight) / Math.min(w,h));
     return {width: Math.max(2, 2 * Math.floor(w * scale / 2)),
       height: Math.max(2, 2 * Math.floor(h * scale / 2))};
@@ -90,13 +88,13 @@
     const source = state.sourceMode === 'demo' ? 'Demo track' : state.sourceMode === 'remote' ? 'Phone video track' : 'Camera track';
     const parts = [state.sourceFps ? `${source} reports ${rateLabel(state.sourceFps)} FPS.` : `${source} does not report a frame rate.`];
     if (state.capabilityFps) parts.push(`Camera offers up to ${rateLabel(state.capabilityFps)} FPS across its modes.`);
-    if (state.observedFps) parts.push(`Preview measured ${rateLabel(state.observedFps)} FPS.`);
+    if (state.observedFps) parts.push(`Preview delivered ${rateLabel(state.observedFps)} samples/s.`);
     if (state.engine === 'compressed' && replayFrames?.times?.length > 1) {
       const times = replayFrames.times, last = times.length - 1;
       let first = last;
       while (first > 0 && times[first] > times[last] - 2) first--;
       const span = times[last] - times[first];
-      if (span >= 1) parts.push(`Replay encoded ${rateLabel((last - first) / span)} FPS.`);
+      if (span >= 1) parts.push(`Replay encoded ${rateLabel((last - first) / span)} samples/s.`);
     }
     if (state.engine === 'fallback') parts.push('Compatibility replay samples up to 10 FPS.');
     else if (state.nativeReplay) parts.push('Replay records the original video track.');
@@ -104,7 +102,7 @@
     detail.textContent = parts.join(' ');
   }
   function preferOriginalTrack() {
-    return state.sourceFps ? state.sourceFps > 30 : state.sourceMode === 'remote' || !selectedRate() || selectedRate() > 30;
+    return state.sourceMode === 'remote' || (state.sourceFps ? state.sourceFps > 30 : !selectedRate() || selectedRate() > 30);
   }
   function cloneCameraVideo() {
     const track = state.stream?.getVideoTracks()[0];
@@ -352,7 +350,7 @@
       if (Number.isFinite(frame.at) && frame.at / 1000 <= seconds + 0.001
         && (!candidate || frame.at > candidate.at)) candidate = frame;
     }
-    if (candidate) drawContained(candidate.canvas, ui.delayedCanvas);
+    if (candidate) showFallbackFrame(candidate.canvas);
   }
   function seekReplayTo(seconds) {
     ++reviewPlayVersion; stopSlowClock();
@@ -504,10 +502,16 @@
     state.frameCallback = null;
     state.frameTimer = null;
   }
-  function drawContained(source, canvas, mirrored = false) {
-    const sourceWidth = source.videoWidth || source.width;
-    const sourceHeight = source.videoHeight || source.height;
-    if (!sourceWidth || !sourceHeight || ('readyState' in source && source.readyState < 2)) return false;
+  function showFallbackFrame(frame) {
+    if (ui.delayedCanvas.width !== frame.width || ui.delayedCanvas.height !== frame.height) {
+      ui.delayedCanvas.width = frame.width; ui.delayedCanvas.height = frame.height;
+    }
+    return drawContained(frame, ui.delayedCanvas);
+  }
+  function drawContained(source, canvas, mirrored = false, aspect = 0) {
+    const content = sourceContentRect(source, aspect);
+    if (!content) return false;
+    const sourceWidth = content.width, sourceHeight = content.height;
     const context = canvas.getContext('2d', { alpha: false });
     const scale = Math.min(canvas.width / sourceWidth, canvas.height / sourceHeight);
     const width = Math.round(sourceWidth * scale);
@@ -517,7 +521,7 @@
     context.fillRect(0, 0, canvas.width, canvas.height);
     if (mirrored) { context.translate(canvas.width, 0); context.scale(-1, 1); }
     try {
-      context.drawImage(source, 0, 0, sourceWidth, sourceHeight,
+      context.drawImage(source, content.x, content.y, sourceWidth, sourceHeight,
         Math.round((canvas.width - width) / 2), Math.round((canvas.height - height) / 2), width, height);
       return true;
     } catch { return false; }
@@ -530,7 +534,8 @@
     let sampleFrames = 0;
     const draw = (timestamp, metadata) => {
       if (!state.running || generation !== state.generation) return;
-      if (!state.nativeReplay) drawContained(ui.live, ui.processingCanvas);
+      const resizing = state.restartEncoderIfResized?.();
+      if (!resizing && !state.nativeReplay) drawContained(ui.live, ui.processingCanvas);
       if (metadata && Number.isFinite(metadata.mediaTime)) {
         if (sampleTime === null || metadata.mediaTime < sampleTime) {
           sampleTime = metadata.mediaTime;
@@ -669,7 +674,9 @@
     updateControls();
   }
   function stopReplayEngine() {
-    replayFrames = null;
+    state.remoteHandoff = null;
+    state.replaceRemoteEncoder = null;
+    replayFrames = null; state.replaySizes = []; state.restartEncoderIfResized = null;
     ++reviewPlayVersion; stopSlowClock();
     state.generation += 1;
     cancelClip();
@@ -740,17 +747,26 @@
       const chunk = state.chunks[0];
       if (!chunk) return;
       state.appendPending = true;
-      const data = await chunk.arrayBuffer();
+      const data = await chunk.blob.arrayBuffer();
       if (generation !== state.generation || buffer !== state.sourceBuffer) return;
       if (buffer.updating || state.mediaSource?.readyState !== 'open') return;
+      const segmentStart = buffer.buffered.length ? buffer.buffered.end(buffer.buffered.length - 1) : 0;
       buffer.appendBuffer(data);
+      if (chunk.startsSegment) {
+        state.replaySizes.push({at: segmentStart, width: chunk.width, height: chunk.height});
+        const oldest = buffer.buffered.length ? buffer.buffered.start(0) : 0;
+        while (state.replaySizes.length > 1 && state.replaySizes[1].at <= oldest) state.replaySizes.shift();
+      }
       if (window.ReplayFrameTimes) {
         replayFrames ||= new window.ReplayFrameTimes();
+        if (chunk.startsSegment && buffer.buffered.length) {
+          replayFrames.startSegment(segmentStart);
+        }
         replayFrames.push(data);
         if (buffer.buffered.length) replayFrames.discardBefore(buffer.buffered.start(0));
       }
       state.chunks.shift();
-      state.queuedBytes -= chunk.size;
+      state.queuedBytes -= chunk.blob.size;
     } catch (error) {
       if (generation === state.generation && buffer === state.sourceBuffer) {
         console.warn('Compressed replay could not continue', error);
@@ -762,7 +778,7 @@
   }
   function updateCompressedPlayback(generation) {
     if (generation !== state.generation || !state.running || state.engine !== 'compressed') return;
-    if (state.sourceMode === 'remote' && (state.remoteMuted || document.visibilityState === 'hidden')) return;
+    if (state.sourceMode === 'remote' && (state.remoteHandoff || state.remoteMuted || document.visibilityState === 'hidden')) return;
     if (state.recorder?.state !== 'paused' && now() - state.lastDataAt > 10000) {
       startFallbackReplay('The video encoder stopped supplying replay frames.');
       return;
@@ -860,28 +876,63 @@
     try {
       state.nativeReplay = allowNative && (preferOriginalTrack() || !ui.processingCanvas.captureStream) &&
         typeof state.stream?.getVideoTracks()[0]?.clone === 'function';
-      if (state.nativeReplay) state.replayContentAspect = 0;
       state.encoderStream = state.nativeReplay ? cloneCameraVideo() : canvasVideo(ui.processingCanvas, state.replayFps);
-      const width = state.nativeReplay ? ui.live.videoWidth : ui.processingCanvas.width;
-      const height = state.nativeReplay ? ui.live.videoHeight : ui.processingCanvas.height;
-      const videoBitsPerSecond = Math.round(Math.min(recordingBitrate(width, height, state.replayFps),
-        HISTORY_BUDGET_BITS / (state.delaySeconds + 20)));
-      state.historySeconds = Math.min(Math.max(120, state.delaySeconds + 20), HISTORY_BUDGET_BITS / videoBitsPerSecond);
-      state.recorder = new MediaRecorder(state.encoderStream, { mimeType, videoBitsPerSecond });
-      reportFrameRates();
-      state.recorder.ondataavailable = event => {
-        if (generation !== state.generation || !event.data?.size) return;
-        state.lastDataAt = now();
-        state.chunks.push(event.data);
-        state.queuedBytes += event.data.size;
-        if (state.queuedBytes > MAX_QUEUED_BYTES) {
-          startFallbackReplay('The browser could not keep up with compressed replay.');
-          return;
+      let sourceWidth, sourceHeight, restarting = false;
+      function beginSegment() {
+        if (generation !== state.generation || !state.running || state.remoteHandoff) return;
+        sourceWidth = ui.live.videoWidth; sourceHeight = ui.live.videoHeight;
+        if (!state.nativeReplay) {
+          const budget = parseResolution(ui.replayResolution.value);
+          const size = replayCanvasSize(budget.width, budget.height);
+          ui.processingCanvas.width = size.width; ui.processingCanvas.height = size.height;
+          drawContained(ui.live, ui.processingCanvas);
         }
-        pumpCompressedReplay();
+        const width = state.nativeReplay ? sourceWidth : ui.processingCanvas.width;
+        const height = state.nativeReplay ? sourceHeight : ui.processingCanvas.height;
+        const videoBitsPerSecond = Math.round(Math.min(recordingBitrate(width, height, state.replayFps),
+          HISTORY_BUDGET_BITS / (state.delaySeconds + 20)));
+        state.historySeconds = Math.min(Math.max(120, state.delaySeconds + 20), HISTORY_BUDGET_BITS / videoBitsPerSecond);
+        const recorder = new MediaRecorder(state.encoderStream, { mimeType, videoBitsPerSecond });
+        let first = true;
+        recorder.ondataavailable = event => {
+          if (generation !== state.generation || !event.data?.size) return;
+          state.lastDataAt = now();
+          state.chunks.push({blob: event.data, startsSegment: first, width, height});
+          first = false;
+          state.queuedBytes += event.data.size;
+          if (state.queuedBytes > MAX_QUEUED_BYTES) {
+            startFallbackReplay('The browser could not keep up with compressed replay.');
+            return;
+          }
+          pumpCompressedReplay();
+        };
+        recorder.onerror = encoderFailed;
+        state.recorder = recorder;
+        recorder.start(1000);
+        restarting = false;
+      }
+      // Dimension changes start a fresh codec initialization, leaving SourceBuffer
+      // and its earlier, independently seekable pictures on the same timeline.
+      state.restartEncoderIfResized = () => {
+        if (restarting || !ui.live.videoWidth) return restarting;
+        if (ui.live.videoWidth === sourceWidth && ui.live.videoHeight === sourceHeight) return false;
+        if (state.recorder.state !== 'recording') return true;
+        restarting = true;
+        state.recorder.onstop = () => {
+          if (generation !== state.generation) return;
+          try { beginSegment(); } catch { encoderFailed(); }
+        };
+        state.recorder.stop();
+        return true;
       };
-      state.recorder.onerror = encoderFailed;
-      state.recorder.start(1000);
+      state.replaceRemoteEncoder = () => {
+        state.encoderStream?.getTracks().forEach(track => track.stop());
+        state.encoderStream = state.nativeReplay ? cloneCameraVideo() : canvasVideo(ui.processingCanvas, state.replayFps);
+        beginSegment();
+        startFramePump();
+      };
+      beginSegment();
+      reportFrameRates();
       startFramePump();
       state.playbackTimer = setInterval(() => updateCompressedPlayback(generation), 250);
       ui.replayStatus.textContent = 'Warming up';
@@ -931,7 +982,12 @@
         const elapsed = (timestamp - lastTick) / 1000;
         lastTick = timestamp;
         const frame = state.fallbackFrames[state.fallbackWrite];
+        const size = replayCanvasSize(320, 180);
+        if (frame.canvas.width !== size.width || frame.canvas.height !== size.height) {
+          frame.canvas.width = size.width; frame.canvas.height = size.height;
+        }
         if (!drawContained(ui.live, frame.canvas)) return;
+        window.FGSReplayQuality?.bufferFrame?.(frame.canvas, timestamp);
         frame.at = timestamp - state.fallbackStartedAt;
         state.fallbackWrite = (state.fallbackWrite + 1) % state.fallbackFrames.length;
         const target = timestamp - state.fallbackStartedAt - state.delaySeconds * 1000;
@@ -959,7 +1015,7 @@
           return;
         }
         if (!candidate) return;
-        drawContained(candidate.canvas, ui.delayedCanvas);
+        showFallbackFrame(candidate.canvas);
         state.reviewTime = candidate.at / 1000;
         setReplayReady(true);
         updateReviewControls();
@@ -973,7 +1029,6 @@
   }
   function startReplayEngine() {
     state.delaySeconds = Number(ui.delay.value);
-    state.replayContentAspect = ui.live.videoWidth / ui.live.videoHeight || 0;
     const replay = parseResolution(ui.replayResolution.value);
     const canvasSize = replayCanvasSize(replay.width, replay.height);
     ui.processingCanvas.width = canvasSize.width;
@@ -1173,7 +1228,7 @@
       state.generation += 1;
       enumerateCameras(settings.deviceId || selectedDevice, request);
       const dimensions = `${settings.width || ui.live.videoWidth}×${settings.height || ui.live.videoHeight}`;
-      ui.actualBadge.textContent = state.sourceFps ? `${dimensions} · ${rateLabel(state.sourceFps)} FPS` : dimensions;
+      ui.actualBadge.textContent = state.sourceFps ? `${dimensions} · ${rateLabel(state.sourceFps)} FPS setting` : dimensions;
       ui.cameraStatus.textContent = track.label || 'Active';
       updateControls();
       applyMirror();
@@ -1195,6 +1250,14 @@
       showToast(message);
     }
   }
+  function updatePhoneDimensions() {
+    if (state.sourceMode !== 'remote' || !ui.live.videoWidth) return;
+    ui.actualBadge.textContent = `Phone · ${ui.live.videoWidth}×${ui.live.videoHeight}`;
+  }
+  ui.live.addEventListener('resize', () => {
+    updatePhoneDimensions();
+    state.restartEncoderIfResized?.();
+  });
   function remotePhase(phase, message) {
     window.dispatchEvent(new CustomEvent('fgs:remote-phase', { detail: { phase, message } }));
   }
@@ -1245,23 +1308,51 @@
       play();
     });
   }
-  async function startRemote(stream) {
-    if (state.running || state.starting) throw new Error('Stop the current camera or demo before connecting a phone.');
-    if (state.trim || state.clip || state.session) throw new Error('Finish reviewing or saving the current recording first.');
+  function prepareRemoteHandoff(stream) {
+    if (state.remoteHandoff) return stream === state.remoteSource;
+    if (stream !== state.remoteSource || !state.running || !state.sourceBuffer?.buffered.length || state.starting ||
+        state.sourceMode !== 'remote' || state.engine !== 'compressed' || !state.replaceRemoteEncoder ||
+        !['recording','paused'].includes(state.recorder?.state) || state.mediaSource?.readyState !== 'open') return false;
+    // A user-started native session recorder owns a clone of the old track.
+    // Finalize its playable file while leaving a held recent clip and MSE alone.
+    if (state.session && !state.session.stopping) finishSessionRecording();
+    const recorder = state.recorder;
+    const handoff = {};
+    state.remoteHandoff = handoff;
+    state.removeRemoteListener?.(); state.removeRemoteListener = null;
+    stopFramePump();
+    handoff.flush = new Promise(resolve => {
+      let timer;
+      const settled = () => { clearTimeout(timer); recorder.removeEventListener('stop', settled); resolve(); };
+      recorder.addEventListener('stop', settled, {once:true});
+      timer = setTimeout(settled, 1800);
+      try { recorder.stop(); } catch { settled(); }
+    });
+    state.remoteMuted = true;
+    return true;
+  }
+  async function startRemote(stream, keepHistory = false) {
+    const handoff = keepHistory && state.remoteHandoff;
+    if (!handoff && (state.running || state.starting)) throw new Error('Stop the current camera or demo before connecting a phone.');
+    if (!handoff && (state.trim || state.clip || state.session)) throw new Error('Finish reviewing or saving the current recording first.');
     const track = stream?.getVideoTracks?.().find(item => item.readyState === 'live');
     if (!track) throw new Error('The phone has not supplied a live video track.');
-    state.sessionReview = false;
-    ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
-    state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
+    if (!handoff) {
+      state.sessionReview = false;
+      ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
+      state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
+    }
     const request = ++state.cameraRequest;
+    if (handoff) state.stream?.getTracks().forEach(old => old.stop());
     const received = new MediaStream([track]);
     state.stream = received; state.remoteSource = stream;
     state.sourceMode = 'remote'; state.starting = true;
     ui.live.srcObject = received;
     updateControls();
-    showViewerMessage('Connecting phone camera', 'Waiting for the first video frame from your phone.');
+    if (!handoff) showViewerMessage('Connecting phone camera', 'Waiting for the first video frame from your phone.');
     const disconnected = () => {
       if (request !== state.cameraRequest || state.sourceMode !== 'remote') return;
+      if (!window.dispatchEvent(new CustomEvent('fgs:remote-track-ended',{cancelable:true,detail:{stream}}))) return;
       const message = 'The phone stopped sending video. Open the camera page on the phone and reconnect.';
       stopCamera('ended', message);
       showViewerMessage('Phone camera disconnected', message);
@@ -1296,12 +1387,24 @@
       if (request !== state.cameraRequest || track.readyState !== 'live') throw new Error('The phone disconnected before replay started.');
       const settings = track.getSettings?.() || {};
       state.sourceFps = Number(settings.frameRate) || 0;
-      state.generation++;
+      if (handoff) {
+        await handoff.flush;
+        if (request !== state.cameraRequest || state.remoteHandoff !== handoff) throw new Error('Replay handoff cancelled.');
+        state.remoteHandoff = null;
+        state.lastDataAt = now();
+        state.replayFps = state.sourceFps;
+        state.observedFps = 0;
+      } else state.generation++;
       state.running = true; state.starting = false;
-      ui.actualBadge.textContent = `Phone · ${ui.live.videoWidth}×${ui.live.videoHeight}` +
-        (state.sourceFps ? ` · ${rateLabel(state.sourceFps)} FPS` : '');
+      updatePhoneDimensions();
       ui.cameraStatus.textContent = 'Connected phone';
-      applyMirror(); startReplayEngine(); updateControls(); requestWakeLock();
+      applyMirror();
+      if (handoff) {
+        state.replaceRemoteEncoder(); reportFrameRates();
+        if (state.replayReady) ui.viewerMessage.hidden = true;
+        showToast('Internet relay connected. Earlier footage is available in the replay timeline.');
+      } else startReplayEngine();
+      updateControls(); requestWakeLock();
       if (state.sourceMode !== 'remote' || request !== state.cameraRequest) throw new Error('The TV could not start its video replay engine.');
       remotePhase('receiving', 'The TV is receiving phone video.');
     } catch (error) {
@@ -1324,6 +1427,7 @@
   }
   window.FGSReplayCamera = Object.freeze({
     startRemote,
+    prepareRemoteHandoff,
     resumeRemote: resumeRemotePlayback,
     endRemote(stream) {
       if (state.sourceMode === 'remote' && (!stream || stream === state.remoteSource)) stopCamera('external');
@@ -1400,8 +1504,8 @@
   function sourceContentRect(source, aspect = 0) {
     const width = source.videoWidth || source.width, height = source.videoHeight || source.height;
     if (!width || !height || ('readyState' in source && source.readyState < 2)) return null;
-    // The replay/session encoder preserves portrait video inside a landscape
-    // canvas. Remove only that known padding, never crop the full-frame video.
+    // A fixed-size session recording can contain padding. The session records
+    // the source aspect when each change occurs. Ordinary replay has none.
     let contentWidth = width, contentHeight = height;
     if (Number.isFinite(aspect) && aspect > 0) {
       if (width / height > aspect) contentWidth = height * aspect;
@@ -1442,7 +1546,7 @@
     const at = compressed ? source.currentTime : range.end;
     if (!Number.isFinite(at) || at < range.start || at > range.end
       || (compressed && (source.seeking || source.readyState < 2))) return;
-    const canvas = copyThumbnail(source, compressed ? state.replayContentAspect : 0);
+    const canvas = copyThumbnail(source);
     if (!canvas) return;
     state.lastThumbnailAt = timestamp;
     const previous = state.thumbnails.findIndex(frame => Math.abs(frame.at - at) < 0.25);
@@ -1538,7 +1642,7 @@
       range: { ...range }, start, end, restore: playbackSnapshot(), mirrored: sourceType === 'session' ? false : state.mirrored,
       frames: sourceType === 'recent' && state.engine === 'fallback' ? snapshotFallback(range) : [],
       thumbnails: (state.sessionReview ? state.sessionThumbnails : state.thumbnails).map(frame => ({ at: frame.at, canvas: copyFrame(frame.canvas, frame.canvas.width, frame.canvas.height) })).filter(frame => frame.canvas),
-      contentAspect: sourceType === 'session' ? state.sessionContentAspect : state.replayContentAspect,
+      aspects: sourceType === 'session' ? state.sessionAspects : [],
       previewing: false, previewFrame: null, previewSeek: null, previewTime: start, previewSpeed: state.reviewSpeed, previewVersion: 0,
       previewStartupTimer: null, timer: null, expiresAt: now() + TRIM_HOLD_MS };
     seekReplayTo(start);
@@ -1590,7 +1694,7 @@
       source = frame?.canvas;
     }
     if (!source) return false;
-    const content = sourceContentRect(source, trim.contentAspect);
+    const content = sourceContentRect(source, aspectAt(trim, seconds));
     if (!content) return false;
     const scale = Math.min(1, 640 / Math.max(content.width, content.height));
     const width = Math.max(1, Math.round(content.width * scale)), height = Math.max(1, Math.round(content.height * scale));
@@ -1710,7 +1814,9 @@
   function drawTrimFrame(trim, seconds, target) {
     let frame = trim.frames[0];
     for (const item of trim.frames) if (item.at <= seconds + 0.001) frame = item;
-    return !!frame && drawContained(frame.canvas, target, target === ui.clipCanvas && trim.mirrored);
+    if (!frame) return false;
+    if (target === ui.delayedCanvas) return showFallbackFrame(frame.canvas);
+    return drawContained(frame.canvas, target, trim.mirrored);
   }
   async function previewSelection() {
     const trim = state.trim;
@@ -1775,7 +1881,7 @@
     ui.trimStatus.textContent = 'Selection updated. Preview it, then export the selected clip.';
     updateControls();
   }
-  async function exportOriginalFrames(clip, trim, source, rate) {
+  async function exportOriginalFrames(clip, trim, source) {
     if (!window.ReplayFrameExport || !window.VideoEncoder || trim.engine === 'fallback' || typeof frameIndexFor !== 'function') return false;
     const index = trim.sourceType === 'session' && typeof indexSavedFrames === 'function'
       ? await indexSavedFrames(state.sessionBlob) : frameIndexFor(false);
@@ -1788,8 +1894,7 @@
     while (last + 1 < times.length && times[last + 1] < clip.end) last++;
     const length = clip.end - clip.start;
     const sampleRate = (last - first + 1) / length;
-    if (Math.max(rate, sampleRate) < 36 || last <= first ||
-        times[first] > clip.start + 0.1 || times[last] < clip.end - Math.max(0.15, 3 / sampleRate)) return false;
+    if (times[first] > clip.start + 0.1 || times[last] < clip.end - Math.max(0.15, 3 / sampleRate)) return false;
     const width = ui.clipCanvas.width, height = ui.clipCanvas.height;
     const encoder = await window.ReplayFrameExport.create({width,height,rate:Math.max(1,sampleRate),duration:length,
       bitrate:Math.min(recordingBitrate(width,height,sampleRate),Math.floor(0.9 * MAX_SESSION_BYTES * 8 / length)),
@@ -1827,8 +1932,9 @@
         // including the first/last partial frame of an arbitrary selection.
         await seekVideo(source, (start + end) / 2, clip);
         if (!active()) return true;
-        if (clip.mirrored && !drawContained(source, ui.clipCanvas, true)) throw new Error('Frame unavailable');
-        await encoder.write(clip.mirrored ? ui.clipCanvas : source,start - clip.start,end - start);
+        const fit = clip.mirrored || trim.aspects.length || source.videoWidth !== width || source.videoHeight !== height;
+        if (fit && !drawContained(source, ui.clipCanvas, clip.mirrored, aspectAt(trim, source.currentTime))) throw new Error('Frame unavailable');
+        await encoder.write(fit ? ui.clipCanvas : source,start - clip.start,end - start);
       }
       if (!active()) return true;
       clip.result = await encoder.finish();
@@ -1864,20 +1970,30 @@
     ui.download.hidden = true;
     updateControls();
     const source = trim.sourceType === 'session' ? ui.sessionVideo : ui.delayedVideo;
-    ui.clipCanvas.width = trim.engine === 'fallback' ? 320 : source.videoWidth || ui.processingCanvas.width;
-    ui.clipCanvas.height = trim.engine === 'fallback' ? 180 : source.videoHeight || ui.processingCanvas.height;
     try {
+      if (trim.engine !== 'fallback') await seekVideo(source, clip.start, clip);
+      if (state.clip !== clip || clip.cancelled) return;
+      let firstSource = source;
+      if (trim.engine === 'fallback') {
+        firstSource = trim.frames[0]?.canvas;
+        for (const frame of trim.frames) if (frame.at <= clip.start + 0.001) firstSource = frame.canvas;
+      }
+      const bounds = firstSource && sourceContentRect(firstSource, aspectAt(trim, clip.start));
+      if (!bounds) throw new Error('The selected first frame is unavailable');
+      ui.clipCanvas.width = Math.max(2, 2 * Math.round(bounds.width / 2));
+      ui.clipCanvas.height = Math.max(2, 2 * Math.round(bounds.height / 2));
       const rate = trim.sourceType === 'session' ? state.sessionFps : state.replayFps || state.observedFps;
-      if (await exportOriginalFrames(clip, trim, source, rate)) return;
+      if (await exportOriginalFrames(clip, trim, source)) return;
       if (state.clip !== clip || clip.cancelled) return;
       clearTimeout(clip.timer);
       clip.timer = setTimeout(() => finishClip(clip, false, true), (clip.end - clip.start + 25) * 1000);
       if (trim.engine !== 'fallback') await seekVideo(source, clip.start, clip);
       if (state.clip !== clip || clip.cancelled || clip.generation !== state.generation) return;
-      const first = trim.engine === 'fallback' ? drawTrimFrame(trim, clip.start, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored);
+      const first = trim.engine === 'fallback' ? drawTrimFrame(trim, clip.start, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored, aspectAt(trim, source.currentTime));
       if (!first) throw new Error('No selected frame');
       drawTrimPreview(trim, clip.start);
-      if (trim.engine !== 'fallback' && !clip.mirrored && (rate > 30 || !rate)) {
+      const changesSize = trim.sourceType === 'recent' && state.replaySizes.some(size => size.at > clip.start && size.at < clip.end);
+      if (trim.engine !== 'fallback' && !clip.mirrored && !trim.aspects.length && !changesSize && (rate > 30 || !rate)) {
         clip.stream = playedVideoStream(source);
       }
       clip.native = !!clip.stream;
@@ -1902,7 +2018,7 @@
       // This makes the selected first frame available to the first capture.
       if (!clip.native) {
         if (trim.engine === 'fallback') drawTrimFrame(trim, clip.start, ui.clipCanvas);
-        else drawContained(source, ui.clipCanvas, clip.mirrored);
+        else drawContained(source, ui.clipCanvas, clip.mirrored, aspectAt(trim, source.currentTime));
         requestCanvasFrame(clip);
       }
       state.reviewing = true; state.reviewPaused = false; state.reviewSpeed = 1;
@@ -1910,14 +2026,29 @@
       if (state.clip !== clip || clip.cancelled || clip.generation !== state.generation) return;
       const started = now(); let lastPosition = clip.start, lastAdvance = started, lastUi = -Infinity;
       const frameVideo = trim.engine === 'fallback' ? null : source;
+      const completeSelection = () => {
+        if (state.clip !== clip || clip.stopping || clip.finishing || clip.finished) return;
+        source.pause(); state.reviewPaused = true; clip.finishing = true;
+        cancelRecordingFrame(clip); clearInterval(clip.countdown);
+        ui.trimStatus.textContent = 'Finalizing selected clip. Keep this page open.';
+        if (clip.native) finishClip(clip);
+        else flushCanvasRecording(clip, () => finishClip(clip));
+      };
+      // A low-cadence video can hold the last selected frame across the entire
+      // endpoint. Use the player's time to stop even while that frame is held.
+      if (frameVideo) clip.countdown = setInterval(() => {
+        if (source.currentTime >= clip.end || source.ended) completeSelection();
+      }, 30);
       const draw = (timestamp, metadata) => {
         if (state.clip !== clip || clip.stopping || clip.finishing || clip.finished) return;
         if (clip.generation !== state.generation || state.trim !== trim) { finishClip(clip, true); return; }
         if (trim.engine === 'compressed' && !validateTrimHistory()) return;
         const position = trim.engine === 'fallback' ? Math.min(clip.end, clip.start + (now() - started) / 1000) : metadata?.mediaTime ?? source.currentTime;
         if (position > lastPosition + 0.005) { lastPosition = position; lastAdvance = now(); }
-        if (position < clip.start - 0.12 || position > clip.end + 0.3 || now() - lastAdvance > 3000) { finishClip(clip, false, true); return; }
-        const drawn = clip.native || (trim.engine === 'fallback' ? drawTrimFrame(trim, position, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored));
+        if (position >= clip.end) { completeSelection(); return; }
+        if (now() - lastAdvance > 3000) { finishClip(clip, false, true); return; }
+        if (position < clip.start) { scheduleVideoFrame(clip, frameVideo, draw); return; }
+        const drawn = clip.native || (trim.engine === 'fallback' ? drawTrimFrame(trim, position, ui.clipCanvas) : drawContained(source, ui.clipCanvas, clip.mirrored, aspectAt(trim, source.currentTime)));
         if (!drawn) { finishClip(clip, false, true); return; }
         if (timestamp - lastUi >= 100) {
           drawTrimPreview(trim, Math.min(clip.end, position));
@@ -1929,12 +2060,7 @@
         ui.trimStatus.textContent = `Exporting selected clip… ${Math.round(progress)}%. Keep this page open.`;
         updateTrimControls();
         if (position >= clip.end - Math.min(0.025, 0.5 / (rate || 60)) || source.ended) {
-          source.pause(); state.reviewPaused = true; clip.finishing = true; clip.frame = null;
-          ui.trimStatus.textContent = 'Finalizing selected clip. Keep this page open.';
-          // The endpoint was just drawn. Stop only after its paint and a short
-          // encoder drain, without drawing any footage outside the selection.
-          if (clip.native) finishClip(clip);
-          else flushCanvasRecording(clip, () => finishClip(clip));
+          completeSelection();
           return;
         }
         scheduleVideoFrame(clip, frameVideo, draw);
@@ -1944,6 +2070,20 @@
     } catch {
       if (state.clip === clip && !clip.cancelled) finishClip(clip, false, true);
     }
+  }
+  function drawSessionFrame(session) {
+    const aspect = ui.live.videoWidth / ui.live.videoHeight;
+    if (!drawContained(ui.live, session.canvas, session.mirrored)) return false;
+    if (aspect > 0 && session.aspects.at(-1)?.aspect !== aspect) {
+      session.aspects.push({at: Math.max(0, (now() - session.started) / 1000), aspect});
+    }
+    return true;
+  }
+  function aspectAt(trim, time) {
+    for (let i = trim.aspects.length - 1; i >= 0; i--) {
+      if (trim.aspects[i].at <= time) return trim.aspects[i].aspect;
+    }
+    return trim.aspects[0]?.aspect || 0;
   }
   function finishSessionRecording(error = false) {
     const session = state.session;
@@ -1961,7 +2101,7 @@
         } else finalizeSession(session);
       } catch { session.error = true; finalizeSession(session); }
     };
-    if (!session.native && !error && drawContained(ui.live, session.canvas, session.mirrored)) {
+    if (!session.native && !error && drawSessionFrame(session)) {
       ui.sessionStatus.textContent = 'Finishing session recording. The final frame is being saved.';
       flushCanvasRecording(session, stop);
     } else stop();
@@ -1988,7 +2128,7 @@
     clearThumbnailFrames(state.sessionThumbnails);
     state.sessionBlob = blob; state.sessionUrl = URL.createObjectURL(blob);
     state.sessionDuration = Math.max(0.25, ((session.endedAt || now()) - session.started) / 1000);
-    state.sessionContentAspect = session.contentAspect;
+    state.sessionAspects = session.aspects;
     state.sessionFps = session.fps;
     state.sessionThumbnails = session.thumbnails;
     ui.sessionVideo.src = state.sessionUrl; ui.sessionVideo.load();
@@ -2006,15 +2146,14 @@
     const session = { chunks: [], bytes: 0, canvas: document.createElement('canvas'), stream: null,
       recorder: null, mimeType: pickClipMime(), started: now(), frame: null, timer: null, clock: null,
       stopping: false, finished: false, error: false, mirrored: state.mirrored,
-      contentAspect: ui.live.videoWidth / ui.live.videoHeight || 0, thumbnails: [], lastThumbnailAt: -Infinity, lastDrawAt: -Infinity };
+      aspects: [], thumbnails: [], lastThumbnailAt: -Infinity, lastDrawAt: -Infinity };
     session.canvas.width = ui.processingCanvas.width || 854; session.canvas.height = ui.processingCanvas.height || 480;
     try {
       session.native = !session.mirrored && (preferOriginalTrack() || !ui.clipCanvas.captureStream) &&
         typeof state.stream.getVideoTracks()[0]?.clone === 'function';
-      if (session.native) session.contentAspect = 0;
       session.fps = session.native ? state.sourceFps || state.observedFps
         : state.observedFps || state.sourceFps;
-      if (!session.native && !drawContained(ui.live, session.canvas, session.mirrored)) throw new Error('Camera not ready');
+      if (!session.native && !drawSessionFrame(session)) throw new Error('Camera not ready');
       session.stream = session.native ? cloneCameraVideo() : canvasVideo(session.canvas, state.sourceFps);
       const width = session.native ? ui.live.videoWidth : session.canvas.width;
       const height = session.native ? ui.live.videoHeight : session.canvas.height;
@@ -2029,14 +2168,14 @@
       session.recorder.onerror = () => finishSessionRecording(true);
       state.session = session; session.recorder.start(1000);
       if (!session.native) {
-        drawContained(ui.live, session.canvas, session.mirrored);
+        drawSessionFrame(session);
         requestCanvasFrame(session);
       }
       const draw = timestamp => {
         if (state.session !== session || session.stopping) return;
         if (!state.running || !state.stream) { finishSessionRecording(); return; }
         if (!session.native) {
-          drawContained(ui.live, session.canvas, session.mirrored);
+          drawSessionFrame(session);
         }
         if (timestamp - session.lastThumbnailAt >= 5000) {
           const canvas = copyThumbnail(ui.live, 0, session.mirrored);
@@ -2069,7 +2208,7 @@
   }
   function restorePreferences() {
     try {
-      const saved = JSON.parse(localStorage.getItem('replay-preferences') || '{}');
+      const saved = JSON.parse(localStorage.getItem('replay-preferences') ?? localStorage.getItem('fgs-studio-replay-preferences') ?? '{}');
       const delay = Number(saved.delay);
       if (Number.isFinite(delay) && delay >= 1 && delay <= 120) ui.delay.value = String(Math.round(delay));
       for (const key of ['captureResolution', 'replayResolution', 'captureFps']) {

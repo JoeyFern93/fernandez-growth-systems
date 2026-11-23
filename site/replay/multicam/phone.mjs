@@ -20,7 +20,7 @@ async function showOriginals() {
       b.disabled=true;
       try{
         const blob=await loadOriginal(row);
-        const link=saveLink(container,blob,'Download '+row.angle+' original','FGS-studio-'+row.angle+'-'+row.date+'.'+extension(blob));
+        const link=saveLink(container,blob,'Download '+row.angle+' original','FGS-'+row.angle+'-'+row.date+'.'+extension(blob));
         b.replaceWith(link);
       }catch(error){b.disabled=false;by('status').textContent=error.message;}
     };container.append(b);
@@ -74,7 +74,7 @@ async function start() {
           if(room.exporting)throw Error('A clip is already being prepared.');
           room.exporting=msg.id;
           const blob=await room.original.clip(msg.start,msg.end);
-          saveLink(by('clips'),blob,'Download '+angle+' clip','FGS-studio-'+angle+'-'+msg.id+'.'+extension(blob));
+          saveLink(by('clips'),blob,'Download '+angle+' clip','FGS-'+angle+'-'+msg.id+'.'+extension(blob));
           ok=true;by('status').textContent='Matching clip ready. The camera is still recording.';
         }catch(error){by('status').textContent='Clip export · '+error.message;}
         finally{if(room.exporting===msg.id)room.exporting=null;}

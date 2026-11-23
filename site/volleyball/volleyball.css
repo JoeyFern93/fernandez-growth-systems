@@ -1,4 +1,4 @@
-@font-face{font-family:Nunito;src:url('../../assets/brand/fonts/Nunito-Variable.woff2') format('woff2');font-weight:200 900;font-display:swap}
+@font-face{font-family:Nunito;src:url('/assets/brand/fonts/Nunito-Variable.woff2') format('woff2');font-weight:200 900;font-display:swap}
 :root{color-scheme:dark;font:16px/1.4 Nunito,system-ui,sans-serif;background:#0c1915;color:#f1f6ec}
 *{box-sizing:border-box}
 body{margin:0}

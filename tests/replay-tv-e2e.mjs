@@ -249,7 +249,8 @@ try{
     assert([404,410].includes(expiryStatus),'expired pairing cannot be reused');
     await tv.click('tv-close');await tv.click('stopBtn');
     assert(!taskErrors.length,taskErrors.join('\n'));
-    const proof={qr,inbound,recordingRequests:sender.requests,cameraTracksAfterDisconnect:ended.tracks,review,before,after,
+    assert.equal(requests.filter(r=>r.op==='relay-chunk' && r.verb==='POST').length,0,'direct video must avoid relay uploads');
+    const proof={qr,inbound,directRelayUploads:0,tapsAfterStart:0,recordingRequests:sender.requests,cameraTracksAfterDisconnect:ended.tracks,review,before,after,
       dialog:'TV QR opens phone invite; camera needs a separate tap',entryPoints:['TV URL','running dashboard'],
       revoked:410,expired:expiryStatus,workerRequests:requests.map(r=>r.verb+' '+r.op+' '+r.status)};
     await writeFile(path.join(output,'results.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof,null,2));

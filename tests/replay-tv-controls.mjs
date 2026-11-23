@@ -127,10 +127,6 @@ export async function runControls({tv,phone,site,db,rounds,requests,relayScenari
   await setControl(phone,'phone-fps','30');
   await phone.click('phone-start');
   await phone.until("document.getElementById('phone-preview').srcObject?.active",'phone camera');
-  if(relayScenario){
-    await phone.until("!document.getElementById('phone-options').hidden",'internet relay controls');
-    await phone.click('phone-options');await phone.click('relay-consent');
-  }
   await tv.until("!document.querySelector('#tv-pair-dialog').open && !document.getElementById('reviewRange').disabled",'working delayed player',45000);
   await setControl(tv,'delayRange','1');
   await expectReplay(tv,'RGBY');

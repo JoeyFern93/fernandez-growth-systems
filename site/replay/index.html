@@ -4,29 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1F563B">
-  <meta name="description" content="Practice a skill, then watch it back. Free delayed camera replay for athletes with a touch-friendly review timeline, slow playback, and on-device clip recording.">
+  <meta name="description" content="Review practice on a delay, pair a phone with a TV, and compare two camera angles. Preview and save replay clips on your device.">
+  <meta name="robots" content="noindex, nofollow">
   <meta name="color-scheme" content="dark">
-  <title>Replay Cam | Delayed Video Replay for Athletes | Fernandez Growth Systems</title>
+  <title>Replay Cam | Fernandez Growth Systems</title>
   <link rel="canonical" href="https://www.fernandezgrowthsystems.com/replay/">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://sitereview.fernandezgrowthsystems.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <link rel="manifest" href="manifest-v3.webmanifest">
   <link rel="icon" href="/favicon-v5.ico" sizes="any">
   <link rel="icon" href="/favicon-v5.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/fgs-apple-180-v4.png">
-  <link rel="stylesheet" href="css/app-v10.css">
+  <link rel="stylesheet" href="css/app-v10.css?v=1691ba92efd2">
   <link rel="preload" href="../assets/brand/fonts/Nunito-Variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css">
-  <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css">
-  <link rel="stylesheet" href="/assets/tool-install-v1.css">
-  <link rel="stylesheet" href="css/dashboard-v11.css?v=8eabeb1debc0">
-  <link rel="stylesheet" href="/replay/tv/pair.css?v=a0975fc0dca4">
-  <script src="js/install-v4.js" defer></script>
+  <link rel="stylesheet" href="../assets/brand/website/fgs-brand-v3.css?v=8832ab1a9e06">
+  <link rel="stylesheet" href="../assets/brand/replay-brand-v3.css?v=465557656770">
+  <link rel="stylesheet" href="/assets/tool-install-v1.css?v=4122f70c207f">
+  <link rel="stylesheet" href="css/dashboard-v11.css?v=bb7adb4edd7a">
+  <link rel="stylesheet" href="/replay/tv/pair.css?v=7a29e5dfe7ee">
+  <link rel="stylesheet" href="/replay/tv/quality.css?v=eb51917b3520">
+  <script defer src="/replay/tv/quality.js?v=df1580f4c305"></script>
+  <script src="js/install-v4.js?v=32944f14ecd6" defer></script>
   <script defer src="/assets/fgs-review-bridge.js?v=d8293ba5c04f" data-review-origin="https://sitereview.fernandezgrowthsystems.com"></script>
 </head>
 <body class="fgs-replay" data-tool-name="Replay Cam">
   <a class="skip-link" href="#main">Skip to replay controls</a>
   <header class="app-header">
-    <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><img src="../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg" width="32" height="32" alt=""></a><h1>Replay Cam</h1><span id="connectionBadge" class="badge">Ready</span></div>
+    <div class="app-identity"><a class="fgs-link" href="/" aria-label="Fernandez Growth Systems home"><img src="../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg" width="32" height="32" alt=""></a><div class="replay-switcher">
+      <h1>Replay Cam</h1>
+      <details id="replayModeMenu">
+        <summary aria-label="Replay Cam modes and tools">Modes</summary>
+        <nav aria-label="Replay Cam modes">
+          <a href="./tv/">Pair a phone with the TV</a>
+          <a href="./multicam/">Two-camera replay</a>
+          <a href="./device-test/">Check a recording</a>
+        </nav>
+      </details>
+    </div><span id="connectionBadge" class="badge">Ready</span></div>
     <div class="header-actions"><button id="installBtn" type="button" class="button button-secondary" hidden>How to install</button><button id="fullscreenBtn" type="button" class="button button-secondary">Full screen</button></div>
   </header>
   <main class="app-shell" id="main" tabindex="-1">
@@ -48,7 +61,9 @@
           <canvas id="delayedCanvas" hidden></canvas>
           <div id="viewerMessage" class="viewer-message">
             <strong>Ready to replay</strong><span>Start your camera to build replay history.</span>
-            <div id="quickDemoSlot"></div>
+            <div id="quickDemoSlot">
+              <nav id="replayStartLinks" aria-label="More replay modes"><a href="./multicam/">Two cameras</a></nav>
+            </div>
           </div>
           <div class="viewer-overlay"><span id="engineBadge">On-device</span><span id="actualBadge">No camera</span></div>
         </div>
@@ -172,16 +187,27 @@
         <p class="help-text">If the camera is blocked, check this site's camera permission in your browser. Open Replay Cam directly in Safari or Chrome.</p>
         <p class="help-text">Use the timeline with a finger, mouse, or arrow keys. Full screen keeps the review controls beside or below the video. Available delay, history, full screen, and clip recording depend on your device and browser. Compatibility mode uses a shorter history at lower quality. Switching apps or locking your screen stops the session and clears the rolling history; start again when you return.</p>
       </details>
-        <section class="card diagnostics-card" aria-labelledby="statusTitle">
+        
+
+    <details id="quality-panel" class="quality-panel">
+
+      <summary>Video diagnostics</summary>
+
+      <dl><div><dt>Transport</dt><dd id="quality-transport">Disconnected</dd></div><div><dt>Codec</dt><dd id="quality-codec">—</dd></div><div><dt>TV input</dt><dd id="quality-capture">Waiting for video</dd></div><div><dt>Replay</dt><dd id="quality-replay">Waiting for video</dd></div><div><dt>Connection</dt><dd id="quality-channel">Waiting for packets</dd></div></dl>
+
+      <p>Changed frames per second compares small images while this panel is open. Still scenes can read zero. Sampled frames count callbacks. Decoder queue measures buffered media ahead of playback.</p><div class="quality-file"><button id="quality-inspect" type="button">Check saved file</button><output id="quality-export"></output></div><button id="quality-readings" type="button">Download readings</button>
+
+    </details>
+    <section class="card diagnostics-card" aria-labelledby="statusTitle">
         <p class="eyebrow">STATUS</p><h2 id="statusTitle">Session details</h2>
         <dl><div><dt>Camera</dt><dd id="cameraStatus">Stopped</dd></div><div><dt>Replay</dt><dd id="replayStatus">Waiting</dd></div><div><dt>Buffer</dt><dd id="bufferStatus">0 seconds</dd></div></dl>
       </section>
         <section class="card privacy-card" aria-labelledby="privacyTitle">
         <p class="eyebrow">PRIVACY</p><h2 id="privacyTitle">Where your video goes</h2>
-        <p>Ordinary replay runs on this device. In a private TV room, your phone sends silent video to the paired display. If you choose the internet relay, Fernandez Growth Systems forwards encrypted video. Keep the phone link private because it contains the video key. Screen mirroring shares what you see with the TV you select.</p>
+        <p>Ordinary replay runs on this device. In a private TV room, your phone sends silent video to the paired display. If direct video stalls, the phone can automatically send encrypted video through the Fernandez Growth Systems relay. Select Direct only on the phone to opt out. Keep the phone link private because it contains the video key. Screen mirroring shares what you see with the TV you select.</p>
         <p>Recent replay clears when you stop. Download clips and completed session recordings before closing or refreshing this page. Downloaded videos become normal files on this device, so follow your organization's recording, consent, and deletion policies.</p>
       </section>
-        <a href="/" class="home-link">Back to Fernandez Growth Systems</a>
+        <a href="/tools" class="home-link">All FGS tools</a>
       </section>
     </section>
   </main>
@@ -220,12 +246,12 @@
   <canvas id="processingCanvas" hidden></canvas>
   <canvas id="clipCanvas" hidden></canvas>
   <noscript>Replay requires JavaScript to access and process the camera locally.</noscript>
-  <script src="js/frame-times-v1.js" defer></script>
-  <script src="js/frame-export-v1.js" defer></script>
-  <script src="js/app-v11.js?v=3d2377a7a9f6" defer></script>
-  <script src="/replay/tv/relay-media.js?v=dc757ce63e12" defer></script>
-  <script src="/replay/tv/pair.js?v=5cff35827a90" defer></script>
-  <script src="js/replay-ui.js" defer></script>
-  <script src="js/dashboard-v11.js?v=298f5a765e76" defer></script>
+  <script src="js/frame-times-v1.js?v=2d651db02d37" defer></script>
+  <script src="js/frame-export-v1.js?v=ff4b11081252" defer></script>
+  <script src="js/app-v11.js?v=4e17475aa163" defer></script>
+  <script src="/replay/tv/relay-media.js?v=517561d29f42" defer></script>
+  <script src="/replay/tv/pair.js?v=795bf789d274" defer></script>
+  <script src="js/replay-ui.js?v=5994a7be705f" defer></script>
+  <script src="js/dashboard-v11.js?v=4b4ca30c573a" defer></script>
 </body>
 </html>

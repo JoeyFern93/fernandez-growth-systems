@@ -1,6 +1,6 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-tools-directory-';
-const CACHE_NAME = CACHE_PREFIX + '2026-11-20-compact-header';
+const CACHE_NAME = CACHE_PREFIX + '2026-11-23-replay-volleyball';
 const NAVIGATION_PATHS = new Set(['/tools', '/tools.html']);
 const SHELL = ['/tools', '/assets/site.css', '/assets/tools.css', '/assets/service.js',
   '/assets/tool-install-v1.js', '/assets/tool-install-v1.css', '/tools-directory.webmanifest',
@@ -8,7 +8,7 @@ const SHELL = ['/tools', '/assets/site.css', '/assets/tools.css', '/assets/servi
   '/assets/brand/fonts/Nunito-Variable.woff2',
   '/assets/brand/logos/FGS-Logo-Green-Mobile-613.webp', '/assets/brand/logos/FGS-Logo-Green-Transparent-v3.png', '/assets/brand/logos/FGS-Logo-White-Transparent-v4.png',
   '/assets/brand/icons/FGS-JF-Leaf-Green-v3.svg', '/assets/brand/icons/FGS-JF-Leaf-192-v3.png', '/assets/brand/icons/FGS-JF-Leaf-512-v3.png',
-  '/favicon.png', '/replay/icons/icon.svg', '/assets/room-measure.svg'];
+  '/favicon.png', '/replay/icons/fgs-192-v4.png', '/assets/room-measure.svg'];
 const ALLOWED = new Set(SHELL);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
