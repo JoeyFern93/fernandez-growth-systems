@@ -4,10 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src blob:; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; media-src blob:; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Volleyball Mode · FGS Replay Studio</title>
   <link rel="stylesheet" href="volleyball.css">
   <script defer src="court.js"></script>
+  <script defer src="tracker.js"></script>
+  <script defer src="director.js"></script>
+  <script defer src="analysis-runner.js"></script>
   <script defer src="player.js"></script>
 </head>
 <body>
@@ -17,7 +20,12 @@
     <section id="viewer" aria-label="Replay">
       <figure><figcaption><span id="caption">Baseline · Follow Play</span><span id="source">Mock rally</span></figcaption>
         <canvas id="primary" width="960" height="540" aria-label="Mock volleyball rally, primary angle"></canvas>
-        <video id="video" playsinline preload="metadata" hidden></video></figure>
+        <div id="local-stage" class="local-stage" hidden>
+          <div id="picture">
+            <video id="video" aria-label="Local rally" playsinline preload="auto" hidden></video>
+            <div id="tracked" aria-label="Mark ball in the original frame" hidden><span id="ring" aria-hidden="true" hidden></span></div>
+          </div>
+        </div></figure>
       <figure id="second" hidden><figcaption>Sideline · Full Court</figcaption>
         <canvas id="secondary" width="960" height="540" aria-label="Wide mock sideline at the same time"></canvas></figure>
     </section>
@@ -26,11 +34,12 @@
       <output id="time" for="scrub">3.60 / 16.00 s</output>
     </div>
     <div class="settings">
-      <div class="group" role="group" aria-label="View"><button id="wide" aria-pressed="false">Full Court</button><button id="follow" aria-pressed="true">Follow Play</button></div>
+      <div class="group" role="group" aria-label="View"><button id="wide" aria-pressed="false">Full Court</button><button id="follow" aria-pressed="true"><span id="follow-label">Follow Play</span></button></div>
       <label>Angle <select id="angle"><option value="baseline">Baseline</option><option value="sideline">Raised sideline</option><option value="both">Both angles</option></select></label>
-      <label>Analysis <select id="fps"><option value="30">30 FPS</option><option value="60">60 FPS</option></select></label>
+      <label>Analysis <select id="fps"><option value="30">Up to 30 FPS</option><option value="60">Up to 60 FPS</option></select></label>
+      <button id="mark" aria-pressed="false" hidden>Mark ball</button>
       <button id="reset" hidden>Return to mock rally</button>
     </div>
-    <p id="note" aria-live="polite">16-second mock rally with synthetic ball and player tracks. Choose a local recording to watch it in Full Court.</p>
+    <p id="note" aria-live="polite">This mock rally uses synthetic tracks. Open a local video to follow its ball on this device.</p>
   </main>
 </body></html>

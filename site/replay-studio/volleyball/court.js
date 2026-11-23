@@ -68,7 +68,7 @@
   // All coordinates are fractions of the original frame, so a square in these
   // coordinates preserves the original display aspect ratio at any output size.
   function advance(state, obs, time, dt, angle) {
-    const chosen = selectCandidate(obs.candidates, state.last, time);
+    const chosen = obs.ball === undefined ? selectCandidate(obs.candidates, state.last, time) : obs.ball;
     if (chosen) state.last = { x: chosen.x, y: chosen.y, time };
     const lost = !state.last || time - state.last.time > .10;
     const old = state.crop;
@@ -81,7 +81,7 @@
         top = Math.min(top, player.top - .025); bottom = Math.max(bottom, player.bottom + .035);
       }
       const margin = angle === 'sideline' ? .075 : .045;
-      size = clamp(Math.max(right-left + margin, bottom-top + margin, obs.nearNet ? .73 : .60), .6, 1);
+      size = clamp(Math.max(right-left + margin, bottom-top + margin, obs.nearNet ? .73 : .60, obs.minCrop || 0), .6, 1);
       cx = (left + right) / 2; cy = (top + bottom) / 2;
       bounds = { left: clamp(left,0,1), right: clamp(right,0,1), top: clamp(top,0,1), bottom: clamp(bottom,0,1) };
     }
