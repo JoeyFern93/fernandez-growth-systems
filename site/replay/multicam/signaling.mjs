@@ -13,7 +13,11 @@ export async function call(path,key,data,signal) {
   const response=await fetch(api+path,{method:data!==undefined?'POST':'GET',signal,
     cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',headers,
     body:data===undefined ? undefined : JSON.stringify(data)});
-  if(!response.ok)throw Error((await response.json().catch(()=>({}))).error || 'The pairing service is unavailable. Create a new invite and try again.');
+  if(!response.ok) {
+    const error=Error((await response.json().catch(()=>({}))).error || 'The pairing service is unavailable. Create a new invite and try again.');
+    error.status=response.status;
+    throw error;
+  }
   return response.json();
 }
 async function gather(pc,description,signal) {

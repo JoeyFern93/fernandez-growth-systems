@@ -1,11 +1,11 @@
 'use strict';
 const CACHE_PREFIX = 'fgs-replay-';
-const CACHE_NAME = CACHE_PREFIX + 'v12-fd72718784c5';
+const CACHE_NAME = CACHE_PREFIX + 'v13-d71dbdc8cde3';
 const APP_SHELL = [
   './tv/quality.js?v=df1580f4c305', './tv/quality.css?v=eb51917b3520',
   './', './css/app-v10.css?v=1691ba92efd2', './css/dashboard-v11.css?v=bb7adb4edd7a', './js/dashboard-v11.js?v=4b4ca30c573a',
   './js/frame-times-v1.js?v=2d651db02d37', './js/frame-export-v1.js?v=ff4b11081252', './js/app-v11.js?v=4e17475aa163', './js/replay-ui.js?v=5994a7be705f',
-  './tv/pair.js?v=795bf789d274', './tv/relay-media.js?v=517561d29f42', './tv/pair.css?v=7a29e5dfe7ee', './manifest-v3.webmanifest', './js/install-v4.js?v=32944f14ecd6',
+  './tv/pair.js?v=ba6bfa93fd72', './tv/relay-media.js?v=5c2d3db6276c', './tv/pair.css?v=7a29e5dfe7ee', './manifest-v3.webmanifest', './js/install-v4.js?v=32944f14ecd6',
   '../favicon-v5.ico', '../favicon-v5.svg', '../favicon-v5-32.png', '../assets/tool-install-v1.css?v=4122f70c207f',
   '../assets/brand/website/fgs-brand-v3.css?v=8832ab1a9e06', '../assets/brand/replay-brand-v3.css?v=465557656770',
   '../assets/brand/fonts/Nunito-Variable.woff2', '../assets/brand/icons/FGS-JF-Leaf-Green-v3.svg',

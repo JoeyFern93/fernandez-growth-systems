@@ -118,6 +118,15 @@ async function verifyShell(){
   assert.ok(!links.includes('/replay-studio/'),'Duplicate Studio tool');
   assert.match(home,/Video diagnostics/i,'Expected updated Replay Cam');
   assert.doesNotMatch(home,/href=["'][^"']*volleyball\//i,'Tracker is a separate tool');
+  for (const [phonePath, startId] of [['tv/phone', 'phone-start'], ['multicam/phone', 'start']]) {
+    const url = new URL(replay+phonePath, site);
+    const response = await fetch(url, {redirect:'manual', cache:'no-store', signal:AbortSignal.timeout(9500)});
+    assert.equal(response.status, 200, 'QR target must open directly: '+url.pathname);
+    assert.match(response.headers.get('content-type')||'', /text\/html/i);
+    const phone = await response.text();
+    assert.ok(phone.includes('id="'+startId+'"'), 'Missing camera start on '+url.pathname);
+    if (startId==='phone-start') assert.ok(phone.includes('Use internet relay'), 'Missing manual relay option');
+  }
   const cameras = await page(replay+'multicam/', /Two-camera replay/i);
   for (const name of ['Camera 1', 'Camera 2']) {
     assert.ok(cameras.includes('>'+name+'</h2>'), 'Missing camera heading for '+name);

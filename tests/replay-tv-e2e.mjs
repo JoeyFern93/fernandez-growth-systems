@@ -15,7 +15,8 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 const site='https://www.fernandezgrowthsystems.com';
 const api='https://sitereview.fernandezgrowthsystems.com';
 const probeOnly=process.argv.includes('--test-browser');
-const relayScenario=process.argv.includes('--relay');
+const manualRelay=process.argv.includes('--manual-relay');
+const relayScenario=manualRelay || process.argv.includes('--relay');
 const controlsScenario=process.argv.includes('--controls');
 const temps=await mkdtemp(path.join(process.env.REPLAY_QA_TEMP||os.tmpdir(),'fgs-tv-check-'));
 const output=process.env.REPLAY_QA_PROOF || path.join(here,'replay-tv-proof');
@@ -110,6 +111,7 @@ async function route({request,requestId},sessionId){
     else{
       let name=url.pathname.replace(/^\//,'');
       if(name.endsWith('/'))name+='index.html';
+      else if(!path.extname(name))name+='.html';
       const found=roots.map(root=>path.join(root,name)).find(existsSync);
       response=found?new Response(await readFile(found),{headers:{'Content-Type':mime[path.extname(name).slice(1)]||'application/octet-stream'}}):new Response('missing local asset',{status:404});
     }
@@ -140,7 +142,7 @@ const observe=`(() => {
   const pcs=[],tracks=[],requests=[];
   const RTC=window.RTCPeerConnection;
   window.RTCPeerConnection=class extends RTC {constructor(configuration,...rest){
-    super({...configuration,iceServers:[],iceTransportPolicy:${relayScenario?"'relay'":"'all'"}},...rest);
+    super({...configuration,iceServers:[],iceTransportPolicy:${relayScenario&&!manualRelay?"'relay'":"'all'"}},...rest);
     pcs.push(this);
   }};
   const media=navigator.mediaDevices;
@@ -197,7 +199,7 @@ try{
     await runControls({tv,phone,site,db,rounds,requests,relayScenario,taskErrors,delay});
   }else if(relayScenario){
     const {default:runRelay}=await import('./replay-tv-relay.mjs');
-    await runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv:{DB:db},taskErrors,output,delay});
+    await runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv:{DB:db},taskErrors,output,delay,manualRelay});
   }else if(probeOnly){
     await Promise.all([tv.navigate(site+'/'),phone.navigate(site+'/')]);
     await Promise.all([tv.until('!!window.__inspectMedia','TV setup'),phone.until('!!window.__inspectMedia','phone setup')]);
@@ -209,7 +211,7 @@ try{
   }else{
     await tv.navigate(site+'/replay/tv/');
     const link=await tv.until("document.querySelector('#tv-phone-link')?.href?.includes('#pair=') && document.querySelector('#tv-phone-link').href",'TV pairing link');
-    assert.equal(new URL(link).pathname,'/replay/tv/phone.html');assert.match(new URL(link).hash,/^#pair=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}&key=[A-Za-z0-9_-]{43}$/);
+    assert.equal(new URL(link).pathname,'/replay/tv/phone');assert.match(new URL(link).hash,/^#pair=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}&key=[A-Za-z0-9_-]{43}$/);
     const qr=await tv.until("(()=>{const q=document.querySelector('#tv-qr'), e=q?.matches('svg,img,canvas')?q:q?.querySelector('svg,img,canvas');if(!e)return false;const b=e.getBoundingClientRect();return b.width>60&&b.height>60?{width:b.width,height:b.height,kind:e.tagName}:false;})()",'visible QR');
     await tv.shot('tv-pair');await phone.navigate(link);await phone.until("typeof document.querySelector('#phone-start')?.onclick==='function'",'phone ready to start');
     assert.equal((await phone.get('__inspectMedia()')).requests.length,0,'the invite must wait for a phone tap');

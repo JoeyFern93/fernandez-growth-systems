@@ -34,8 +34,8 @@
       <details id="replayModeMenu">
         <summary aria-label="Replay Cam modes and tools">Modes</summary>
         <nav aria-label="Replay Cam modes">
-          <a href="./tv/">Pair a phone with the TV</a>
-          <a href="./multicam/">Two-camera replay</a>
+          <a href="/replay/?mode=tv">One phone to TV (internet relay available)</a>
+          <a href="./multicam/">Two-camera replay (same Wi-Fi)</a>
           <a href="./device-test/">Check a recording</a>
         </nav>
       </details>
@@ -117,7 +117,7 @@
           <label>Camera frame rate<select id="captureFps"><option value="max" selected>Maximum on this camera</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="240">240 FPS</option></select></label>
         </div>
         <p id="frameRateStatus" class="fps-readout" role="status">Start the camera to measure its frame rate.</p>
-        <div class="camera-actions"><button id="flipBtn" type="button" class="button button-secondary" disabled>Switch camera</button><button id="mirrorBtn" type="button" class="button button-secondary" aria-pressed="false">Mirror: off</button><button id="pairTvBtn" type="button" class="button button-secondary" aria-haspopup="dialog">TV display</button></div>
+        <div class="camera-actions"><button id="flipBtn" type="button" class="button button-secondary" disabled>Switch camera</button><button id="mirrorBtn" type="button" class="button button-secondary" aria-pressed="false">Mirror: off</button><button id="pairTvBtn" type="button" class="button button-secondary" aria-haspopup="dialog">Pair phone to TV</button></div>
         <details class="cast-help">
           <summary>Cast or mirror this screen</summary>
           <p>The TV shows the delayed replay and controls from this device. Connect both devices to the same Wi-Fi and start mirroring before starting the camera.</p>
@@ -249,8 +249,8 @@
   <script src="js/frame-times-v1.js?v=2d651db02d37" defer></script>
   <script src="js/frame-export-v1.js?v=ff4b11081252" defer></script>
   <script src="js/app-v11.js?v=4e17475aa163" defer></script>
-  <script src="/replay/tv/relay-media.js?v=517561d29f42" defer></script>
-  <script src="/replay/tv/pair.js?v=795bf789d274" defer></script>
+  <script src="/replay/tv/relay-media.js?v=5c2d3db6276c" defer></script>
+  <script src="/replay/tv/pair.js?v=ba6bfa93fd72" defer></script>
   <script src="js/replay-ui.js?v=5994a7be705f" defer></script>
   <script src="js/dashboard-v11.js?v=4b4ca30c573a" defer></script>
 </body>

@@ -159,9 +159,9 @@
     } else if (s.media) {
       window.FGSReplayCamera?.endRemote(s.media);
       if (s.handoffPrevious && s.handoffPrevious !== s.media) window.FGSReplayCamera?.endRemote(s.handoffPrevious);
-      if (tvButton) tvButton.textContent = 'TV display';
+      if (tvButton) tvButton.textContent = 'Pair phone to TV';
     }
-    if (notifyServer && s.id && s.key) {
+    if (notifyServer && s.id && s.key && (s.role!=='phone' || s.claimed || s.claimSent)) {
       api('/' + s.id + '/end', 'POST', s.key, null, true).catch(() => {});
     }
   }
@@ -272,7 +272,7 @@
   async function switchToRelay(s) {
     if(!current(s) || s.role!=='phone' || s.directOnly || s.relaying || s.relayPending || !s.media)return;
     s.relayPending=true;
-    el('phone-options').hidden=true;
+    s.updateRelayButton?.();
     el('phone-status').textContent='Switching to internet relay.'+switchNotice(s);
     closePeer(s);
     try {
@@ -284,6 +284,7 @@
       const agreed=await api('/'+s.id+'/relay','POST',s.key,{action:'start',mimeType:mime});
       if(!current(s))return;
       s.relaying=true;
+      s.updateRelayButton?.();
       expiry(s,agreed.expiresAt || s.expires);
       s.relayController=new AbortController();
       showTransport(s,mime);
@@ -450,7 +451,7 @@
       s.id=session.id;
       if (s.ended) { api('/'+s.id+'/end','POST',s.key).catch(()=>{}); return; }
       expiry(s,session.expiresAt);
-      const link=new URL('/replay/tv/phone.html', location.origin);
+      const link=new URL('/replay/tv/phone', location.origin);
       link.hash='pair='+s.id+'.'+session.invite+'&key='+s.videoKey;
       tvState('Open the private phone link or scan the QR code, then tap Start camera. The phone can use a different network. Share the link only with the person using the camera.', 'code');
       el('tv-phone-link').href=link.href; el('tv-phone-link').hidden=false;
@@ -489,7 +490,7 @@
 
     } catch (error) {
       if(s.ended || s.relaying || s.interrupted)return;
-      if(s.monitoring && !error.status && Date.now()<s.expires)offerRelay(s,'The TV could not open direct video.');
+      if(s.monitoring && ![401,403,404,410].includes(error.status) && Date.now()<s.expires)offerRelay(s,'The TV could not open direct video.');
       else fail(s,error);
     }
   }
@@ -555,48 +556,87 @@
   function setupPhone() {
     const params=new URLSearchParams(location.hash.slice(1));
     const match=/^([a-zA-Z0-9_-]{10,90})\.([a-zA-Z0-9_-]{16,96})$/.exec(params.get('pair')||'');
-    if (!match || !supported('phone') || !navigator.mediaDevices?.getUserMedia) {
-      phoneStart.hidden=true;
-      el('phone-status').textContent=match?'Open this private phone link in a browser with camera access.':'On the display, open Replay Cam and select TV display. Then open its private phone link or scan its QR code on this phone.';
+    const status=el('phone-status'), relay=el('phone-options'), stop=el('phone-stop');
+    const choice=el('phone-connection-choice'), directOnly=el('phone-direct-only');
+    const note=el('phone-connection-note'), browserHelp=el('phone-browser-help');
+    const validKey=/^[A-Za-z0-9_-]{43}$/.test(params.get('key') || '');
+    const canRelay=!!(validKey && window.FGSReplayRelay?.sendFormats()?.length);
+    if(!match) {
+      phoneStart.hidden=true;choice.hidden=true;
+      status.textContent='On the display, choose Pair phone to TV and scan its new QR code.';
       return;
     }
-    const capture=window.FGSPhoneCamera?.setup();
-    phoneStart.onclick=async()=>{
-      if (active) return;
-      const secret=params.get('key');
-      const s={role:'phone',id:match[1],key:token(),videoKey:/^[A-Za-z0-9_-]{43}$/.test(secret||'')?secret:null,capture};
-      s.directOnly=el('phone-direct-only').checked;
-      active=s;phoneStart.disabled=true;
-      el('phone-connection-choice').hidden=true;
+    el('phone-copy-invite').onclick=async()=>{
       try {
-        el('phone-status').textContent='Connecting to your TV…';
-        const session=await api('/'+s.id+'/claim','POST',null,{invite:match[2],phoneToken:s.key});
-        if (s.ended) return;
-        expiry(s,session.expiresAt);
-        el('phone-status').textContent='Allow camera access to start sending video.';
-        phoneStart.hidden=true; el('phone-stop').hidden=false;
+        await navigator.clipboard.writeText(location.href);
+        el('phone-copy-status').textContent='Paste the private link into Safari or Chrome on this phone.';
+      } catch {
+        el('phone-copy-status').textContent='Copy the full address from this browser and paste it into Safari or Chrome.';
+      }
+    };
+    if (!supported('phone') || !navigator.mediaDevices?.getUserMedia) {
+      phoneStart.hidden=true;choice.hidden=true;browserHelp.hidden=false;
+      status.textContent='This browser cannot start the camera. Open this private link in Safari or Chrome.';
+      return;
+    }
+    if(!canRelay) {
+      note.textContent=validKey ? 'This browser supports direct pairing only.' : 'This link supports direct pairing only. For internet relay, scan a new QR code on the TV.';
+      directOnly.checked=true;directOnly.disabled=true;
+    } else if(!hasDirect()) {
+      note.textContent='This browser can send video over the encrypted internet relay for up to 30 minutes. Cellular uses mobile data.';
+      directOnly.checked=false;directOnly.disabled=true;
+    }
+    function updateRelayButton() {
+      const s=active;
+      relay.hidden=!canRelay;
+      relay.disabled=!canRelay || (s?.directOnly ?? directOnly.checked) || !!(s?.manualRelay || s?.interrupted || s?.relayPending || s?.relaying);
+      relay.textContent=s?.relaying?'Internet relay active':s?.relayPending?'Switching to relay…':s?.manualRelay?'Relay selected':'Use internet relay';
+    }
+    let capture=window.FGSPhoneCamera?.setup();
+    async function start(manual) {
+      const s=active || {role:'phone',id:match[1],key:token(),videoKey:validKey?params.get('key'):null,
+        directOnly:directOnly.checked,capture,updateRelayButton};
+      if(manual) {
+        if(!canRelay || s.directOnly || s.interrupted || s.relaying)return;
+        s.manualRelay=true;
+        updateRelayButton();
+        if(s.claimed && s.media){offerRelay(s,'Manual relay selected.');return;}
+      }
+      if(s.starting || s.claimed)return;
+      s.starting=true;active=s;
+      phoneStart.hidden=true;phoneStart.disabled=true;stop.hidden=false;choice.hidden=true;browserHelp.hidden=true;
+      updateRelayButton();
+      try {
+        status.textContent='Allow camera access on this phone.';
         const lost=()=>fail(s,new Error('The camera stopped.'));
-        const stream=capture ? await capture.start(lost) :
-          await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:240}}});
-        if (s.ended) { stopTracks(stream);return; }
+        // Request permission during the user's tap. A denied permission leaves
+        // the invite unclaimed, and changing transport reuses this capture.
+        const stream=s.capture ? await s.capture.start(lost) :
+          await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}});
+        if(!current(s)){stopTracks(stream);return;}
         s.media=stream;
-        el('phone-options').hidden=s.directOnly || !s.videoKey;
-        const track=stream.getVideoTracks()[0];
-        if (!track) throw new Error('The phone camera did not provide a video track.');
-        if (!capture) {
+        const track=stream?.getVideoTracks()[0];
+        if (!track) throw new Error('This camera did not provide a video track.');
+        if (!s.capture) {
           track.addEventListener('ended',lost,{once:true});
           const preview=el('phone-preview'); preview.srcObject=stream; preview.hidden=false; preview.play().catch(()=>{});
         }
-        el('phone-status').textContent='Connecting directly.';
+        status.textContent='Joining your private TV room…';
+        s.claimPending=true;s.claimSent=true;
+        const session=await api('/'+s.id+'/claim','POST',null,{invite:match[2],phoneToken:s.key});
+        s.claimPending=false;s.claimed=true;
+        if(!current(s)){api('/'+s.id+'/end','POST',s.key,null,true).catch(()=>{});return;}
+        expiry(s,session.expiresAt);
         monitorRelay(s);
-        if(!hasDirect()){offerRelay(s,'This phone could not open a direct connection.');return;}
-        // Runs independently of ICE. The TV confirms advancing decoded frames.
+        if(s.manualRelay || !hasDirect()){offerRelay(s,'Internet relay selected.');return;}
+        status.textContent='Connecting directly.';
+        // The display confirms that decoded frames advance independently of ICE.
         s.frameDeadline=setTimeout(()=>offerRelay(s,'The TV did not confirm direct video.'),firstFrameWait+2500);
         const peer=await peerFor(s);
         if(s.ended || s.relaying || s.interrupted) return;
-        const outgoing=capture?.directStream() || stream;
+        const outgoing=s.capture?.directStream() || stream;
         const sending=peer.addTransceiver(outgoing.getVideoTracks()[0],{direction:'sendonly',streams:[outgoing]});
-        capture?.setSender(sending.sender);
+        s.capture?.setSender(sending.sender);
         const offer=await localDescription(peer,await peer.createOffer());
         if (s.ended || s.relaying || s.interrupted) return;
         await api('/'+s.id+'/offer','POST',s.key,offer);
@@ -606,14 +646,40 @@
         receiveCandidates(s,peer);
   
       } catch (error) {
-        if(s.ended || s.relaying || s.interrupted)return;
-        if(s.media && !error.status && Date.now()<s.expires)offerRelay(s,'The phone could not open direct video.');
-        else fail(s,error);
-      }
-    };
-    phoneStart.disabled=false;
-    el('phone-stop').onclick=()=>{end(active);el('phone-status').textContent='Camera disconnected. Create a new room on the display for another phone link or QR code.';};
-    el('phone-options').onclick=()=>{if(active?.media)offerRelay(active,'Manual relay selected.');};
+        if(!current(s) || s.relaying || s.interrupted)return;
+        if(s.claimed) {
+          if(![401,403,404,410].includes(error.status) && Date.now()<s.expires)offerRelay(s,'The phone could not open direct video.');
+          else fail(s,error);
+          return;
+        }
+        const claimFailed=s.claimPending;s.claimPending=false;
+        if(claimFailed && [400,401,403,404,409,410].includes(error.status)){
+          s.claimSent=false;fail(s,error);
+          return;
+        }
+        if(s.media){
+          s.capture?.stop();stopTracks(s.media);s.media=null;
+          const preview=el('phone-preview');preview.srcObject=null;preview.hidden=true;
+          capture=window.FGSPhoneCamera?.setup();s.capture=capture;
+        }
+        const denied=error.name==='NotAllowedError' || error.name==='SecurityError';
+        if(claimFailed)status.textContent='The phone could not reach the pairing service. Check your connection and try again.';
+        else if(denied)status.textContent='Allow camera access in this browser, then tap Start camera.';
+        else if(error.name==='NotReadableError' || error.name==='AbortError')status.textContent='The camera could not open. Close other apps using it, then tap Start camera.';
+        else if(error.name==='NotFoundError')status.textContent='No camera was found. Open this private link on a phone with a camera.';
+        else status.textContent='The camera could not start. Check camera access, then try again.';
+        browserHelp.hidden=!denied && error.name!=='NotFoundError';
+        s.manualRelay=false;
+        phoneStart.hidden=false;phoneStart.disabled=false;stop.hidden=true;choice.hidden=false;
+        s.directOnly=directOnly.checked;
+        updateRelayButton();
+      } finally{s.starting=false;}
+    }
+    directOnly.onchange=()=>{if(active && !active.starting && !active.media)active.directOnly=directOnly.checked;updateRelayButton();};
+    phoneStart.disabled=false;updateRelayButton();
+    phoneStart.onclick=()=>start(false);
+    relay.onclick=()=>start(true);
+    stop.onclick=()=>{end(active);phoneStart.hidden=true;choice.hidden=true;browserHelp.hidden=true;status.textContent='Camera disconnected. Create a new room on the display for another phone link or QR code.';};
   }
   window.addEventListener('pagehide',()=>end(active));
   if (phoneStart) {

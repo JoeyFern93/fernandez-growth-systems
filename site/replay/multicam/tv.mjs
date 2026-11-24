@@ -92,7 +92,7 @@ async function invite(slot) {
     if(signal.aborted)return;
     if(!result.id?.startsWith('~'))throw Error('Two-camera pairing is unavailable. Create a new invite and try again.');
     Object.assign(room,{id:result.id,expiry:result.expiresAt});
-    const url=new URL('phone.html',location.href);
+    const url=new URL('phone',location.href);
     url.hash=new URLSearchParams({room:room.id,invite:result.invite,camera:slot.cameraId,session,until:String(room.expiry)});
     const qr=globalThis.qrcode(0,'M');qr.addData(url.href);qr.make();
     by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});

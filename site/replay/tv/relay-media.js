@@ -6,13 +6,13 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   function sendFormats() {
     if (!globalThis.crypto?.subtle) return [];
-    const supported = videoFormats.filter(mime => globalThis.MediaRecorder?.isTypeSupported(mime));
+    const supported = videoFormats.filter(mime => globalThis.MediaRecorder?.isTypeSupported?.(mime));
     if (HTMLCanvasElement.prototype.toBlob) supported.push(jpeg);
     return supported;
   }
   function receiveFormats() {
     if (!globalThis.crypto?.subtle || !HTMLCanvasElement.prototype.captureStream) return [];
-    return [...videoFormats.filter(mime => globalThis.MediaSource?.isTypeSupported(mime)), jpeg];
+    return [...videoFormats.filter(mime => globalThis.MediaSource?.isTypeSupported?.(mime)), jpeg];
   }
   function importVideoKey(encoded) {
     const bytes = Uint8Array.from(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0));

@@ -32,6 +32,10 @@ jobs:
             scenario: --relay
             jpeg: '0'
             without_rtc: '0'
+          - label: Manual internet relay from phone invite
+            scenario: --manual-relay
+            jpeg: '0'
+            without_rtc: '0'
           - label: Encrypted images on a TV without WebRTC
             scenario: --relay
             jpeg: '1'

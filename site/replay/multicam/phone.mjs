@@ -5,8 +5,10 @@ const by=id=>document.getElementById(id);
 const q=new URLSearchParams(location.hash.slice(1));
 const id=q.get('room'),invite=q.get('invite'),expiry=Number(q.get('until'));
 const camera=q.has('camera') ? cameras.find(c=>c.id===q.get('camera')) : cameras.find(c=>c.angle===q.get('angle'));
-history.replaceState(null,'',location.pathname+location.search);
-let active=null;
+const validInvite=/^~[A-Za-z0-9_-]{21}$/.test(id) && /^[A-Za-z0-9_-]{43}$/.test(invite) &&
+  camera && Number.isFinite(expiry) && expiry>0;
+const expiredMessage='This invite expired. Scan a new invite for this camera on the TV.';
+let active=null,claimKey;
 function saveLink(container,blob,label,file){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file;
   a.textContent=label;container.append(a);return a;
@@ -29,30 +31,46 @@ async function showOriginals() {
     };container.append(b);
   }
 }
-async function close(room,message){
-  if(active!==room)return;active=null;room.controller.abort();clearTimeout(room.watchdog);
+async function close(room,message,retry=false){
+  if(active!==room)return;active=null;room.controller.abort();clearTimeout(room.watchdog);clearTimeout(room.inviteTimer);
   room.pc?.close();room.stream?.getTracks().forEach(t=>t.stop());
-  by('camera').srcObject=null;by('start').disabled=true;by('stop').disabled=true;
+  by('camera').srcObject=null;by('start').disabled=!retry || Date.now()>=expiry;by('stop').disabled=true;
   by('status').textContent=message;
   if(room.claimed)call('/'+id+'/end',room.key,{}).catch(()=>{});
-  try{await room.original?.stop();await showOriginals();}catch(error){by('status').textContent=error.message;}
+  try{await room.original?.stop();await showOriginals();}catch(error){by('originals').textContent=error.message;}
 }
 async function start() {
-  if(active)return;
-  const room={key:token(),controller:new AbortController()};active=room;
+  if(active || !validInvite)return;
+  const room={controller:new AbortController()};active=room;
   const signal=room.controller.signal;
   by('start').disabled=true;by('stop').disabled=false;
   try{
-    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)throw Error('Open this camera link over HTTPS.');
-    if(!('MediaRecorder' in window))throw Error('This phone cannot record an original in this browser.');
-    if(Date.now()>=expiry)throw Error('This code expired. Request a new invite for this angle.');
-    by('status').textContent='Connecting directly…';
-    await call('/'+id+'/claim',null,{invite,phoneToken:room.key},signal);room.claimed=true;
+    if(Date.now()>=expiry)throw Error(expiredMessage);
+    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia ||
+       !('MediaRecorder' in window) || typeof RTCPeerConnection!=='function'){
+      throw Error('Open this private invite in Chrome or Safari with camera access.');
+    }
+    room.inviteTimer=setTimeout(()=>close(room,expiredMessage),Math.min(expiry-Date.now(),2147483647));
+    by('status').textContent='Allow camera access to join the TV.';
     const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{
       facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}});
     if(active!==room){stream.getTracks().forEach(t=>t.stop());return;}
     room.stream=stream;const video=by('camera');video.srcObject=stream;await video.play();
     if(signal.aborted)return;
+    if(Date.now()>=expiry)throw Error(expiredMessage);
+    by('status').textContent='Connecting directly to the TV.';
+    // A lost response may follow a successful claim; retry with the same in-memory phone key.
+    room.key=claimKey ||= token();
+    room.claimSent=true;
+    const claimController=new AbortController();
+    const timeout=setTimeout(()=>claimController.abort(),12000);
+    try{
+      await call('/'+id+'/claim',null,{invite,phoneToken:room.key},claimController.signal);
+    }finally{clearTimeout(timeout);}
+    if(signal.aborted){call('/'+id+'/end',room.key,{}).catch(()=>{});return;}
+    room.claimed=true;clearTimeout(room.inviteTimer);
+    // Keep an unclaimed invitation usable through a reload. A claimed invite is single-use.
+    try{history.replaceState(history.state,'',location.pathname+location.search);}catch{}
     room.original=await startOriginal(stream,camera.angle,message=>{by('status').textContent=String(message);});
     if(signal.aborted){await room.original.stop();return;}
     const anchor=(_,m)=>{
@@ -95,15 +113,39 @@ async function start() {
     };
     await negotiate(pc,{id,key:room.key,expiry,signal},true);
     if(!signal.aborted && pc.connectionState!=='connected')room.watchdog=setTimeout(()=>close(room,'Direct connection timed out. Scan a new invite.'),22000);
-  }catch(error){if(!signal.aborted)await close(room,error.message);}
+  }catch(error){
+    if(signal.aborted){
+      // The server may have claimed the room even if its reply was lost during Stop.
+      if(room.claimSent && !room.claimed)call('/'+id+'/end',room.key,{}).catch(()=>{});
+      return;
+    }
+    const expired=Date.now()>=expiry || error.status===410;
+    const invalid=[400,403,404,409].includes(error.status);
+    const retry=!expired && !invalid && !room.claimed;
+    let message=error.message;
+    if(expired)message=expiredMessage;
+    else if(invalid)message='This camera invite is already used or invalid. Scan a new invite on the TV.';
+    else if(error.name==='NotAllowedError')message='Allow camera access in this browser, then tap Start camera again.';
+    else if(error.name==='NotReadableError')message='Close the other app using your camera, then tap Start camera again.';
+    else if(room.claimSent && !room.claimed)message='Could not reach the TV room. Check your connection and tap Start camera again.';
+    else if(room.claimed)message+=' Scan a new invite on the TV to reconnect.';
+    await close(room,message,retry);
+  }
 }
-by('start').onclick=start;by('stop').onclick=()=>active && close(active,'Stopped. Your original is available below.');
+by('start').onclick=start;
+by('stop').onclick=()=>{
+  if(!active)return;
+  const retry=!active.claimSent;
+  close(active,retry?'Stopped. You can start this camera again.':'Stopped. Scan a new invite on the TV to reconnect.',retry);
+};
 window.addEventListener('pagehide',()=>{if(active)close(active,'Closed');});
-if(!/^~[A-Za-z0-9_-]{21}$/.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(invite) ||
-  !camera || !Number.isFinite(expiry)){
+window.addEventListener('hashchange',()=>location.reload());
+if(!validInvite){
   by('start').disabled=true;by('status').textContent='Scan a new camera invite on the TV.';
 }else{
   by('angle-name').textContent=camera.label;
   document.title=camera.label+' · FGS Replay Cam';
+  by('start').disabled=Date.now()>=expiry;
+  by('status').textContent=by('start').disabled?expiredMessage:'Tap Start camera to join the TV.';
 }
-showOriginals().catch(()=>{by('status').textContent='Phone storage is unavailable for originals.';});
+showOriginals().catch(()=>{by('originals').textContent='Phone storage is unavailable for originals.';});

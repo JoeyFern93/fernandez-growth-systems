@@ -307,7 +307,7 @@
         onLost = lost; busy = true; refresh();
         try {
           await install(await acquire(lensChoice, false));
-          if (!stopped) await listCameras();
+          if (!stopped) listCameras();
           return source;
         } finally { busy = false; refresh(); }
       },

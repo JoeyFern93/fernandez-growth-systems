@@ -12,10 +12,10 @@
   <title>Phone camera | Replay Cam</title>
   <link rel="stylesheet" href="/replay/tv/quality.css?v=eb51917b3520">
   <script defer src="/replay/tv/quality.js?v=df1580f4c305"></script>
-  <script defer src="/replay/tv/relay-media.js?v=517561d29f42"></script>
-  <script defer src="/replay/tv/phone-camera.js?v=ccdc90c7a849"></script>
+  <script defer src="/replay/tv/relay-media.js?v=5c2d3db6276c"></script>
+  <script defer src="/replay/tv/phone-camera.js?v=5dacf2209e2b"></script>
   <script defer src="/replay/tv/phone-view.js?v=f66199e9189d"></script>
-  <script defer src="/replay/tv/pair.js?v=795bf789d274"></script>
+  <script defer src="/replay/tv/pair.js?v=ba6bfa93fd72"></script>
 </head>
 <body class="replay-phone">
   <main class="phone-shell">
@@ -30,13 +30,17 @@
     <div class="phone-tools">
         <p id="phone-status" role="status">Join your private TV room.</p>
         <div id="phone-connection-choice">
-          <p id="phone-connection-note">Start camera tries a direct connection first. If direct video fails to start or later stops, your phone may use the encrypted internet relay for up to 30 minutes. Cellular uses mobile data.</p>
+          <p id="phone-connection-note">Start camera tries a direct connection and switches to the encrypted internet relay if video stalls. Choose Use internet relay to start on relay immediately. Relay can use mobile data for up to 30 minutes.</p>
           <label><input id="phone-direct-only" type="checkbox"> Direct only</label>
         </div>
         <div class="phone-session-actions">
           <button type="button" id="phone-start" aria-describedby="phone-connection-note" disabled>Start camera</button>
-          <button type="button" id="phone-options" hidden>Use internet relay</button>
+          <button type="button" id="phone-options" aria-describedby="phone-connection-note" hidden>Use internet relay</button>
           <button type="button" id="phone-stop" hidden>Disconnect</button>
+        </div>
+        <div id="phone-browser-help" hidden>
+          <button type="button" id="phone-copy-invite">Copy private phone link</button>
+          <p id="phone-copy-status" role="status"></p>
         </div>
         <div class="phone-transform">
           <button type="button" id="phone-rotate" aria-describedby="phone-angle">Rotate 90°</button>

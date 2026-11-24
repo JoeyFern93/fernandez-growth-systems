@@ -88,7 +88,7 @@ function holdDisplayRegistration(){
   };
 }
 
-export default async function runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv,taskErrors,output,delay}){
+export default async function runRelay({tv,phone,site,api,db,requests,rounds,worker,workerEnv,taskErrors,output,delay,manualRelay=false}){
   const jpeg=process.env.REPLAY_QA_RELAY_JPEG==='1';
   const tvWithoutRtc=process.env.REPLAY_QA_TV_WITHOUT_RTC==='1';
   await phone.send('Page.addScriptToEvaluateOnNewDocument',{source:'('+decorateCamera.toString()+')();'+
@@ -105,7 +105,10 @@ export default async function runRelay({tv,phone,site,api,db,requests,rounds,wor
   assert.equal((await phone.get('__inspectMedia()')).requests.length,0);
   assert.equal(requests.filter(r=>r.op==='relay-chunk' && r.verb==='POST').length,0);
   const began=Date.now();
-  await phone.click('phone-start');
+  if(manualRelay){
+    await phone.until("!document.querySelector('#phone-options')?.hidden && !document.querySelector('#phone-options').disabled",'relay available before camera starts');
+  }
+  await phone.click(manualRelay?'phone-options':'phone-start');
   await phone.until("__inspectMedia().then(s=>s.tracks.some(t=>t.state==='live'))",'phone camera ready');
   if(tvWithoutRtc){
     await phone.until("document.getElementById('phone-status').textContent.includes('Switching')",'automatic handoff while registration is pending',25000);
@@ -117,7 +120,14 @@ export default async function runRelay({tv,phone,site,api,db,requests,rounds,wor
   const session=rounds[0], lookup=()=>db.prepare('SELECT status,mime,latest FROM replay_relays WHERE id=?').bind(session.id).first();
   const media=await tv.get('__inspectMedia()');
   assert(media.requests.length===0,'the receiver must never prompt for a camera');
-  assert(!media.received.some(flow=>flow.frames>0),'no frames can come from the blocked peer');
+  assert(!media.received.some(flow=>flow.frames>0),'relay video must not come from a direct peer');
+  if(manualRelay){
+    const sender=await phone.get('__inspectMedia()');
+    assert.equal(sender.requests.length,1,'manual relay opens the camera once');
+    assert.equal(sender.connections.length,0,'manual relay must skip direct negotiation');
+    assert.equal(requests.filter(r=>r.op==='claim' && r.verb==='POST').length,1,'manual relay claims the room once');
+    assert.equal(requests.filter(r=>r.op==='offer' && r.verb==='POST').length,0,'manual relay must not send a direct offer');
+  }
   const status=await lookup();assert.equal(status.status,'active');
   if(jpeg)assert.match(status.mime,/jpeg/);
   else assert.match(status.mime,/video\//,'normal browsers must negotiate video');
@@ -148,7 +158,7 @@ export default async function runRelay({tv,phone,site,api,db,requests,rounds,wor
   assert.equal((await db.prepare('SELECT count(*) AS n FROM replay_relay_chunks WHERE pair_id=?').bind(session.id).first()).n,0);
   assert.equal(rounds.length,1);
   assert.deepEqual(taskErrors,[]);
-  const proof={mode:status.mime,tvWithoutRtc,timeToTwoDistinctMarkersMs:movingAfterMs,tapsAfterStart:0,verifiedCiphertexts:matched,liveOpticalMarkers:source,delayedOpticalMarkers:replay,directDecodedFrames:0,frameStep:{previous,stepped},cameraAfterDisconnect:stopped,pairAfterDisconnect:ended.status,storedPacketsAfterDisconnect:0};
+  const proof={mode:status.mime,manualRelay,tvWithoutRtc,timeToTwoDistinctMarkersMs:movingAfterMs,tapsAfterStart:0,verifiedCiphertexts:matched,liveOpticalMarkers:source,delayedOpticalMarkers:replay,directDecodedFrames:0,frameStep:{previous,stepped},cameraAfterDisconnect:stopped,pairAfterDisconnect:ended.status,storedPacketsAfterDisconnect:0};
   await writeFile(path.join(output,'results.json'),JSON.stringify(proof,null,2));
   console.log(JSON.stringify(proof,null,2));
   await Promise.all([tv.navigate('about:blank'),phone.navigate('about:blank')]);
