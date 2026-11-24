@@ -52,6 +52,18 @@
   let pendingLocalCamera = null;
   let activeLocalCamera = null;
   let activeDeviceId = '';
+  let localStalled = false, stallPausedRecorder = null;
+  const retryCamera = document.createElement('button');
+  retryCamera.type = 'button';
+  retryCamera.id = 'retryCameraBtn';
+  retryCamera.className = 'button button-secondary';
+  retryCamera.textContent = 'Retry camera';
+  retryCamera.title = 'Start a fresh camera buffer. Save any recent clip first.';
+  retryCamera.hidden = true;
+  ($('quickReplayTransport') || ui.stop.parentElement).append(retryCamera);
+  retryCamera.addEventListener('click', () => {
+    if (localStalled) startCamera({ retry: true, deviceId: activeDeviceId });
+  });
   const MAX_QUEUED_BYTES = 32 * 1024 * 1024;
   const HISTORY_BUDGET_BITS = 64 * 1024 * 1024 * 8;
   const MIN_CLIP_SECONDS = 0.25;
@@ -163,6 +175,8 @@
     const busy = !!state.clip;
     const source = getReplayWindow();
     ui.start.disabled = state.running || state.starting || busy;
+    retryCamera.hidden = !localStalled;
+    retryCamera.disabled = state.starting || busy || !!state.trim;
     ui.demo.disabled = state.running || state.starting || busy;
     ui.stop.disabled = !state.running && !state.starting;
     ui.flip.disabled = !state.running || state.starting || state.sourceMode !== 'camera' || busy || !!state.trim || !nextCameraTarget();
@@ -174,6 +188,7 @@
     ui.delay.disabled = busy || !!state.trim;
     ui.connectionBadge.textContent = state.starting ? (state.sourceMode === 'demo' ? 'Starting demo' : 'Starting camera')
       : state.running ? (state.sourceMode === 'demo' ? 'Demo active' : 'Camera active') : 'Ready';
+    if (localStalled) ui.connectionBadge.textContent = 'Camera stalled';
     if (state.running && state.starting && state.sourceMode === 'camera') ui.connectionBadge.textContent = 'Switching camera';
     if (state.sourceMode === 'remote') ui.connectionBadge.textContent = state.starting ? 'Connecting phone' : 'Phone camera active';
     ui.recordClip.textContent = 'Save clip';
@@ -304,6 +319,7 @@
     return state.sessionReview ? ui.sessionVideo.currentTime : state.engine === 'compressed' ? ui.delayedVideo.currentTime : state.reviewTime;
   }
   function delayStatus(span) {
+    if (localStalled) return 'Camera stalled';
     const remaining = Math.ceil(state.delaySeconds - span);
     return remaining > 0 ? `Waiting ${remaining}s for delay` : 'Delayed playback';
   }
@@ -576,15 +592,10 @@
     let lastCallback = now();
     let lastPaintedCount = null;
     let paintedByPoll = false;
-    function frameCount() {
-      if (Number.isFinite(video.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
-      const quality = video.getVideoPlaybackQuality?.();
-      return quality ? quality.totalVideoFrames - quality.droppedVideoFrames : null;
-    }
     function presented(timestamp, metadata) {
       if (!state.running || generation !== state.generation) return;
       lastCallback = now();
-      const count = frameCount();
+      const count = decodedFrames(video);
       const alreadyPainted = paintedByPoll && count !== null && count === lastPaintedCount;
       paintedByPoll = false;
       lastPaintedCount = count;
@@ -597,7 +608,7 @@
       // Hidden source videos can keep decoding when the browser suspends presentation callbacks.
       const waitingForCallback = hasCallbacks && timestamp - lastCallback < 250;
       if (!waitingForCallback && !video.paused && video.readyState >= 2 && video.videoWidth) {
-        const count = frameCount();
+        const count = decodedFrames(video);
         if ((count !== null && count > 0 && count !== lastPaintedCount) || (!hasCallbacks && count === null)) {
           draw(timestamp);
           lastPaintedCount = count;
@@ -832,7 +843,7 @@
   function updateCompressedPlayback(generation) {
     if (generation !== state.generation || !state.running || state.engine !== 'compressed') return;
     if (state.sourceMode === 'remote' && (state.remoteHandoff || state.remoteMuted || document.visibilityState === 'hidden')) return;
-    if (state.recorder?.state !== 'paused' && now() - state.lastDataAt > 10000) {
+    if (!localStalled && state.recorder?.state !== 'paused' && now() - state.lastDataAt > 10000) {
       startFallbackReplay('The video encoder stopped supplying replay frames.');
       return;
     }
@@ -1025,7 +1036,7 @@
       });
       let started = now();
       state.fallbackStartedAt = started;
-      let lastTick = started;
+      let lastTick = started, lastSourceFrame = null;
       state.frameTimer = setInterval(() => {
         if (!state.running || generation !== state.generation) return;
         const timestamp = now();
@@ -1038,22 +1049,30 @@
         }
         const elapsed = (timestamp - lastTick) / 1000;
         lastTick = timestamp;
-        const frame = state.fallbackFrames[state.fallbackWrite];
-        const size = replayCanvasSize(320, 180);
-        if (frame.canvas.width !== size.width || frame.canvas.height !== size.height) {
-          frame.canvas.width = size.width; frame.canvas.height = size.height;
+        const sourceFrame = state.sourceMode === 'camera' ? decodedFrames(ui.live) : null;
+        if (localStalled || (sourceFrame > 0 && sourceFrame === lastSourceFrame)) {
+          // Keep the ring and its media timeline still until a new picture arrives.
+          state.fallbackStartedAt += elapsed * 1000;
+          started += elapsed * 1000;
+        } else {
+          lastSourceFrame = sourceFrame;
+          const frame = state.fallbackFrames[state.fallbackWrite];
+          const size = replayCanvasSize(320, 180);
+          if (frame.canvas.width !== size.width || frame.canvas.height !== size.height) {
+            frame.canvas.width = size.width; frame.canvas.height = size.height;
+          }
+          if (!drawContained(ui.live, frame.canvas)) return;
+          window.FGSReplayQuality?.bufferFrame?.(frame.canvas, timestamp);
+          frame.at = timestamp - state.fallbackStartedAt;
+          state.fallbackWrite = (state.fallbackWrite + 1) % state.fallbackFrames.length;
+          captureTimelineThumbnail(timestamp);
         }
-        if (!drawContained(ui.live, frame.canvas)) return;
-        window.FGSReplayQuality?.bufferFrame?.(frame.canvas, timestamp);
-        frame.at = timestamp - state.fallbackStartedAt;
-        state.fallbackWrite = (state.fallbackWrite + 1) % state.fallbackFrames.length;
         const target = timestamp - state.fallbackStartedAt - state.delaySeconds * 1000;
         let candidate = null;
         for (const saved of state.fallbackFrames) {
           if (Number.isFinite(saved.at) && saved.at <= target && (!candidate || saved.at > candidate.at)) candidate = saved;
         }
         ui.bufferStatus.textContent = `${Math.min(6.2, (timestamp - started) / 1000).toFixed(1)} seconds available`;
-        captureTimelineThumbnail(timestamp);
         if (state.sessionReview || state.clip?.engine === 'fallback' || state.trim) { updateControls(); return; }
         if (state.reviewing) {
           const range = getReplayWindow();
@@ -1250,10 +1269,66 @@
     } catch { /* Not every browser reports lens capabilities. */ }
     return null;
   }
+  function decodedFrames(video) {
+    const quality = video.getVideoPlaybackQuality?.();
+    const counted = quality ? quality.totalVideoFrames - quality.droppedVideoFrames : null;
+    const decoded = video.webkitDecodedFrameCount;
+    return Number.isFinite(decoded) ? Math.max(decoded, counted || 0) : counted;
+  }
+  function setLocalStall(stalled) {
+    if (localStalled === stalled) return;
+    localStalled = stalled;
+    if (stalled) {
+      if (state.recorder?.state === 'recording') {
+        try { state.recorder.pause(); stallPausedRecorder = state.recorder; } catch { /* Recorder can end during teardown. */ }
+      }
+      ui.cameraStatus.textContent = 'Camera stalled';
+      showToast('Camera frames stopped. Waiting for video to resume. Save recent footage before Retry camera starts a new buffer and finishes any session recording.', 12000);
+    } else {
+      state.lastDataAt = now();
+      if (stallPausedRecorder === state.recorder && state.recorder?.state === 'paused') {
+        try { state.recorder.resume(); } catch { /* The recorder can end during teardown. */ }
+      }
+      stallPausedRecorder = null;
+      ui.cameraStatus.textContent = state.stream?.getVideoTracks()[0]?.label || 'Active';
+      showToast('Camera frames resumed.', 3000);
+    }
+    updateControls();
+    if (stalled && !state.reviewing && !state.sessionReview) ui.replayStatus.textContent = 'Camera stalled';
+  }
+  function watchLocalDelivery(video, signal) {
+    let count = decodedFrames(video);
+    let lastFrame = now(), lastPoll = lastFrame;
+    let callback, lastPresented;
+    function progress() { lastFrame = now(); setLocalStall(false); }
+    function presented(stamp, metadata) {
+      if (signal.aborted) return;
+      if (metadata.presentedFrames !== lastPresented) {
+        lastPresented = metadata.presentedFrames;
+        progress();
+      }
+      callback = video.requestVideoFrameCallback(presented);
+    }
+    callback = video.requestVideoFrameCallback?.(presented);
+    const timer = setInterval(() => {
+      const tick = now(), nextCount = decodedFrames(video);
+      if (document.visibilityState !== 'visible' || tick - lastPoll > 1500) lastFrame = tick;
+      else if (nextCount !== count && nextCount > 0) progress();
+      // Presentation callbacks may be suspended for this hidden source element.
+      // Only a working decoder counter can establish that delivery has stopped.
+      else if (nextCount > 0 && tick - lastFrame >= 6000) setLocalStall(true);
+      count = nextCount;
+      lastPoll = tick;
+    }, 300);
+    signal.addEventListener('abort', () => {
+      clearInterval(timer);
+      if (callback != null) video.cancelVideoFrameCallback?.(callback);
+    }, { once: true });
+  }
   function cameraDisconnected() {
     return new DOMException('The camera disconnected. Choose Start camera to try again.', 'CameraDisconnected');
   }
-  function waitForCameraFrame(video, stream, signal) {
+  function waitForCameraFrame(video, stream, signal, requireProgress = false) {
     const track = stream.getVideoTracks()[0];
     return new Promise((resolve, reject) => {
       let frameCallback;
@@ -1272,7 +1347,7 @@
       function check() {
         if (signal.aborted) return finish(signal.reason);
         if (track.readyState !== 'live' || !stream.active) return finish(cameraDisconnected());
-        if (playing && received && !track.muted && !video.paused && video.readyState >= 2 &&
+        if (playing && received && (!requireProgress || decodedFrames(video) >= 2) && !track.muted && !video.paused && video.readyState >= 2 &&
             video.videoWidth > 2 && video.videoHeight > 2) finish();
       }
       function delivered() { received = true; check(); }
@@ -1291,7 +1366,7 @@
   async function startCamera(target = {}) {
     const replacing = state.running && state.sourceMode === 'camera';
     const selectedDevice = target.deviceId ?? (target.facingMode ? '' : ui.camera.value);
-    if (state.starting || (replacing && !target.facingMode && (!selectedDevice || selectedDevice === activeDeviceId))) return;
+    if (state.starting || (replacing && !target.retry && !target.facingMode && (!selectedDevice || selectedDevice === activeDeviceId))) return;
     if (!replacing) {
       stopCamera();
       state.sessionReview = false;
@@ -1361,7 +1436,7 @@
       if (signal.aborted) throw signal.reason;
       if (replacing) {
         if (oldTracks.includes(track) || (selectedDevice && settings.deviceId &&
-            (settings.deviceId !== selectedDevice || settings.deviceId === activeDeviceId)) ||
+            (settings.deviceId !== selectedDevice || (!target.retry && settings.deviceId === activeDeviceId))) ||
             (target.facingMode && settings.facingMode !== target.facingMode)) {
           throw new Error('The browser returned the current camera.');
         }
@@ -1370,7 +1445,7 @@
         probe.removeAttribute('id');
         probe.muted = true;
         ui.live.after(probe);
-        await waitForCameraFrame(probe, acquired, signal);
+        await waitForCameraFrame(probe, acquired, signal, target.retry);
         verify();
         if (signal.aborted) throw signal.reason;
         if (state.trim || state.clip) throw new Error('Finish saving the current clip first.');
@@ -1401,6 +1476,7 @@
       state.running = true;
       state.starting = false;
       state.generation += 1;
+      watchLocalDelivery(ui.live, signal);
       enumerateCameras(activeDeviceId, request);
       if (replacing) window.FGSReplayQuality?.capture?.(ui.live, acquired);
       const dimensions = `${settings.width || ui.live.videoWidth}×${settings.height || ui.live.videoHeight}`;
@@ -1420,7 +1496,8 @@
         state.starting = false;
         ui.camera.value = activeDeviceId;
         updateControls();
-        showToast('Could not switch cameras. Your current camera and replay are still available.');
+        showToast(target.retry ? 'Retry did not receive new frames. Your existing replay is still available.'
+          : 'Could not switch cameras. Your current camera and replay are still available.');
         return;
       }
       stopCamera();
@@ -1630,6 +1707,7 @@
     const wasRemote = state.sourceMode === 'remote';
     const pending = pendingLocalCamera, active = activeLocalCamera;
     pendingLocalCamera = null; activeLocalCamera = null; activeDeviceId = '';
+    localStalled = false; stallPausedRecorder = null;
     pending?.abort(); active?.abort();
     state.cancelRemoteStart?.(); state.remoteMuted = false;
     state.removeRemoteListener?.(); state.removeRemoteListener = null; state.remoteSource = null;
@@ -2100,7 +2178,10 @@
     }
     clip.frameEncoder = encoder;
     let heldRecorder = null;
-    if (trim.sourceType === 'recent' && state.recorder?.state === 'recording') {
+    if (trim.sourceType === 'recent' && stallPausedRecorder && stallPausedRecorder === state.recorder) {
+      heldRecorder = stallPausedRecorder;
+      stallPausedRecorder = null;
+    } else if (trim.sourceType === 'recent' && state.recorder?.state === 'recording') {
       // Freeze the pinned rolling buffer while seeking back through it. The
       // independent session recorder, if running, keeps recording the camera.
       try { state.recorder.pause(); heldRecorder = state.recorder; } catch { /* Normal bounded MSE cleanup remains active. */ }
@@ -2142,7 +2223,8 @@
       clip.frameEncoder = null;
       if (state.running && heldRecorder && heldRecorder === state.recorder && heldRecorder.state === 'paused') {
         state.lastDataAt = now();
-        try { heldRecorder.resume(); } catch { /* The source may have stopped during cancellation. */ }
+        if (localStalled) stallPausedRecorder = heldRecorder;
+        else try { heldRecorder.resume(); } catch { /* The source may have stopped during cancellation. */ }
       }
     }
   }
@@ -2379,7 +2461,7 @@
         scheduleVideoFrame(session, ui.live, draw);
       };
       scheduleVideoFrame(session, ui.live, draw);
-      const clock = () => { ui.sessionStatus.textContent = `Recording session · ${formatTime((now() - session.started) / 1000)} · ${(session.bytes / 1024 / 1024).toFixed(1)} MB. Up to 10 minutes / 128 MB. Camera footage from before this button is only in recent history.`; };
+      const clock = () => { ui.sessionStatus.textContent = localStalled ? 'Session recording open. Waiting for new camera frames.' : `Recording session · ${formatTime((now() - session.started) / 1000)} · ${(session.bytes / 1024 / 1024).toFixed(1)} MB. Up to 10 minutes / 128 MB. Camera footage from before this button is only in recent history.`; };
       clock(); session.clock = setInterval(clock, 500);
       session.timer = setTimeout(() => { showToast('Recording reached 10 minutes and was stopped safely.'); finishSessionRecording(); }, MAX_SESSION_MS);
       updateControls();
