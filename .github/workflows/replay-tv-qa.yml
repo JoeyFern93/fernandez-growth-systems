@@ -48,6 +48,10 @@ jobs:
             scenario: --controls --relay
             jpeg: '0'
             without_rtc: '0'
+          - label: Webcam and phone share the two-camera replay
+            scenario: --webcam
+            jpeg: '0'
+            without_rtc: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

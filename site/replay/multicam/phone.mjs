@@ -1,4 +1,4 @@
-import {call,token,negotiate} from './signaling.mjs';
+import {call,token,negotiate,createPeer,directConnectionMessage} from './signaling.mjs';
 import {startOriginal,recordings,loadOriginal} from './originals.mjs';
 import {cameras} from './cameras.mjs';
 const by=id=>document.getElementById(id);
@@ -79,7 +79,7 @@ async function start() {
       video.requestVideoFrameCallback(anchor);
     };
     video.requestVideoFrameCallback?.(anchor);
-    const pc=new RTCPeerConnection({iceServers:[]});room.pc=pc;
+    const pc=createPeer();room.pc=pc;
     pc.addTransceiver(stream.getVideoTracks()[0],{direction:'sendonly',streams:[stream]});
     const channel=pc.createDataChannel('replay-clock-v1');
     channel.onmessage=async event=>{
@@ -105,14 +105,15 @@ async function start() {
     pc.onconnectionstatechange=()=>{
       if(active!==room)return;
       if(pc.connectionState==='connected'){
+        room.wasConnected=true;
         clearTimeout(room.watchdog);by('status').textContent='Direct · recording original'+(room.hasStamp?'':' · checking source timestamps');
       }else if(pc.connectionState==='disconnected'){
         by('status').textContent='Direct connection interrupted';
-        clearTimeout(room.watchdog);room.watchdog=setTimeout(()=>close(room,'Disconnected. Scan a new invite for this angle.'),8000);
-      }else if(pc.connectionState==='failed')close(room,'Disconnected. Scan a new invite for this angle.');
+        clearTimeout(room.watchdog);room.watchdog=setTimeout(()=>close(room,directConnectionMessage(room.wasConnected)),8000);
+      }else if(pc.connectionState==='failed')close(room,directConnectionMessage(room.wasConnected));
     };
     await negotiate(pc,{id,key:room.key,expiry,signal},true);
-    if(!signal.aborted && pc.connectionState!=='connected')room.watchdog=setTimeout(()=>close(room,'Direct connection timed out. Scan a new invite.'),22000);
+    if(!signal.aborted && pc.connectionState!=='connected')room.watchdog=setTimeout(()=>close(room,directConnectionMessage(room.wasConnected)),22000);
   }catch(error){
     if(signal.aborted){
       // The server may have claimed the room even if its reply was lost during Stop.

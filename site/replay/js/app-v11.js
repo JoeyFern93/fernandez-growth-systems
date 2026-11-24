@@ -552,10 +552,46 @@
         }
       }
       captureTimelineThumbnail(timestamp);
-      if (ui.live.requestVideoFrameCallback) state.frameCallback = ui.live.requestVideoFrameCallback(draw);
     };
-    if (ui.live.requestVideoFrameCallback) state.frameCallback = ui.live.requestVideoFrameCallback(draw);
-    else state.frameTimer = setInterval(() => draw(now()), 1000 / (state.replayFps || 60));
+    const video = ui.live;
+    const hasCallbacks = typeof video.requestVideoFrameCallback === 'function';
+    const paintInterval = 1000 / (state.replayFps || 60);
+    let lastCallback = now();
+    let lastPaintedCount = null;
+    let paintedByPoll = false;
+    function frameCount() {
+      if (Number.isFinite(video.webkitDecodedFrameCount)) return video.webkitDecodedFrameCount;
+      const quality = video.getVideoPlaybackQuality?.();
+      return quality ? quality.totalVideoFrames - quality.droppedVideoFrames : null;
+    }
+    function presented(timestamp, metadata) {
+      if (!state.running || generation !== state.generation) return;
+      lastCallback = now();
+      const count = frameCount();
+      const alreadyPainted = paintedByPoll && count !== null && count === lastPaintedCount;
+      paintedByPoll = false;
+      lastPaintedCount = count;
+      if (!alreadyPainted) draw(timestamp, metadata);
+      state.frameCallback = video.requestVideoFrameCallback(presented);
+    }
+    function checkDecoder() {
+      if (!state.running || generation !== state.generation) return;
+      const timestamp = now();
+      // Hidden source videos can keep decoding when the browser suspends presentation callbacks.
+      const waitingForCallback = hasCallbacks && timestamp - lastCallback < 250;
+      if (!waitingForCallback && !video.paused && video.readyState >= 2 && video.videoWidth) {
+        const count = frameCount();
+        if ((count !== null && count > 0 && count !== lastPaintedCount) || (!hasCallbacks && count === null)) {
+          draw(timestamp);
+          lastPaintedCount = count;
+          paintedByPoll = true;
+          sampleTime = null;
+        }
+      }
+      state.frameTimer = setTimeout(checkDecoder, waitingForCallback ? 250 : paintInterval);
+    }
+    if (hasCallbacks) state.frameCallback = video.requestVideoFrameCallback(presented);
+    state.frameTimer = setTimeout(checkDecoder, hasCallbacks ? 250 : paintInterval);
   }
   function clearRecordingFlush(recording) {
     if (recording.flushFrame != null) cancelAnimationFrame(recording.flushFrame);

@@ -131,6 +131,7 @@ async function verifyShell(){
   for (const name of ['Camera 1', 'Camera 2']) {
     assert.ok(cameras.includes('>'+name+'</h2>'), 'Missing camera heading for '+name);
     assert.ok(cameras.includes('>'+name+'</option>'), 'Missing view choice for '+name);
+    assert.ok(cameras.includes('aria-label="Webcam for '+name+'"'), 'Missing local webcam selector for '+name);
   }
   const tag = home.match(/<link\b[^>]*\brel=["']manifest["'][^>]*>/i)?.[0];
   const href = tag?.match(/\bhref=["']([^"']+)["']/i)?.[1];

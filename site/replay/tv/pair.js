@@ -25,14 +25,14 @@
     if(s.sendingFrameStatus || !current(s))return;
     s.sendingFrameStatus=true;
     const send=async()=>{
-      let attempts=0;
-      while(current(s) && (!s.relaying || s.directStatus==='relay-moving') && s.sentFrameStatus!==s.directStatus && attempts<3) {
+      // Keep the receipt eligible throughout the phone's bounded first-frame wait.
+      const until=Math.min(s.expires,Date.now()+firstFrameWait);
+      while(current(s) && (!s.relaying || s.directStatus==='relay-moving') && s.sentFrameStatus!==s.directStatus && Date.now()<until) {
         const state=s.directStatus;
         try {
           await api('/'+s.id+'/relay','POST',s.key,{action:'direct',state});
-          s.sentFrameStatus=state;attempts=0;
+          s.sentFrameStatus=state;
         } catch(error) {
-          attempts++;
           if(error.status===410 || error.status===403 || error.status===404 || error.status===400)break;
           if(!current(s) || Date.now()>=s.expires)break;
           await sleep(1500);
@@ -47,45 +47,49 @@
   function observeDisplay(s, relay=false) {
     s.cancelFrames?.();
     const video=el('liveVideo'), began=Date.now();
-    let previous,decoded,frames=0,last=began,callback,interval,closed=false,readingStats=false;
-    function observe(stamp) {
-      if(closed || !current(s) || video.paused || !video.videoWidth || !Number.isFinite(stamp) || stamp===previous)return;
-      previous=stamp;
+    let previous,frames=0,last=began,callback,interval,closed=false,readingStats=false,lastStatsAt=0;
+    const counters=new Map();
+    function progress(count=1) {
+      if(closed || !current(s) || video.paused || !video.videoWidth)return;
       last=Date.now();
-      if(++frames<2 || s.usable)return;
+      frames+=count;
+      if(frames<2 || s.usable)return;
       s.usable=true;
       if(relay)frameStatus(s,'relay-moving');
       else {s.hadDirectFrames=true;transport(s,'Direct WebRTC');frameStatus(s,'moving');}
       if(s.started)tvConnected(s);
     }
+    function decoded(source,count) {
+      const before=counters.get(source);
+      if(!Number.isFinite(count))return;
+      counters.set(source,count);
+      // Two distinct, nonzero samples from the same decoder establish progress.
+      if(before>0 && count>before)progress(2);
+    }
     function presented(_,meta) {
       if(closed)return;
-      observe(meta.rtpTimestamp ?? meta.mediaTime);
+      const stamp=meta.rtpTimestamp ?? meta.mediaTime;
+      if(Number.isFinite(stamp) && stamp!==previous){previous=stamp;progress();}
       callback=video.requestVideoFrameCallback(presented);
     }
     if(video.requestVideoFrameCallback)callback=video.requestVideoFrameCallback(presented);
     interval=setInterval(async()=>{
       if(closed || !current(s))return;
-      if(!video.requestVideoFrameCallback) {
+      if(Date.now()-last>=750) {
         const quality=video.getVideoPlaybackQuality?.();
-        if(quality)observe(quality.totalVideoFrames-quality.droppedVideoFrames);
-        else if(Number.isFinite(video.webkitDecodedFrameCount))observe(video.webkitDecodedFrameCount);
+        if(quality)decoded('element',quality.totalVideoFrames-quality.droppedVideoFrames);
+        else decoded('element',video.webkitDecodedFrameCount);
       }
-      // Chromium can suspend presentation callbacks while the clip dialog or
-      // fullscreen replay covers the live element. Confirm an established
-      // stream's decoder has also stopped before initiating a handoff.
-      if(s.peer && !readingStats && Date.now()-last>1000 && (s.usable || !video.requestVideoFrameCallback)){
-        readingStats=true;
+      // The dashboard's hidden source can decode without presenting callbacks,
+      // including before its first visible replay. ICE alone cannot confirm video.
+      if(s.peer && !readingStats && Date.now()-last>=1000 && Date.now()-lastStatsAt>=750){
+        readingStats=true;lastStatsAt=Date.now();
         try {
           const reports=await s.peer.getStats();
           if(closed || !current(s))return;
           for(const row of reports.values()) {
             if(row.type!=='inbound-rtp' || (row.kind || row.mediaType)!=='video' || !Number.isFinite(row.framesDecoded))continue;
-            if(row.framesDecoded>0 && decoded!==undefined && row.framesDecoded>decoded){
-              if(s.usable)last=Date.now();
-              else observe(row.framesDecoded);
-            }
-            decoded=row.framesDecoded;
+            decoded('rtp:'+row.id,row.framesDecoded);
           }
         } catch { /* A closing peer can discard pending stats. */ }
         finally {readingStats=false;}
@@ -337,7 +341,7 @@
       if (event.candidate?.candidate) {
         const {candidate,sdpMid,sdpMLineIndex,usernameFragment} = event.candidate;
         if (pending.length < 64) pending.push({candidate,sdpMid,sdpMLineIndex,usernameFragment});
-      } else complete=true;
+      } else if(event.candidate==null) complete=true;
       clearTimeout(s.candidateTimer);
       s.candidateTimer=setTimeout(flush,60);
     };
@@ -380,8 +384,10 @@
     const localPreview=!!document.querySelector('meta[name="replay-preview-local"]');
     let iceServers=localPreview ? [] : [{urls:'stun:stun.cloudflare.com:3478'}];
     try {
-      const config=await api('/'+s.id+'/ice-servers','GET',s.key);
-      if(Array.isArray(config.iceServers) && (config.iceServers.length || localPreview)) iceServers=config.iceServers;
+      // Discovery has working defaults. Two slow configuration lookups must
+      // not consume the entire time allotted for actual direct video.
+      const config=await Promise.race([api('/'+s.id+'/ice-servers','GET',s.key),sleep(1250)]);
+      if(Array.isArray(config?.iceServers) && (config.iceServers.length || localPreview)) iceServers=config.iceServers;
     } catch { /* Keep discovery available when optional configuration is offline. */ }
     if(s.ended || s.relaying || s.interrupted)throw new Error('The direct connection is no longer needed.');
     const peer = new RTCPeerConnection({iceServers});

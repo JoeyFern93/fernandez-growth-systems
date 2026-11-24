@@ -18,6 +18,7 @@ const probeOnly=process.argv.includes('--test-browser');
 const manualRelay=process.argv.includes('--manual-relay');
 const relayScenario=manualRelay || process.argv.includes('--relay');
 const controlsScenario=process.argv.includes('--controls');
+const webcamScenario=process.argv.includes('--webcam');
 const temps=await mkdtemp(path.join(process.env.REPLAY_QA_TEMP||os.tmpdir(),'fgs-tv-check-'));
 const output=process.env.REPLAY_QA_PROOF || path.join(here,'replay-tv-proof');
 await mkdir(output,{recursive:true});
@@ -78,6 +79,7 @@ const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-gpu','--no-
   '--disable-background-networking','--disable-component-update','--autoplay-policy=no-user-gesture-required',
   '--host-resolver-rules=MAP * ~NOTFOUND','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',
   '--allow-loopback-in-peer-connection','--disable-features=WebRtcHideLocalIpsWithMdns',
+  ...(webcamScenario?['--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows']:[]),
   ...cameraFixture,'--remote-debugging-pipe','--user-data-dir='+path.join(temps,'profile')],
   {stdio:['ignore','ignore','ignore','pipe','pipe'],windowsHide:true});
 const finished=once(child,'exit');let serial=0,tail='',closing=false;
@@ -87,7 +89,7 @@ function cdp(method,params={},sessionId){
   const id=++serial;return new Promise((resolve,reject)=>{jobs.set(id,{resolve,reject});
     child.stdio[3].write(JSON.stringify({id,method,params,sessionId})+'\0');});
 }
-const mime={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',
+const mime={html:'text/html',js:'text/javascript',mjs:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',
   ico:'image/x-icon',woff2:'font/woff2',webmanifest:'application/manifest+json'};
 async function route({request,requestId},sessionId){
   const url=new URL(request.url);
@@ -194,7 +196,10 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(controlsScenario){
+  if(webcamScenario){
+    const {runWebcam}=await import('./replay-tv-webcam.mjs');
+    await runWebcam({tv,phone,site,requests,rounds,taskErrors,delay});
+  }else if(controlsScenario){
     const {runControls}=await import('./replay-tv-controls.mjs');
     await runControls({tv,phone,site,db,rounds,requests,relayScenario,taskErrors,delay});
   }else if(relayScenario){

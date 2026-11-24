@@ -1,15 +1,18 @@
-const ready=new Promise((resolve,reject)=>{
-  const request=indexedDB.open('fgs-studio-angle-originals',1);
-  request.onupgradeneeded=()=>{
-    const db=request.result;
-    db.createObjectStore('recordings',{keyPath:'id'});
-    db.createObjectStore('pieces',{keyPath:['id','seq']});
-  };
-  request.onsuccess=()=>resolve(request.result);
-  request.onerror=()=>reject(request.error);
-});
+let ready;
+function openDatabase() {
+  return ready ||= new Promise((resolve,reject)=>{
+    const request=indexedDB.open('fgs-studio-angle-originals',1);
+    request.onupgradeneeded=()=>{
+      const db=request.result;
+      db.createObjectStore('recordings',{keyPath:'id'});
+      db.createObjectStore('pieces',{keyPath:['id','seq']});
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error);
+  });
+}
 async function dbRequest(store,mode,fn) {
-  const db=await ready;
+  const db=await openDatabase();
   return new Promise((resolve,reject)=>{
     const tx=db.transaction(store,mode),request=fn(tx.objectStore(store));
     tx.oncomplete=()=>resolve(request.result);tx.onabort=tx.onerror=()=>reject(tx.error);
@@ -25,10 +28,10 @@ export async function loadOriginal(meta) {
 function chooseType() {
   return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/mp4','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
 }
-export async function startOriginal(stream,angle,onError) {
+export async function startOriginal(stream,angle,onError,source='phone') {
   const type=chooseType();
   const rec=new MediaRecorder(stream,{...(type?{mimeType:type}:{}),videoBitsPerSecond:14000000});
-  const meta={id:crypto.randomUUID(),date:Date.now(),angle,type:rec.mimeType,start:null};
+  const meta={id:crypto.randomUUID(),date:Date.now(),angle,source,type:rec.mimeType,start:null};
   await put('recordings',meta);
   let seq=0,writes=Promise.resolve(),failure=null;
   function persist(blob) {
@@ -37,11 +40,11 @@ export async function startOriginal(stream,angle,onError) {
     writes=writes.then(()=>put('pieces',row)).catch(error=>{
       if(failure)return;
       failure=error;if(rec.state==='recording')rec.stop();
-      onError('Phone storage stopped recording. Save the available original.');
+      onError('Storage stopped recording. Save the available original.');
     });
   }
   rec.ondataavailable=event=>persist(event.data);
-  rec.onerror=()=>onError('The phone recorder stopped unexpectedly.');
+  rec.onerror=()=>onError('The recorder stopped unexpectedly.');
   const stopped=new Promise(resolve=>rec.addEventListener('stop',resolve,{once:true}));
   rec.start(1000);
   const startRequest=performance.now();
@@ -54,7 +57,7 @@ export async function startOriginal(stream,angle,onError) {
     async stop(){if(rec.state==='recording')rec.stop();await stopped;await writes;},
     async clip(start,end) {
       if(failure || !Number.isFinite(meta.start) || start<meta.start || end<=start || end-start>21000 || end>performance.now()) {
-        throw Error('This interval is outside the phone original.');
+        throw Error('This interval is outside the original recording.');
       }
       if(rec.state==='recording') {
         const flushed=new Promise(resolve=>rec.addEventListener('dataavailable',resolve,{once:true}));
