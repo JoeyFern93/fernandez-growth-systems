@@ -1,15 +1,15 @@
 import {renderMock} from './demo-court.mjs';
 import {ClockMap,AngleBuffer} from './clock.mjs';
 import {call,token,negotiate} from './signaling.mjs';
-const by=id=>document.getElementById(id),names=['baseline','sideline'];
-const slots=names.map(name=>{
+import {cameras} from './cameras.mjs';
+const by=id=>document.getElementById(id);
+const slots=cameras.map(({id:cameraId,angle:name,label})=>{
   const node=by(name);
-  return {name,node,canvas:node.querySelector('canvas'),missing:node.querySelector('.missing'),status:node.querySelector('.status'),
+  return {name,cameraId,label,node,canvas:node.querySelector('canvas'),missing:node.querySelector('.missing'),status:node.querySelector('.status'),
     buffer:new AngleBuffer(),room:null,rendered:null,frameJob:0,epoch:0};
 });
 let demo=false,origin=0,mode='delay',cursor=0,markIn=null,markOut=null,clipId=null;
 const session=token().slice(0,16);
-const title=name=>name[0].toUpperCase()+name.slice(1);
 function dispose(slot,msg,notify=true) {
   const room=slot.room;
   if(room){
@@ -76,7 +76,7 @@ function control(slot,room,channel) {
     }
     if(m.op==='clip-result' && m.id===clipId) {
       room.clipResult=m.ok?'ready on phone':'failed on phone';
-      by('clip-status').textContent=slots.map(s=>title(s.name)+' '+(s.room?.clipResult || 'preparing')).join(' · ');
+      by('clip-status').textContent=slots.map(s=>s.label+' '+(s.room?.clipResult || 'preparing')).join(' · ');
     }
   };
   if(channel.readyState==='open')channel.onopen();
@@ -93,10 +93,10 @@ async function invite(slot) {
     if(!result.id?.startsWith('~'))throw Error('Two-camera pairing is unavailable. Create a new invite and try again.');
     Object.assign(room,{id:result.id,expiry:result.expiresAt});
     const url=new URL('phone.html',location.href);
-    url.hash=new URLSearchParams({room:room.id,invite:result.invite,angle:slot.name,session,until:String(room.expiry)});
+    url.hash=new URLSearchParams({room:room.id,invite:result.invite,camera:slot.cameraId,session,until:String(room.expiry)});
     const qr=globalThis.qrcode(0,'M');qr.addData(url.href);qr.make();
     by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});
-    by('phone-link').href=url;by('invite-title').textContent=title(slot.name)+' invite';
+    by('phone-link').href=url;by('invite-title').textContent=slot.label+' invite';
     if(!by('invite-dialog').open)by('invite-dialog').showModal();
     slot.status.textContent='Invite ready · waiting for phone';
     slot.node.querySelector('.invite').textContent='Replace invite';
@@ -120,10 +120,10 @@ function setDemo(value) {
   demo=value;mode='delay';origin=performance.now()-3200-Number(by('delay').value)*1000;cursor=3200;markIn=markOut=null;clipId=null;
   by('save').disabled=true;by('clip-status').textContent='';
   by('demo').textContent=value?'Exit demo':'Try synced demo';
-  by('mode').textContent=value?'Simulated rally · shared clock':'Direct · same Wi-Fi · prototype';
+  by('mode').textContent=value?'Demo · shared clock':'Direct · same Wi-Fi · prototype';
   for(const s of slots){
     s.rendered=null;s.displayed=null;s.frameJob++;s.canvas.getContext('2d').clearRect(0,0,s.canvas.width,s.canvas.height);
-    s.status.textContent=value?(s.name==='baseline'?'Mock track · Follow Play':'Mock track · Full Court'):(s.room?'Live camera':'Waiting for a phone');
+    s.status.textContent=value?'Simulated camera':(s.room?'Live camera':'Waiting for a phone');
   }
 }
 function blank(slot,message){
@@ -134,7 +134,7 @@ function draw(slot,time){
   if(slot.node.hidden)return;
   if(demo){
     slot.canvas.hidden=false;slot.missing.hidden=true;slot.rendered='demo';
-    renderMock(slot.canvas,time/1000,{angle:slot.name,view:slot.name==='baseline'?'follow':'full'});return;
+    renderMock(slot.canvas,time/1000,{angle:slot.name});return;
   }
   const frame=slot.buffer.nearest(time);
   if(!frame){blank(slot,demo?'Demo asset unavailable':'Angle unavailable at this time');return;}

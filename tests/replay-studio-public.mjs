@@ -118,6 +118,11 @@ async function verifyShell(){
   assert.ok(!links.includes('/replay-studio/'),'Duplicate Studio tool');
   assert.match(home,/Video diagnostics/i,'Expected updated Replay Cam');
   assert.doesNotMatch(home,/href=["'][^"']*volleyball\//i,'Tracker is a separate tool');
+  const cameras = await page(replay+'multicam/', /Two-camera replay/i);
+  for (const name of ['Camera 1', 'Camera 2']) {
+    assert.ok(cameras.includes('>'+name+'</h2>'), 'Missing camera heading for '+name);
+    assert.ok(cameras.includes('>'+name+'</option>'), 'Missing view choice for '+name);
+  }
   const tag = home.match(/<link\b[^>]*\brel=["']manifest["'][^>]*>/i)?.[0];
   const href = tag?.match(/\bhref=["']([^"']+)["']/i)?.[1];
   assert.ok(href,'Replay manifest link missing');

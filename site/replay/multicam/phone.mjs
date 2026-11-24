@@ -1,8 +1,10 @@
 import {call,token,negotiate} from './signaling.mjs';
 import {startOriginal,recordings,loadOriginal} from './originals.mjs';
+import {cameras} from './cameras.mjs';
 const by=id=>document.getElementById(id);
 const q=new URLSearchParams(location.hash.slice(1));
-const id=q.get('room'),invite=q.get('invite'),angle=q.get('angle'),expiry=Number(q.get('until'));
+const id=q.get('room'),invite=q.get('invite'),expiry=Number(q.get('until'));
+const camera=q.has('camera') ? cameras.find(c=>c.id===q.get('camera')) : cameras.find(c=>c.angle===q.get('angle'));
 history.replaceState(null,'',location.pathname+location.search);
 let active=null;
 function saveLink(container,blob,label,file){
@@ -14,13 +16,14 @@ async function showOriginals() {
   const rows=await recordings(),container=by('originals');container.replaceChildren();
   if(!rows.length){container.textContent='No originals recorded on this phone.';return;}
   for(const row of rows.reverse()) {
+    const label=cameras.find(c=>c.angle===row.angle)?.label ?? 'Camera';
     const b=document.createElement('button');
-    b.textContent='Open '+row.angle+' original · '+new Date(row.date).toLocaleTimeString();
+    b.textContent='Open '+label+' original · '+new Date(row.date).toLocaleTimeString();
     b.onclick=async()=>{
       b.disabled=true;
       try{
         const blob=await loadOriginal(row);
-        const link=saveLink(container,blob,'Download '+row.angle+' original','FGS-'+row.angle+'-'+row.date+'.'+extension(blob));
+        const link=saveLink(container,blob,'Download '+label+' original','FGS-'+label.replace(' ','-')+'-'+row.date+'.'+extension(blob));
         b.replaceWith(link);
       }catch(error){b.disabled=false;by('status').textContent=error.message;}
     };container.append(b);
@@ -50,7 +53,7 @@ async function start() {
     if(active!==room){stream.getTracks().forEach(t=>t.stop());return;}
     room.stream=stream;const video=by('camera');video.srcObject=stream;await video.play();
     if(signal.aborted)return;
-    room.original=await startOriginal(stream,angle,message=>{by('status').textContent=String(message);});
+    room.original=await startOriginal(stream,camera.angle,message=>{by('status').textContent=String(message);});
     if(signal.aborted){await room.original.stop();return;}
     const anchor=(_,m)=>{
       if(active!==room)return;
@@ -74,7 +77,7 @@ async function start() {
           if(room.exporting)throw Error('A clip is already being prepared.');
           room.exporting=msg.id;
           const blob=await room.original.clip(msg.start,msg.end);
-          saveLink(by('clips'),blob,'Download '+angle+' clip','FGS-'+angle+'-'+msg.id+'.'+extension(blob));
+          saveLink(by('clips'),blob,'Download '+camera.label+' clip','FGS-'+camera.label.replace(' ','-')+'-'+msg.id+'.'+extension(blob));
           ok=true;by('status').textContent='Matching clip ready. The camera is still recording.';
         }catch(error){by('status').textContent='Clip export · '+error.message;}
         finally{if(room.exporting===msg.id)room.exporting=null;}
@@ -97,7 +100,10 @@ async function start() {
 by('start').onclick=start;by('stop').onclick=()=>active && close(active,'Stopped. Your original is available below.');
 window.addEventListener('pagehide',()=>{if(active)close(active,'Closed');});
 if(!/^~[A-Za-z0-9_-]{21}$/.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(invite) ||
-  !['baseline','sideline'].includes(angle) || !Number.isFinite(expiry)){
+  !camera || !Number.isFinite(expiry)){
   by('start').disabled=true;by('status').textContent='Scan a new camera invite on the TV.';
-}else by('angle-name').textContent=angle[0].toUpperCase()+angle.slice(1)+' camera';
+}else{
+  by('angle-name').textContent=camera.label;
+  document.title=camera.label+' · FGS Replay Cam';
+}
 showOriginals().catch(()=>{by('status').textContent='Phone storage is unavailable for originals.';});
