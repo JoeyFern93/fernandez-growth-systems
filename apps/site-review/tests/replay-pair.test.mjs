@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {after,test} from 'node:test';
 import worker from '../worker.js';
+import previewWorker from '../replay-preview-worker.js';
 
 globalThis.crypto ??= webcrypto;
 const folder=mkdtempSync(join(tmpdir(),'replay-pair-'));
@@ -44,6 +45,95 @@ const lines=['v=0','o=- 123 1 IN IP4 127.0.0.1','s=private device nickname','t=0
   'a=setup:actpass','a=sendonly','a=rtcp-mux','a=rtpmap:96 VP8/90000','a=end-of-candidates'];
 const offer={type:'offer',sdp:lines.join('\r\n')+'\r\n'};
 const answer={type:'answer',sdp:offer.sdp.replace('sendonly','recvonly').replace('actpass','active')};
+
+const auditOrigin = 'https://qa-replay-audit-fixes-202611.fernandez-growth-systems.pages.dev';
+const auditEndpoint = 'https://qa-replay-audit-fixes-202611.fgs-site-review.pages.dev/api/replay-pair';
+
+test('audit pairing preflight requires its own frontend and backend and leaves production CORS unchanged', async () => {
+  const cases = [
+    [previewWorker, auditEndpoint, auditOrigin, 204],
+    [previewWorker, auditEndpoint, origin, 403],
+    [worker, endpoint, auditOrigin, 403],
+    [worker, endpoint, origin, 204],
+    [previewWorker, endpoint, origin, 404],
+    [previewWorker, auditEndpoint.replace('qa-replay-audit-fixes-202611', 'b1234567'), auditOrigin, 404],
+    [previewWorker, auditEndpoint, auditOrigin.replace('qa-replay-audit-fixes-202611', 'another-preview'), 403]
+  ];
+  for (const [handler, url, from, status] of cases) {
+    const response = await handler.fetch(new Request(url, {method:'OPTIONS', headers:{
+      Origin:from, 'Access-Control-Request-Method':'POST', 'Access-Control-Request-Headers':'Content-Type'
+    }}), {DB});
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), status === 204 ? from : null);
+  }
+  for (const path of ['/', '/api/reviews', '/downloads/fgs-site-review.zip']) {
+    const response = await previewWorker.fetch(new Request(new URL(path,auditEndpoint), {headers:{Origin:auditOrigin}}), {});
+    assert.equal(response.status, 404);
+  }
+});
+
+test('audit rooms, relay packets, cleanup and daily budgets are independent on one database binding', async t => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const tv = token(), phone = token(), packet = randomBytes(64);
+  function client(handler, base, from) {
+    return (path, method='GET', data, role) => {
+      const headers = {Origin:from};
+      if (role) headers.Authorization = 'Bearer ' + role;
+      const binary = data instanceof Uint8Array;
+      if (data !== undefined) headers['Content-Type'] = binary ? 'application/octet-stream' : 'application/json';
+      return handler.fetch(new Request(base + path, {method,headers,body:binary ? data : JSON.stringify(data)}), {DB});
+    };
+  }
+  const prod = client(worker, endpoint, origin), qa = client(previewWorker, auditEndpoint, auditOrigin);
+  async function startRelay(request) {
+    const response = await request('', 'POST', {tvToken:tv});
+    assert.equal(response.status, 201);
+    const room = await response.json();
+    const path = '/' + room.id;
+    assert.equal((await request(path + '/claim', 'POST', {invite:room.invite, phoneToken:phone})).status, 200);
+    assert.equal((await request(path + '/relay', 'POST', {action:'request', formats:['video/webm']}, tv)).status, 200);
+    assert.equal((await request(path + '/relay', 'POST', {action:'start', mimeType:'video/webm'}, phone)).status, 200);
+    assert.equal((await request(path + '/relay-chunk?seq=0', 'POST', packet, phone)).status, 201);
+    return path;
+  }
+  function productionRecords() {
+    const tables = ['replay_pairs','replay_pair_ice','replay_tv_readiness','replay_relays','replay_relay_chunks','replay_relay_days'];
+    return execute(tables.map(table => ['SELECT * FROM ' + table + ' ORDER BY 1,2', []]));
+  }
+  const publicRoom = await startRelay(prod);
+  const expired = [token().slice(0,22), token(), token(), now - 1];
+  await DB.prepare('INSERT INTO replay_pairs(id,tv_hash,bucket,expires) VALUES (?,?,?,?)').bind(...expired).run();
+  const before = productionRecords();
+  const testRoom = await startRelay(qa);
+  assert.notEqual(testRoom, publicRoom);
+  for (const [request, own, other] of [[qa,testRoom,publicRoom], [prod,publicRoom,testRoom]]) {
+    assert.equal((await request(own)).status, 401);
+    assert.equal((await request(own, 'GET', undefined, token())).status, 403);
+    assert.equal((await request(other, 'GET', undefined, tv)).status, 410);
+    assert.equal((await request(other + '/end', 'POST', {}, tv)).status, 410);
+  }
+  assert.deepEqual(Buffer.from(await (await qa(testRoom + '/relay-chunk?seq=0', 'GET', undefined, tv)).arrayBuffer()), packet);
+  const ice = await qa(testRoom + '/ice-servers', 'GET', undefined, tv);
+  assert.equal(ice.status, 200);
+  assert.deepEqual(await ice.json(), {iceServers:[{urls:'stun:stun.cloudflare.com:3478'}],relayAvailable:false});
+  const day = Math.floor(now / 86400000);
+  await DB.prepare('UPDATE audit_replay_relay_days SET packets=? WHERE day=?').bind(2147483647, day).run();
+  now += 400;
+  assert.equal((await qa(testRoom + '/relay-chunk?seq=1', 'POST', packet, phone)).status, 429);
+  assert.equal((await qa(testRoom + '/end', 'POST', {}, tv)).status, 200);
+  assert.equal((await DB.prepare('SELECT count(*) AS n FROM audit_replay_relay_chunks WHERE pair_id=?').bind(testRoom.slice(1)).first()).n, 0);
+  await DB.prepare('INSERT INTO audit_replay_pairs(id,tv_hash,bucket,expires) VALUES (?,?,?,?)').bind(...expired).run();
+  const angle = await qa('', 'POST', {tvToken:token(), purpose:'multicam'});
+  assert.equal(angle.status, 201);
+  assert.match((await angle.json()).id, /^~[A-Za-z0-9_-]{21}$/);
+  assert.equal((await DB.prepare('SELECT count(*) AS n FROM audit_replay_pairs WHERE id=?').bind(expired[0]).first()).n, 0);
+  assert.deepEqual(productionRecords(), before);
+  assert.equal((await prod(publicRoom + '/relay-chunk?seq=1', 'POST', packet, phone)).status, 201);
+  assert.equal((await prod(publicRoom + '/end', 'POST', {}, tv)).status, 200);
+  // This fixture shares a database with the rest of the Worker tests.
+  await DB.prepare('DELETE FROM audit_replay_relay_days WHERE day=?').bind(day).run();
+});
 
 test('two-angle invites allow one native video plus one private control channel and have no relay',async()=>{
   const tv=token(),phone=token(),room=await(await call('','POST',{tvToken:tv,purpose:'multicam'})).json();

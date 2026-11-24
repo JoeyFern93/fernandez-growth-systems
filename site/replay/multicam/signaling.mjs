@@ -1,12 +1,10 @@
 import {delay} from './clock.mjs';
 
-// Production reuses the existing pairing API. Development uses a local
-// same-origin adapter so unpublished builds never create production rooms.
-const api=document.querySelector('meta[name="replay-pair-api"]')?.content === '/api/replay-pair' ? '/api/replay-pair' :
-  'https://sitereview.fernandezgrowthsystems.com/api/replay-pair';
+const api=window.FGSReplayPairEndpoint;
 export const token=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
   .replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 export async function call(path,key,data,signal) {
+  if(!api)throw Error('Phone pairing is unavailable at this address. Open Replay Cam from its website or the test preview.');
   const headers={};
   if(key)headers.Authorization='Bearer '+key;
   if(data!==undefined)headers['Content-Type']='application/json';

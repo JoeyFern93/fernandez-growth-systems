@@ -204,7 +204,10 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(auditCase==='stall'){
+  if(process.argv.includes('--invite-ui')){
+    const {runInviteUI}=await import('./replay-tv-invite-ui.mjs');
+    await runInviteUI({tv,phone,site,taskErrors,delay});
+  }else if(auditCase==='stall'){
     const {runStallAudit}=await import('./replay-tv-stall.mjs');
     await runStallAudit({tv,site,output,delay});
   }else if(auditCase){

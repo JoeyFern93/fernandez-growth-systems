@@ -1,4 +1,6 @@
 const ORIGINS = new Set(['https://www.fernandezgrowthsystems.com','https://fernandezgrowthsystems.com']);
+const QA_SITE = 'https://qa-replay-audit-fixes-202611.fernandez-growth-systems.pages.dev';
+const QA_API = 'https://qa-replay-audit-fixes-202611.fgs-site-review.pages.dev';
 const PREFIX = '/api/replay-pair';
 const TTL = 10 * 60 * 1000;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -10,6 +12,18 @@ const CREATE = `CREATE TABLE IF NOT EXISTS replay_pairs (
  offer TEXT, answer TEXT)`;
 const initialized = new WeakMap();
 const nextSweep = new WeakMap();
+const previewDatabases = new WeakMap();
+function previewDatabase(db) {
+  if (!previewDatabases.has(db)) {
+    // All SQL in the pairing and relay modules is app-owned, with request data
+    // bound separately. Scope every table, index and trigger, including cleanup.
+    previewDatabases.set(db, {
+      prepare(sql) { return db.prepare(sql.replace(/\breplay_[a-z0-9_]+\b/g, 'audit_$&')); },
+      batch(statements) { return db.batch(statements); }
+    });
+  }
+  return previewDatabases.get(db);
+}
 const expiredPairs = "DELETE FROM replay_pairs WHERE expires<=? AND NOT EXISTS (SELECT 1 FROM replay_relays WHERE id=replay_pairs.id AND status='active' AND expires>?)";
 
 class PairError extends Error {
@@ -84,16 +98,16 @@ function description(value,kind,angleRoom=false) {
       (angleRoom && /^(?:a=sctp-port:5000|a=max-message-size:\d{1,10})$/.test(line)))
     .map(line=>line.startsWith('s=') ? 's=-' : line).join('\r\n')+'\r\n';
 }
-async function createPair(request,db,now) {
+async function createPair(request,db,now,hash) {
   const {tvToken,purpose}=await body(request);
   requireToken(tvToken);
   const expiry = now+TTL;
-  const [idSeed,tvHash,invite]=await Promise.all([digest('id',tvToken),digest('role',tvToken),digest('invite/'+expiry,tvToken)]);
+  const [idSeed,tvHash,invite]=await Promise.all([hash('id',tvToken),hash('role',tvToken),hash('invite/'+expiry,tvToken)]);
   // The reserved prefix cannot occur in ordinary base64url room identifiers.
   const id=purpose==='multicam' ? '~'+idSeed.slice(0,21) : idSeed.slice(0,22);
-  const inviteHash=await digest('claim',invite);
+  const inviteHash=await hash('claim',invite);
   const ip=request.headers.get('CF-Connecting-IP');
-  const bucket=ip ? await digest('network',Math.floor(now/TTL)+'/'+ip) : tvHash;
+  const bucket=ip ? await hash('network',Math.floor(now/TTL)+'/'+ip) : tvHash;
   const [,result]=await db.batch([
     db.prepare(expiredPairs).bind(now,now),
     db.prepare(`INSERT INTO replay_pairs(id,tv_hash,invite_hash,bucket,expires)
@@ -104,7 +118,7 @@ async function createPair(request,db,now) {
   const row=await db.prepare('SELECT expires,ended FROM replay_pairs WHERE id=? AND tv_hash=?').bind(id,tvHash).first();
   if(!row) fail(429,'Pairing is busy. Try again in a few minutes.');
   if(row.ended) fail(410,'This pairing has ended. Show a new QR code on the TV.');
-  return {status:result.meta.changes ? 201 : 200, data:{id,invite:row.expires===expiry ? invite : await digest('invite/'+row.expires,tvToken),expiresAt:row.expires}};
+  return {status:result.meta.changes ? 201 : 200, data:{id,invite:row.expires===expiry ? invite : await hash('invite/'+row.expires,tvToken),expiresAt:row.expires}};
 }
 function checkedCandidate(value) {
   const c=value?.candidate;
@@ -148,11 +162,12 @@ async function candidates(request,db,id,role,url,now) {
   }
   fail(409,'Connection details changed. Retry the same batch.');
 }
-async function handle(request,env,id,action,now,url,helpers) {
-  const db=env.DB;
-  if(!db) fail(503,'Pairing is temporarily unavailable.');
+async function handle(request,env,id,action,now,url,helpers,preview) {
+  if(!env.DB) fail(503,'Pairing is temporarily unavailable.');
+  const db=preview ? previewDatabase(env.DB) : env.DB;
+  const hash=preview ? (tag,value)=>digest('audit/'+tag,value) : digest;
   await setup(db,helpers.relaySchema);
-  if(!id) return createPair(request,db,now);
+  if(!id) return createPair(request,db,now,hash);
   // Pair creation always sweeps. Active traffic also clears abandoned rooms at most once
   // per minute on each Worker isolate, including their encrypted rolling windows.
   if(now >= (nextSweep.get(db)||0)) {
@@ -162,7 +177,7 @@ async function handle(request,env,id,action,now,url,helpers) {
   }
   if(action==='claim') {
     const input=await body(request);
-    const [invite,phone]=await Promise.all([digest('claim',requireToken(input.invite)),digest('role',requireToken(input.phoneToken))]);
+    const [invite,phone]=await Promise.all([hash('claim',requireToken(input.invite)),hash('role',requireToken(input.phoneToken))]);
     // The first phone claims atomically. Retrying the same phone's request is harmless.
     const row=await db.prepare(`UPDATE replay_pairs SET phone_hash=?
       WHERE id=? AND expires>? AND ended=0 AND invite_hash=? AND tv_hash<>?
@@ -176,7 +191,7 @@ async function handle(request,env,id,action,now,url,helpers) {
   }
   const token=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('Authorization')||'')?.[1];
   if(!token) fail(401,'Pairing access is required.');
-  const roleHash=await digest('role',token);
+  const roleHash=await hash('role',token);
   // Fetch pixel-free signaling metadata only; media packets never need the potentially long SDP.
   const desc=(!action || action==='offer' || action==='answer') ? ',p.offer,p.answer' : '';
   const row=await db.prepare(`SELECT p.tv_hash,p.phone_hash,p.expires,p.ended,
@@ -197,7 +212,11 @@ async function handle(request,env,id,action,now,url,helpers) {
   const angleRoom=id.startsWith('~');
   if(angleRoom && ['ice-servers','relay','relay-chunk'].includes(action)) fail(403,'Multi-camera rooms use direct connections only.');
   if(action==='candidates') return candidates(request,db,id,role,url,now);
-  if(action==='ice-servers') return {data:await helpers.turnIceServers(env,db,id,role,now)};
+  if(action==='ice-servers') {
+    // Preview rooms never issue credentials using the production TURN binding.
+    if(preview) return {data:{iceServers:[{urls:'stun:stun.cloudflare.com:3478'}],relayAvailable:false}};
+    return {data:await helpers.turnIceServers(env,db,id,role,now)};
+  }
   if(action==='relay' || action==='relay-chunk') return helpers.replayRelay({request,db,id,role,action,url,now,pair:row,body,fail});
   if(!action) {
     const data=publicState(row);
@@ -218,9 +237,18 @@ async function handle(request,env,id,action,now,url,helpers) {
   if(!result.meta.changes) fail(409,'This pairing changed. Start a new pairing on the TV.');
   return {data:{status:action==='offer'?'offered':'answered',expiresAt:row.expires}};
 }
+export function replayPreview(request,env,helpers) {
+  const url=new URL(request.url);
+  if(url.origin!==QA_API || !(url.pathname===PREFIX || url.pathname.startsWith(PREFIX+'/'))) {
+    return new Response(null,{status:404,headers:{'Cache-Control':'private, no-store'}});
+  }
+  return replayPair(request,env,url,helpers);
+}
 export async function replayPair(request,env,url,helpers) {
   const origin=request.headers.get('Origin'), headers=new Headers({'Cache-Control':'private, no-store','Vary':'Origin','Referrer-Policy':'no-referrer'});
-  if(!ORIGINS.has(origin)) return Response.json({error:'Open Replay Cam to pair a TV.'},{status:403,headers});
+  const preview=url.origin===QA_API;
+  const allowed=preview ? origin===QA_SITE : !url.hostname.endsWith('.fgs-site-review.pages.dev') && ORIGINS.has(origin);
+  if(!allowed) return Response.json({error:'Open Replay Cam to pair a TV.'},{status:403,headers});
   headers.set('Access-Control-Allow-Origin',origin);
   try {
     const path=url.pathname.slice(PREFIX.length);
@@ -240,7 +268,7 @@ export async function replayPair(request,env,url,helpers) {
       return new Response(null,{status:204,headers});
     }
     if(!methods.includes(request.method)) fail(405,'Use the correct method for this pairing action.');
-    const result=await handle(request,env,id,action,Date.now(),url,helpers);
+    const result=await handle(request,env,id,action,Date.now(),url,helpers,preview);
     if(result.bytes) {
       headers.set('Content-Type','application/octet-stream');
       headers.set('Content-Length',String(result.bytes.length));

@@ -1,5 +1,7 @@
 <!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://sitereview.fernandezgrowthsystems.com https://qa-replay-audit-fixes-202611.fgs-site-review.pages.dev">
+<script src="/replay/tv/pair-endpoint.js?v=0a729f0c5b64"></script><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>Two-camera replay · FGS Replay Cam</title>
 <link rel="stylesheet" href="./style.css"><script defer src="../tv/qrcode.js"></script>
 <script type="module" src="./tv.mjs"></script>
@@ -18,8 +20,8 @@
 <output id="position">Waiting for capture timestamps</output><output id="alignment"></output></div>
 <details><summary>Save matching clips</summary><p>Mark one interval on the shared timeline. Webcam clips download here. Phone clips download on each phone.</p><div class="tools"><button id="mark-in">Mark start</button><button id="mark-out">Mark end</button><button id="save" disabled>Prepare clips</button><output id="clip-status" role="status"></output></div><div id="clip-downloads"></div></details>
 <details id="local-originals"><summary>Webcam originals</summary><div id="original-list"></div></details>
-<dialog id="invite-dialog" aria-labelledby="invite-title"><h2 id="invite-title"></h2><div id="qr"></div><p id="invite-note">Connect the phone to the TV's Wi-Fi, then scan the code with its camera. This private invite expires in 10 minutes.</p>
-<div class="tools"><a id="phone-link">Open phone link</a><button id="close">Close</button></div><p>On different networks? <a href="/replay/?mode=tv">Pair one phone with internet relay</a>.</p></dialog>
+<dialog id="invite-dialog" aria-labelledby="invite-title" aria-describedby="invite-note"><h2 id="invite-title"></h2><div id="qr"></div><p id="invite-note" role="status"></p>
+<div class="tools"><a id="phone-link" target="_blank" rel="noopener noreferrer" hidden>Open phone link</a><button id="retry-invite" type="button" hidden>Retry invite</button><button id="close" type="button">Close</button></div><p>On different networks? <a href="/replay/?mode=tv">Pair one phone with internet relay</a>.</p></dialog>
 <dialog id="demo-dialog" aria-labelledby="demo-title"><h2 id="demo-title">Finish recording before the demo?</h2>
 <p id="demo-description">Keep recording to stay with your cameras. Starting the demo stops the cameras, saves each original on its recording device and closes pending invites.</p>
 <div class="tools"><button id="demo-keep" autofocus>Keep recording</button><button id="demo-finish">Finish recording and start demo</button></div>

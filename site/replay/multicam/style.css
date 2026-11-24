@@ -15,3 +15,5 @@ dialog{color:inherit;background:#173027;border:1px solid #66826f;border-radius:1
 section header .source{margin-left:auto;display:flex;align-items:center;gap:.4rem}select.webcam{max-width:min(14rem,45vw)}#clip-downloads a,#original-list a,#original-list button{display:block;margin:.4rem 0}
 
 .picture video{width:100%;height:100%;object-fit:contain}
+#invite-dialog.invite-fallback:not([open]){display:none}
+#invite-dialog.invite-fallback[open]{display:block;position:fixed;z-index:99;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;box-shadow:0 0 0 100vmax #000a}

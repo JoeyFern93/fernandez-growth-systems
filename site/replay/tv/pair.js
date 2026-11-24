@@ -1,7 +1,6 @@
 (() => {
   'use strict';
-  const apiRoot = document.querySelector('meta[name="replay-pair-api"]')?.content === '/api/replay-pair'
-    ? location.origin + '/api/replay-pair' : 'https://sitereview.fernandezgrowthsystems.com/api/replay-pair';
+  const apiRoot = window.FGSReplayPairEndpoint;
   const phoneStart = document.getElementById('phone-start');
   const tvButton = document.getElementById('pairTvBtn');
   if (!phoneStart && !tvButton) return;
@@ -114,6 +113,7 @@
       .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   }
   async function api(path, method, credential, body, keepalive = false) {
+    if (!apiRoot) throw new Error('Phone pairing is unavailable at this address. Open Replay Cam from its website or the test preview.');
     const headers = {};
     if (credential) headers.Authorization = 'Bearer ' + credential;
     if (body) headers['Content-Type'] = 'application/json';
@@ -172,7 +172,11 @@
   function fail(s, error) {
     if (s.ended) return;
     end(s);
-    const message = error.name === 'NotAllowedError' ? 'Allow camera access in your browser settings.' :
+    const creatingRoom=s.role==='tv' && !s.id;
+    const message = creatingRoom && error.status===429 ? 'The pairing service is busy. Wait a minute, then retry.' :
+      creatingRoom && error.status===403 ? 'The pairing service did not accept this display address.' :
+      creatingRoom ? 'Could not create a private room. Check that this display is online, then retry.' :
+      error.name === 'NotAllowedError' ? 'Allow camera access in your browser settings.' :
       error.name === 'NotFoundError' ? 'This phone could not find an available camera.' :
       error instanceof TypeError ? 'Pairing could not reach the service.' :
       error.message || 'The room connection was lost.';
@@ -454,6 +458,10 @@
     tvState('Creating your private TV room.', 'loading');
     try {
       const session=await api('', 'POST', null, {tvToken:s.key});
+      if (!/^[A-Za-z0-9_-]{10,90}$/.test(session?.id || '') ||
+          !/^[A-Za-z0-9_-]{16,96}$/.test(session?.invite || '') || !Number.isFinite(session?.expiresAt) || session.expiresAt<=Date.now()) {
+        throw new Error('The pairing service returned an incomplete invite.');
+      }
       s.id=session.id;
       if (s.ended) { api('/'+s.id+'/end','POST',s.key).catch(()=>{}); return; }
       expiry(s,session.expiresAt);
@@ -530,6 +538,7 @@
     play.onclick=()=>window.FGSReplayCamera?.resumeRemote?.();
     el('tv-close').onclick=dismiss;
     el('tv-end').onclick=()=>{end(active); dialog.close();tvButton.focus();};
+    el('tv-new').textContent='Retry pairing';
     el('tv-new').onclick=openTv;
     dialog.addEventListener('cancel',event=>{event.preventDefault();dismiss();});
     tvButton.addEventListener('click',openTv);

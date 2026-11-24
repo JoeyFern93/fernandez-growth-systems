@@ -31,7 +31,9 @@ for (const asset of ['review.js','review.css','install.js','install.css','compan
 for (const [name, html] of documents) await writeFile(path.join(output, name), html);
 
 // Pages advanced mode serves one worker. Inline the small local modules in their own scopes.
-let bundle = await readFile(path.join(root,'worker.js'),'utf8');
+const replayPreview = process.env.CF_PAGES_BRANCH === 'qa/replay-audit-fixes-20261124';
+const entry = replayPreview ? 'replay-preview-worker.js' : 'worker.js';
+let bundle = await readFile(path.join(root,entry),'utf8');
 const imports = [...bundle.matchAll(/^import \{([^}]+)\} from ["']\.\/([\w-]+\.js)["'];?$/gm)];
 for (const [declaration, names, filename] of imports) {
   const source = await readFile(path.join(root,filename),'utf8');
@@ -40,5 +42,9 @@ for (const [declaration, names, filename] of imports) {
   bundle = bundle.replace(declaration, () => 'const {' + names + '} = (() => {\n' + definitions + '\nreturn {' + names + '};\n})();');
 }
 if (/^import /m.test(bundle)) throw new Error('A worker import was not bundled.');
+if (replayPreview) {
+  // The QA alias and its immutable deployment must never fall through to Site Review.
+  await writeFile(path.join(output,'_routes.json'),JSON.stringify({version:1,include:['/*'],exclude:[]}));
+}
 await writeFile(path.join(output,'_worker.js'),bundle);
 console.log('Built Site Review for Cloudflare Pages.');

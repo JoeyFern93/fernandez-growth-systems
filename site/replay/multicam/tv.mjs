@@ -16,11 +16,33 @@ const slots=cameras.map(({id:cameraId,angle:name,label})=>{
 let demo=false,origin=0,mode='delay',cursor=0,markIn=null,markOut=null,clipId=null;
 let exportJobs=[],exportOriginals=[],lastClipRefresh=-Infinity;
 const session=token().slice(0,16);
+const inviteDialog=by('invite-dialog'),phoneLink=by('phone-link');
+let inviteSlot=null,inviteRoom=null;
+if(typeof inviteDialog.showModal!=='function'){
+  inviteDialog.classList.add('invite-fallback');
+  inviteDialog.setAttribute('role','dialog');
+  inviteDialog.showModal=()=>{inviteDialog.open=true;inviteDialog.setAttribute('open','');by('close').focus();};
+  inviteDialog.close=()=>{
+    inviteDialog.open=false;inviteDialog.removeAttribute('open');
+    inviteSlot?.node.querySelector('.invite').focus();
+    inviteDialog.dispatchEvent(new Event('close'));
+  };
+  inviteDialog.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){event.preventDefault();inviteDialog.close();}
+  });
+}
+function inviteState(message,retry=false) {
+  by('invite-note').textContent=message;
+  by('retry-invite').hidden=!retry;
+  by('qr').replaceChildren();
+  phoneLink.removeAttribute('href');phoneLink.hidden=true;
+}
 function dispose(slot,msg,notify=true) {
   slot.pendingWebcam=null;
   slot.discovery?.stream?.getTracks().forEach(t=>t.stop());slot.discovery=null;
   const room=slot.room;
   if(room){
+    if(room===inviteRoom && inviteDialog.open)inviteState(msg,true);
     const originalOnly=room.local ? room.original && !room.originalError && !trimHere : room.trimSupport===false;
     slot.lastOriginalLocation=originalOnly?'Original only. '+originalLocation(room,false):'';
     slot.room=null;room.controller.abort();clearInterval(room.clockTimer);clearTimeout(room.watchdog);
@@ -106,17 +128,32 @@ async function invite(slot) {
   const room={controller:new AbortController(),key:token(),clock:new ClockMap()};
   slot.room=room;
   const signal=room.controller.signal;
+  inviteSlot=slot;inviteRoom=room;
+  by('invite-title').textContent=slot.label+' invite';
+  inviteState('Creating a private invite for '+slot.label+'.');
+  if(!inviteDialog.open)inviteDialog.showModal();
   try{
-    const result=await call('',null,{tvToken:room.key,purpose:'multicam'},signal);
+    if(typeof RTCPeerConnection!=='function')throw Error('This display cannot receive a direct two-camera connection. Use single-camera pairing with internet relay.');
+    const timer=setTimeout(()=>{
+      if(slot.room===room)dispose(slot,'The pairing service took too long. Check that this display is online, then retry.');
+    },11000);
+    let result;
+    try{result=await call('',null,{tvToken:room.key,purpose:'multicam'},signal);}
+    finally{clearTimeout(timer);}
     if(signal.aborted){if(result.id)call('/'+result.id+'/end',room.key,{}).catch(()=>{});return;}
-    if(!result.id?.startsWith('~'))throw Error('Two-camera pairing is unavailable. Create a new invite and try again.');
+    if(!/^~[A-Za-z0-9_-]{21}$/.test(result?.id || '') || !/^[A-Za-z0-9_-]{43}$/.test(result?.invite || '') ||
+      !Number.isFinite(result?.expiresAt) || result.expiresAt<=Date.now())throw Error('The pairing service returned an incomplete invite. Retry to create a new one.');
     Object.assign(room,{id:result.id,expiry:result.expiresAt});
     const url=new URL('phone',location.href);
     url.hash=new URLSearchParams({room:room.id,invite:result.invite,camera:slot.cameraId,session,until:String(room.expiry)});
-    const qr=globalThis.qrcode(0,'M');qr.addData(url.href);qr.make();
-    by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});
-    by('phone-link').href=url;by('invite-title').textContent=slot.label+' invite';
-    if(!by('invite-dialog').open)by('invite-dialog').showModal();
+    if(room===inviteRoom && inviteDialog.open){
+      phoneLink.href=url;phoneLink.hidden=false;
+      by('invite-note').textContent="Connect the phone to the display's Wi-Fi, then scan the code and tap Start camera.";
+      try{
+        const qr=globalThis.qrcode(0,'M');qr.addData(url.href);qr.make();
+        by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});
+      }catch{by('invite-note').textContent='The QR code could not load. Copy the private phone link and open it on the camera phone.';}
+    }
     slot.status.textContent='Invite ready · waiting for phone';
     slot.node.querySelector('.invite').textContent='Replace invite';
     const pc=createPeer();room.pc=pc;
@@ -127,14 +164,20 @@ async function invite(slot) {
       if(pc.connectionState==='connected'){
         room.wasConnected=true;
         clearTimeout(room.watchdog);slot.status.textContent='Direct connected · waiting for capture timestamps';
-        if(by('phone-link').href===url.href)by('invite-dialog').close();
+        if(room===inviteRoom && inviteDialog.open)by('invite-note').textContent='Phone connected. Waiting for video from '+slot.label+'.';
       } else if(pc.connectionState==='failed')dispose(slot,directConnectionMessage(room.wasConnected));
       else if(pc.connectionState==='disconnected')slot.status.textContent='Camera interrupted';
     };
     await negotiate(pc,{...room,signal},false);
     if(signal.aborted)return;
     if(pc.connectionState!=='connected')room.watchdog=setTimeout(()=>dispose(slot,directConnectionMessage(room.wasConnected)),22000);
-  }catch(error){if(!signal.aborted)dispose(slot,error.message);}
+  }catch(error){
+    if(signal.aborted)return;
+    const message=!room.id && error.status===429?'The pairing service is busy. Wait a minute, then retry.':
+      !room.id && error.status===403?'The pairing service did not accept this display address.':
+      !room.id && (error instanceof TypeError || error instanceof SyntaxError)?'Could not create a private invite. Check that this display is online, then retry.':error.message;
+    dispose(slot,message);
+  }
 }
 function finishPhone(room) {
   if(room.channel?.readyState!=='open')return Promise.resolve(null);
@@ -233,6 +276,10 @@ function blank(slot,message){
 }
 function draw(slot,time){
   const room=slot.room;
+  if(room && room===inviteRoom && inviteDialog.open && room.preview){
+    const previous=slot.buffer.frames.at(-2);
+    if(previous?.epoch===slot.epoch || room.preview.state()==='live')inviteDialog.close();
+  }
   if(slot.node.hidden){if(room?.video)room.video.hidden=true;return;}
   if(demo){
     if(room?.video)room.video.hidden=true;
@@ -302,6 +349,14 @@ const renderWebcams=bindWebcams(slots,{
   dispose,receive
 });
 for(const s of slots)s.node.querySelector('.invite').onclick=()=>invite(s);
+by('retry-invite').onclick=()=>{if(inviteSlot)invite(inviteSlot);};
+inviteDialog.addEventListener('close',()=>{
+  if(inviteDialog.open)return;
+  const pending=inviteSlot && inviteRoom && inviteSlot.room===inviteRoom && !inviteRoom.id;
+  if(pending)dispose(inviteSlot,'Invite canceled.');
+  inviteSlot=null;inviteRoom=null;
+  inviteState('');
+});
 by('demo').onclick=()=>{
   if(demo){setDemo(false);return;}
   if(sourcesPresent() || pendingPhoneChecks.length)showDemoChoice();else setDemo(true);

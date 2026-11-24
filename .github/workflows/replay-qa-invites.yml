@@ -1,0 +1,33 @@
+name: Check hosted Replay Cam test invites
+on:
+  push:
+    branches: [qa/replay-audit-fixes-20261124]
+    paths:
+      - 'site/replay/**'
+      - 'site/_headers'
+      - 'apps/site-review/**'
+      - 'tests/replay-qa-invites.mjs'
+      - '.github/workflows/replay-qa-invites.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: replay-hosted-test-invites
+  cancel-in-progress: false
+jobs:
+  hosted-pairing:
+    if: github.ref == 'refs/heads/qa/replay-audit-fixes-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated browser test dependencies
+        run: npm install --prefix "$RUNNER_TEMP/replay-qa" --no-audit --no-fund --ignore-scripts --no-save playwright-core@1.52.0 pngjs@7.0.0 jsqr@1.4.0
+      - name: Check rendered invites and camera video on the test URLs
+        run: node tests/replay-qa-invites.mjs
+        env:
+          REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
+          FGS_CHROME_BIN: /usr/bin/google-chrome
