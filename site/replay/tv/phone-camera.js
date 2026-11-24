@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  function setup() {
+  function setup(onSourceChange) {
     const element = id => document.getElementById('phone-' + id);
     const lens = element('lens'), size = element('resolution'), fps = element('fps');
     const rotate = element('rotate'), mirror = element('mirror'), zoom = element('zoom');
@@ -225,7 +225,10 @@
         stopTracks(candidate);
         throw error;
       }
-      if (previous !== candidate) stopTracks(previous);
+      if (previous !== candidate) {
+        onSourceChange?.(candidate);
+        stopTracks(previous);
+      }
       window.FGSReplayQuality?.capture(input, source);
     }
     async function acquire(choice, strict) {

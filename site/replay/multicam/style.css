@@ -14,6 +14,10 @@ dialog{color:inherit;background:#173027;border:1px solid #66826f;border-radius:1
 
 section header .source{margin-left:auto;display:flex;align-items:center;gap:.4rem}select.webcam{max-width:min(14rem,45vw)}#clip-downloads a,#original-list a,#original-list button{display:block;margin:.4rem 0}
 
-.picture video{width:100%;height:100%;object-fit:contain}
+.picture video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.picture canvas,.picture .missing{position:relative;z-index:1;background:#020705}
+.picture .missing{position:absolute;inset:0;display:grid;place-items:center}
+.picture .receiver-play{position:absolute;z-index:2}
 #invite-dialog.invite-fallback:not([open]){display:none}
 #invite-dialog.invite-fallback[open]{display:block;position:fixed;z-index:99;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;box-shadow:0 0 0 100vmax #000a}
+.relay-clip-editor img,.relay-clip-editor video{display:block;width:100%;max-height:30vh;object-fit:contain;background:#07110c}

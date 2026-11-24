@@ -3,12 +3,12 @@ import {delay} from './clock.mjs';
 const api=window.FGSReplayPairEndpoint;
 export const token=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
   .replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
-export async function call(path,key,data,signal) {
+export async function call(path,key,data,signal,keepalive=false) {
   if(!api)throw Error('Phone pairing is unavailable at this address. Open Replay Cam from its website or the test preview.');
   const headers={};
   if(key)headers.Authorization='Bearer '+key;
   if(data!==undefined)headers['Content-Type']='application/json';
-  const response=await fetch(api+path,{method:data!==undefined?'POST':'GET',signal,
+  const response=await fetch(api+path,{method:data!==undefined?'POST':'GET',signal,keepalive,
     cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',headers,
     body:data===undefined ? undefined : JSON.stringify(data)});
   if(!response.ok) {
@@ -104,7 +104,7 @@ async function describe(pc,description,signal) {
 }
 export async function negotiate(pc,room,phone) {
   const {id,key,expiry,signal}=room,path='/'+id;
-  const deadline=Math.min(expiry,Date.now()+(phone?30000:600000));
+  let deadline=Math.min(expiry,Date.now()+(phone?30000:600000)),claimed=false;
   // A TV can be waiting for a scan for several minutes. Start its candidate
   // window when a phone actually offers video.
   let receive;
@@ -115,6 +115,10 @@ export async function negotiate(pc,room,phone) {
   while(!signal.aborted && Date.now()<deadline) {
     const state=await signalRequest(path,key,undefined,signal,deadline);
     const remote=phone?state.answer:state.offer;
+    if(!phone && !claimed && (state.status==='paired' || remote)){
+      claimed=true;deadline=Math.min(deadline,Date.now()+30000);
+      room.onPhoneClaimed?.();
+    }
     if(remote) {
       if(!phone)receive=trickle(pc,room,Math.min(deadline,Date.now()+30000));
       await pc.setRemoteDescription(remote);
@@ -124,5 +128,5 @@ export async function negotiate(pc,room,phone) {
     }
     await delay(phone?500:1100);
   }
-  throw Error(signal.aborted?'Pairing stopped.':'Invite expired. Create a new invite for this camera.');
+  throw Error(signal.aborted?'Pairing stopped.':claimed?'The phone joined, but its video connection did not start. Retry this camera or choose internet relay.':'Invite expired. Create a new invite for this camera.');
 }

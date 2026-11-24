@@ -2,20 +2,39 @@ let ready;
 function openDatabase() {
   return ready ||= new Promise((resolve,reject)=>{
     const request=indexedDB.open('fgs-studio-angle-originals',1);
+    let abandoned=false;
+    const fail=error=>{abandoned=true;clearTimeout(timer);reject(error);};
+    const timer=setTimeout(()=>fail(Error('Original storage did not open in time.')),8000);
+    request.onblocked=()=>fail(Error('Another tab is blocking original storage.'));
     request.onupgradeneeded=()=>{
       const db=request.result;
       db.createObjectStore('recordings',{keyPath:'id'});
       db.createObjectStore('pieces',{keyPath:['id','seq']});
     };
-    request.onsuccess=()=>resolve(request.result);
-    request.onerror=()=>reject(request.error);
-  });
+    request.onsuccess=()=>{
+      clearTimeout(timer);
+      if(abandoned)request.result.close();else resolve(request.result);
+    };
+    request.onerror=()=>fail(request.error);
+  }).catch(error=>{ready=null;throw error;});
 }
-async function dbRequest(store,mode,fn) {
-  const db=await openDatabase();
+function dbRequest(store,mode,fn,signal) {
   return new Promise((resolve,reject)=>{
-    const tx=db.transaction(store,mode),request=fn(tx.objectStore(store));
-    tx.oncomplete=()=>resolve(request.result);tx.onabort=tx.onerror=()=>reject(tx.error);
+    let tx;
+    const cancel=()=>{
+      if(tx){try{tx.abort();}catch{}}
+      reject(signal.reason);
+    };
+    if(signal?.aborted){cancel();return;}
+    signal?.addEventListener('abort',cancel,{once:true});
+    const cleanup=()=>signal?.removeEventListener('abort',cancel);
+    openDatabase().then(db=>{
+      if(signal?.aborted)return;
+      tx=db.transaction(store,mode);
+      const request=fn(tx.objectStore(store));
+      tx.oncomplete=()=>{cleanup();resolve(request.result);};
+      tx.onabort=tx.onerror=()=>{cleanup();reject(tx.error || Error('Could not access original storage.'));};
+    }).catch(error=>{cleanup();reject(error);});
   });
 }
 const put=(store,row)=>dbRequest(store,'readwrite',s=>s.put(row));
@@ -33,16 +52,16 @@ export function canTrimOriginal() {
   return typeof video.captureStream==='function' && typeof video.requestVideoFrameCallback==='function' &&
     typeof MediaRecorder==='function';
 }
-export async function startOriginal(stream,angle,onError,source='phone') {
+export async function startOriginal(stream,angle,onError,source='phone',signal) {
   const type=chooseType();
   const rec=new MediaRecorder(stream,{...(type?{mimeType:type}:{}),videoBitsPerSecond:14000000});
   const meta={id:crypto.randomUUID(),date:Date.now(),angle,source,type:rec.mimeType,start:null};
-  await put('recordings',meta);
-  let seq=0,writes=Promise.resolve(),failure=null;
+  await dbRequest('recordings','readwrite',s=>s.put(meta),signal);
+  let seq=0,savedPieces=0,writes=Promise.resolve(),failure=null;
   function persist(blob) {
     if(!blob.size || failure)return;
     const row={id:meta.id,seq:seq++,blob};
-    writes=writes.then(()=>put('pieces',row)).catch(error=>{
+    writes=writes.then(()=>put('pieces',row)).then(()=>{savedPieces++;}).catch(error=>{
       if(failure)return;
       failure=error;if(rec.state==='recording')rec.stop();
       onError('Storage stopped recording. Save the available original.');
@@ -51,15 +70,22 @@ export async function startOriginal(stream,angle,onError,source='phone') {
   rec.ondataavailable=event=>persist(event.data);
   rec.onerror=()=>onError('The recorder stopped unexpectedly.');
   const stopped=new Promise(resolve=>rec.addEventListener('stop',resolve,{once:true}));
-  rec.start(1000);
+  try{
+    if(signal?.aborted)throw signal.reason;
+    rec.start(1000);
+  }catch(error){
+    dbRequest('recordings','readwrite',s=>s.delete(meta.id)).catch(()=>{});
+    throw error;
+  }
   const startRequest=performance.now();
   return {
+    id:meta.id,
     get start(){return failure?null:meta.start;},
     anchor(capture) {
       if(meta.start!==null || !Number.isFinite(capture) || capture<startRequest)return;
       meta.start=capture;writes=writes.then(()=>put('recordings',meta)).catch(onError);
     },
-    async stop(){if(rec.state==='recording')rec.stop();await stopped;await writes;},
+    async stop(){if(rec.state==='recording')rec.stop();await stopped;await writes;return savedPieces>0 && !failure;},
     async clip(start,end) {
       if(failure || !Number.isFinite(meta.start) || start<meta.start || end<=start || end-start>21000 || end>performance.now()) {
         throw Error('This interval is outside the original recording.');

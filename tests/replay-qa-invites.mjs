@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import {installPhoneCounter,verifyMoving,verifyMixedReplay} from './replay-qa-pictures.mjs';
 
 // Deliberately pinned to this test branch. Never follow a room API redirect.
 const site = 'https://qa-replay-audit-fixes-202611.fernandez-growth-systems.pages.dev';
@@ -54,39 +56,25 @@ async function newDevice(browser, viewport) {
   return {context, page:await context.newPage()};
 }
 
-function sampleRemoteVideo(selector) {
-  const video = document.querySelector(selector);
-  if (!video || video.readyState < 2 || video.videoWidth < 16 ||
-      !video.srcObject?.getVideoTracks().some(track => track.readyState === 'live')) return null;
-  const canvas = document.createElement('canvas');
-  canvas.width = 64; canvas.height = 36;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video,0,0,canvas.width,canvas.height);
-  const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-  let fingerprint = 2166136261;
-  for (const channel of pixels) fingerprint = Math.imul(fingerprint ^ channel, 16777619);
-  return {fingerprint, width:video.videoWidth, height:video.videoHeight};
-}
-
-async function verifyMoving(page, selector) {
-  const frames = new Set();
-  const until = Date.now() + 42000;
-  do {
-    const frame = await page.evaluate(sampleRemoteVideo, selector);
-    if (frame) {
-      frames.add(frame.fingerprint);
-      if (frames.size >= 3) return frame;
-    }
-    await delay(200);
-  } while (Date.now() < until);
-  throw new Error('No changing camera pictures reached the display.');
-}
-
-async function checkInvite(browser, camera) {
+export async function checkInvite(browser, camera, relay = false) {
   const multi = camera !== null;
-  const label = multi ? 'Camera ' + camera : 'Single camera';
+  const multiSender = multi && !relay;
+  const label = relay ? 'USB webcam and relayed phone' : multi ? 'Camera ' + camera : 'Single camera';
   const tv = await newDevice(browser, {width:1280,height:800});
   const phone = await newDevice(browser, {width:390,height:844});
+  let acceptedChunks = 0, largestChunk = 0, offers = 0, starts = 0;
+  if(relay) {
+    await phone.page.addInitScript(installPhoneCounter);
+    phone.page.on('response', response => {
+      const req=response.request(), url=new URL(response.url());
+      if(url.origin!==service || req.method()!=='POST' || !response.ok())return;
+      if(url.pathname.endsWith('/relay-chunk')){
+        acceptedChunks++;
+        largestChunk=Math.max(largestChunk,req.postDataBuffer()?.length || 0);
+      } else if(url.pathname.endsWith('/offer'))offers++;
+      else if(url.pathname.endsWith('/relay') && req.postDataJSON()?.action==='start')starts++;
+    });
+  }
   const statuses = new Set();
   for (const page of [tv.page,phone.page]) {
     page.on('response', response => {
@@ -110,7 +98,13 @@ async function checkInvite(browser, camera) {
   try {
     phase = label + ' opening the invite dialog';
     await tv.page.goto(site + (multi ? '/replay/multicam/' : '/replay/'), {waitUntil:'domcontentloaded'});
-    const button = tv.page.locator(multi ? '#camera-' + camera + '-invite' : '#pairTvBtn');
+    if(relay) {
+      phase=label+' selecting the display webcam';
+      await tv.page.waitForFunction(()=>typeof document.querySelector('#baseline .webcam')?.onchange==='function',null,{timeout:12000});
+      await tv.page.locator('#baseline .webcam').selectOption('default');
+      await verifyMoving(tv.page,'#baseline .picture');
+    }
+    const button = tv.page.locator(multi ? '#camera-' + camera + (relay ? '-relay' : '-invite') : '#pairTvBtn');
     if (!multi && !await button.isVisible()) {
       const open = tv.page.locator('#toggleReplayControls[aria-expanded="false"]');
       if (await open.isVisible()) await open.click();
@@ -128,23 +122,48 @@ async function checkInvite(browser, camera) {
     const link = await dialog.locator(multi ? '#phone-link' : '#tv-phone-link').getAttribute('href');
     assert.ok(decoded.data === link, 'Scanned QR differs from phone link.');
     const url = new URL(link);
-    assert.ok(url.origin === site && url.pathname === (multi ? '/replay/multicam/phone' : '/replay/tv/phone'));
+    assert.ok(url.origin === site && url.pathname === (multiSender ? '/replay/multicam/phone' : '/replay/tv/phone'));
     await createRead;
     assert.ok(typeof room === 'string' && room.length === 22 && token?.length === 43, 'Room creation was not observed on the isolated API.');
     const hash = new URLSearchParams(url.hash.slice(1));
-    assert.ok(multi ? hash.get('room') === room && hash.get('camera') === String(camera) && hash.has('invite') :
+    assert.ok(multiSender ? hash.get('room') === room && hash.get('camera') === String(camera) && hash.has('invite') :
       hash.get('pair')?.startsWith(room + '.') && hash.has('key'), 'Invite details do not match the new room.');
+    if(relay)assert.equal(hash.get('transport'),'relay');
     phase = label + ' claiming room and starting camera';
     await phone.page.goto(decoded.data,{waitUntil:'domcontentloaded'});
     const claim = phone.page.waitForResponse(r => r.url() === api + '/' + room + '/claim' && r.request().method() === 'POST', {timeout:18000});
-    const [response] = await Promise.all([claim, phone.page.locator(multi ? '#start' : '#phone-start').click({timeout:12000})]);
+    const [response] = await Promise.all([claim, phone.page.locator(multiSender ? '#start' : '#phone-start').click({timeout:12000})]);
     assert.ok(response.ok(), 'Preview room claim failed.');
     phase = label + ' waiting for changing video on display';
     const slot = camera === 2 ? '#sideline' : '#baseline';
-    const frame = await verifyMoving(tv.page, multi ? slot + ' .picture video' : '#liveVideo');
+    const frame = await verifyMoving(tv.page, multi ? slot + ' .picture' : '#viewer');
     console.log(label + ': QR decoded, phone started once, three distinct pictures reached display at ' + frame.width + 'x' + frame.height + '.');
+    if(relay) {
+      phase=label+' reading delayed phone marker, pause and scrub';
+      await tv.page.waitForFunction(()=>/internet relay/i.test(document.querySelector('#sideline .status').textContent),null,{timeout:9000});
+      const replay=await verifyMixedReplay(tv.page,phone.page);
+      await phone.page.waitForFunction(()=>/recording/i.test(document.querySelector('#relay-original-status')?.textContent),null,{timeout:9000});
+      assert.equal(await phone.page.evaluate(()=>testCamera.opens),1,'Camera opened more than once');
+      assert.ok(acceptedChunks>=2 && largestChunk>0 && largestChunk<=256*1024,'Expected capped encrypted packets');
+      assert.equal(offers,0,'Relay selection sent a direct offer');
+      assert.equal(starts,1,'Relay started more than once');
+      console.log(label+': selected transport active; delayed optical picture '+replay.lagMs+' ms behind phone; pause held and scrub restored the chosen marker.');
+    }
     phase = label + ' stopping phone camera';
-    await phone.page.locator(multi ? '#stop' : '#phone-stop').click({timeout:8000});
+    await phone.page.locator(multiSender ? '#stop' : '#phone-stop').click({timeout:8000});
+    if(relay) {
+      await phone.page.waitForFunction(()=>testCamera.tracks.every(t=>t.readyState==='ended'),null,{timeout:8000});
+      const original=phone.page.locator('#relay-originals');
+      await original.locator('summary').click();
+      await original.locator('button').first().click();
+      await original.locator('a[href^="blob:"]').first().waitFor({timeout:10000});
+      assert.equal(await tv.page.locator('#baseline .webcam').inputValue(),'default');
+      await verifyMoving(tv.page,'#baseline .picture',10000);
+      const finished=acceptedChunks;
+      await delay(1500);
+      assert.equal(acceptedChunks,finished,'Relay uploads continued after the phone stopped');
+      console.log(label+': phone released, original available on phone, USB picture still changing, relay stopped uploading.');
+    }
   } catch (error) {
     console.error(label + ' HTTP results: ' + (Array.from(statuses).join(', ') || 'no preview API response'));
     throw error;
@@ -153,11 +172,14 @@ async function checkInvite(browser, camera) {
       await createRead;
       if (room && token) {
         const resource = api + '/' + room;
-        const headers = {Origin:site, Authorization:'Bearer '+token, 'Content-Type':'application/json'};
-        const closed = await fetch(resource + '/end', {method:'POST', headers, body:'{}', redirect:'error', signal:AbortSignal.timeout(8000)});
-        assert.ok(closed.ok || closed.status === 410, 'Could not revoke the isolated test room.');
-        const status = await fetch(resource, {headers, redirect:'error', signal:AbortSignal.timeout(8000)});
-        assert.ok(status.status === 410, 'Revoked room is still active.');
+        const [closed,status] = await tv.page.evaluate(async ({resource,token})=>{
+          const headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+          const end=await fetch(resource+'/end',{method:'POST',headers,body:'{}',redirect:'error',signal:AbortSignal.timeout(8000)});
+          const check=await fetch(resource,{headers,redirect:'error',signal:AbortSignal.timeout(8000)});
+          return [end.status,check.status];
+        },{resource,token});
+        assert.ok(closed===200 || closed===410,'Could not revoke the isolated test room.');
+        assert.equal(status,410,'Revoked room is still active.');
       }
     } finally {
       await Promise.all([tv.context.close(),phone.context.close()]);
@@ -165,8 +187,9 @@ async function checkInvite(browser, camera) {
   }
 }
 
-let browser;
-try {
+async function main(){
+  let browser;
+  try {
   await waitForDeployments();
   browser = await chromium.launch({executablePath:process.env.FGS_CHROME_BIN, args:[
     '--no-sandbox','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream',
@@ -175,10 +198,13 @@ try {
     '--disable-renderer-backgrounding','--disable-features=WebRtcHideLocalIpsWithMdns'
   ]});
   for (const camera of [1,2,null]) await checkInvite(browser,camera);
+  await checkInvite(browser,2,true);
 } catch (error) {
   // Playwright errors can contain the phone's private fragment. Log only
   // the stage and the safe assertion text defined here, never browser URLs.
   console.error('Hosted Replay Cam test failed while ' + phase + '.');
   if (error instanceof assert.AssertionError && !String(error.message).includes('http')) console.error(error.message);
   process.exitCode = 1;
-} finally { await browser?.close(); }
+  } finally { await browser?.close(); }
+}
+if(import.meta.url===pathToFileURL(process.argv[1]).href) await main();

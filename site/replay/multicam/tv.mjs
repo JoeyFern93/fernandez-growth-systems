@@ -2,17 +2,29 @@ import {renderMock} from './demo-court.mjs';
 import {ClockMap,AngleBuffer} from './clock.mjs';
 import {call,token,negotiate,createPeer,directConnectionMessage} from './signaling.mjs';
 import {bindWebcams,offerClip,clearClipDownloads} from './webcams.mjs';
-import {createLivePreview} from './live-preview.mjs';
+import {createLivePreview,playIncomingVideo} from './live-preview.mjs';
 import {cameras} from './cameras.mjs';
 import {canTrimOriginal} from './originals.mjs';
+import {startRelayAngle} from './relay-angle.mjs';
+import {receiveRelayVideo,relayFrameAt} from './relay-buffer.mjs';
+import {bindRelayClips} from './relay-clips.mjs';
 const by=id=>document.getElementById(id);
 const trimHere=canTrimOriginal();
 function setText(node,text){if(node.textContent!==text)node.textContent=text;}
 const slots=cameras.map(({id:cameraId,angle:name,label})=>{
   const node=by(name);
+  const relayButton=document.createElement('button');
+  relayButton.type='button';relayButton.id='camera-'+cameraId+'-relay';relayButton.textContent='Use internet relay';
+  relayButton.setAttribute('aria-label','Use internet relay for '+label);
+  node.querySelector('.invite').after(relayButton);
+  const relayLink=document.createElement('a');
+  relayLink.href='/replay/?mode=tv';relayLink.target='_blank';relayLink.rel='noopener';
+  relayLink.textContent='Use one phone with internet relay';relayLink.hidden=true;
+  node.querySelector('.status').after(relayLink);
   return {name,cameraId,label,node,canvas:node.querySelector('canvas'),missing:node.querySelector('.missing'),status:node.querySelector('.status'),
-    capability:node.querySelector('.clip-capability'),buffer:new AngleBuffer(),room:null,rendered:null,frameJob:0,epoch:0};
+    capability:node.querySelector('.clip-capability'),relayLink,relayButton,buffer:new AngleBuffer(),room:null,rendered:null,frameJob:0,epoch:0};
 });
+const relayClipControls=slots.map(slot=>bindRelayClips(slot));
 let demo=false,origin=0,mode='delay',cursor=0,markIn=null,markOut=null,clipId=null;
 let exportJobs=[],exportOriginals=[],lastClipRefresh=-Infinity;
 const session=token().slice(0,16);
@@ -34,10 +46,13 @@ if(typeof inviteDialog.showModal!=='function'){
 function inviteState(message,retry=false) {
   by('invite-note').textContent=message;
   by('retry-invite').hidden=!retry;
+  by('use-slot-relay').hidden=!retry || !!inviteRoom?.relay;
   by('qr').replaceChildren();
   phoneLink.removeAttribute('href');phoneLink.hidden=true;
 }
 function dispose(slot,msg,notify=true) {
+  slot.relayLink.hidden=true;
+  slot.relayButton.textContent='Use internet relay';slot.relayButton.setAttribute('aria-label','Use internet relay for '+slot.label);
   slot.pendingWebcam=null;
   slot.discovery?.stream?.getTracks().forEach(t=>t.stop());slot.discovery=null;
   const room=slot.room;
@@ -45,21 +60,65 @@ function dispose(slot,msg,notify=true) {
     if(room===inviteRoom && inviteDialog.open)inviteState(msg,true);
     const originalOnly=room.local ? room.original && !room.originalError && !trimHere : room.trimSupport===false;
     slot.lastOriginalLocation=originalOnly?'Original only. '+originalLocation(room,false):'';
-    slot.room=null;room.controller.abort();clearInterval(room.clockTimer);clearTimeout(room.watchdog);
+    slot.room=null;room.controller.abort();clearInterval(room.clockTimer);clearInterval(room.videoMonitor);clearTimeout(room.watchdog);
     if(room.video){room.video.pause();room.video.srcObject=null;room.video.remove();}
     room.pc?.close();
     room.stream?.getTracks().forEach(track=>track.stop());
     room.original?.stop().catch(()=>{});
-    if(notify && room.id)call('/'+room.id+'/end',room.key,{}).catch(()=>{});
+    if(notify && room.id && !room.relay)call('/'+room.id+'/end',room.key,{}).catch(()=>{});
   }
   slot.epoch++;
   slot.status.textContent=msg;
   renderWebcams();
   slot.node.querySelector('.invite').textContent=room?'New invite':'Invite phone';
 }
+function failedConnection(slot,room,message){
+  if(slot.room!==room)return;
+  dispose(slot,message);slot.relayLink.hidden=false;
+}
+function watchPhoneVideo(slot,room){
+  if(room.videoMonitor || slot.room!==room)return;
+  room.delivery='waiting';
+  let lastProgress=performance.now(),lastCheck=lastProgress,lastCapture=-Infinity,lastDecoder=-Infinity;
+  let retriedPlayback=false;
+  room.videoMonitor=setInterval(()=>{
+    if(slot.room!==room || room.finishing)return;
+    const now=performance.now(),frames=slot.buffer.frames,latest=frames.at(-1);
+    const buffered=frames.at(-2)?.epoch===slot.epoch && latest.time>lastCapture;
+    const decoded=room.preview?.lastFrameAt?.();
+    const live=room.preview?.state()==='live';
+    const progressed=buffered || live || (Number.isFinite(decoded) && decoded>lastDecoder);
+    if(buffered)lastCapture=latest.time;
+    if(Number.isFinite(decoded))lastDecoder=decoded;
+    if(progressed){
+      lastProgress=now;retriedPlayback=false;
+      if(room.delivery!=='receiving'){
+        room.delivery='receiving';
+        slot.relayLink.hidden=true;
+        slot.node.querySelector('.invite').textContent='Replace invite';
+        if(room===inviteRoom && inviteDialog.open)inviteDialog.close();
+      }
+    }else if(document.visibilityState!=='visible' || now-lastCheck>2500 || room.playBlocked){
+      lastProgress=now;
+    }else{
+      const elapsed=now-lastProgress;
+      if(elapsed>=4000 && room.video?.paused && !retriedPlayback){
+        retriedPlayback=true;room.video.play().catch(()=>{});
+      }
+      if(elapsed>=14000 && room.delivery!=='stalled'){
+        room.delivery='stalled';slot.relayLink.hidden=false;
+        const message=room.video?'The phone is connected, but video is not advancing on this display. Retry this camera or use internet relay.':
+          'The phone is connected, but no video track reached this display. Retry this camera or use internet relay.';
+        setText(slot.status,message);slot.node.querySelector('.invite').textContent='Retry camera';
+        if(room===inviteRoom && inviteDialog.open)inviteState(message,true);
+      }
+    }
+    lastCheck=now;
+  },400);
+}
 function receive(slot,room,track) {
   const video=document.createElement('video');
-  Object.assign(video,{autoplay:true,muted:true,playsInline:true});video.hidden=true;
+  Object.assign(video,{autoplay:true,muted:true,playsInline:true});
   room.video=video;slot.node.querySelector('.picture').append(video);video.srcObject=new MediaStream([track]);
   room.preview=createLivePreview(video);
   const scratch=document.createElement('canvas'),ctx=scratch.getContext('2d',{alpha:false});
@@ -87,11 +146,11 @@ function receive(slot,room,track) {
       slot.buffer.add({time:t,size:blob.size,blob,epoch:slot.epoch});
       const fit=room.clock?.fit(performance.now());
       const detail=room.local?(room.originalError?' · '+room.originalError:''):(fit?' · clock ±'+Math.ceil(fit.uncertainty)+' ms':' · calibrating clock');
-      setText(slot.status,(room.local?'Webcam':'Direct')+' · '+w+'×'+h+detail);
+      room.replayStatus=(room.local?'Webcam':'Direct')+' · '+w+'×'+h+detail;
     },'image/jpeg',.82);
   };
   if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(next);
-  video.play().catch(()=>{slot.status.textContent='TV browser could not play this camera';});
+  playIncomingVideo(slot,room,()=>{slot.status.textContent='TV browser could not play this camera';});
 }
 function control(slot,room,channel) {
   if(channel.label!=='replay-clock-v1' || room.channel){channel.close();return;}
@@ -105,15 +164,16 @@ function control(slot,room,channel) {
   function ping() {
     if(channel.readyState!=='open' || slot.room!==room)return;
     const tv=performance.now();probes.clear();probes.set(tv,true);
-    channel.send(JSON.stringify({op:'ping',tv}));
+    channel.send(JSON.stringify({op:'ping',tv,video:room.delivery || 'waiting'}));
   }
-  channel.onopen=()=>{ping();room.clockTimer=setInterval(ping,2000);};
+  channel.onopen=()=>{watchPhoneVideo(slot,room);ping();room.clockTimer=setInterval(ping,2000);};
   channel.onmessage=e=>{
     if(slot.room!==room || typeof e.data!=='string' || e.data.length>600)return;
     let m;try{m=JSON.parse(e.data);}catch{return;}
     if(m.op==='pong' && probes.delete(m.tv)){
       room.clock.add(m.tv,m.p1,m.p2,performance.now());room.originalStart=m.originalStart;
-      room.trimSupport=typeof m.canTrim==='boolean'?m.canTrim:'unconfirmed';
+      room.trimSupport=['starting','partial','unavailable'].includes(m.originalState)?m.originalState:
+        typeof m.canTrim==='boolean'?m.canTrim:'unconfirmed';
     }
     if(m.op==='clip-result' && m.id===clipId && exportJobs.some(job=>job.room===room)) {
       room.clipResult=m.ok?'ready on phone':'failed on phone';
@@ -122,18 +182,64 @@ function control(slot,room,channel) {
   };
   if(channel.readyState==='open')channel.onopen();
 }
-async function invite(slot) {
+function showPhoneLink(slot,room,url,help){
+  room.invited=true;
+  if(room!==inviteRoom || !inviteDialog.open)return;
+  phoneLink.href=url;phoneLink.hidden=false;by('invite-note').textContent=help;
+  try{
+    const qr=globalThis.qrcode(0,'M');qr.addData(String(url));qr.make();
+    by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});
+  }catch{by('invite-note').textContent='The QR code could not load. Copy the private phone link and open it on the camera phone.';}
+}
+function relayInvite(slot,room){
+  const current=()=>slot.room===room && !room.controller.signal.aborted;
+  room.updateRelayVideoState=state=>{
+    if(!current())return;
+    room.delivery=state;
+    if(state==='receiving'){
+      room.relayReceived=true;
+      slot.status.textContent='Internet relay · '+(room.mime==='image/jpeg'?'Low-quality JPEG':'Encrypted video')+' · replay timed on this display';
+      if(room===inviteRoom && inviteDialog.open)inviteDialog.close();
+    }else if(state==='stalled')slot.status.textContent='Internet relay stalled. Buffered TV replay is still available.';
+  };
+  startRelayAngle({
+    cameraId:slot.cameraId,signal:room.controller.signal,
+    onInvite:url=>{
+      if(!current())return;
+      showPhoneLink(slot,room,url,'Scan this code and tap Start camera to send video through the encrypted internet relay.');
+      slot.status.textContent='Internet relay invite ready · waiting for phone';
+    },
+    onClaimed:()=>{if(current())room.claimed=true;},
+    onStream:async(stream,mime)=>{
+      if(!current())throw new DOMException('Pairing stopped.','AbortError');
+      room.claimed=true;room.mime=mime;
+      await receiveRelayVideo(slot,room,stream,mime);
+      room.updateRelayVideoState('receiving');
+    },
+    onStatus:message=>{
+      if(!current() || room.relayReceived)return;
+      setText(slot.status,message);
+      if(room===inviteRoom && inviteDialog.open && (!room.invited || room.claimed))setText(by('invite-note'),message);
+    },
+    onError:error=>{if(current())failedConnection(slot,room,error.message || 'Internet relay stopped. Retry the invite for this camera.');}
+  });
+}
+async function invite(slot,relay=false) {
   if(demo)setDemo(false);
   dispose(slot,'Creating private invite…');slot.epoch++;
-  const room={controller:new AbortController(),key:token(),clock:new ClockMap()};
+  const room={controller:new AbortController(),key:token(),clock:new ClockMap(),relay};
   slot.room=room;
   const signal=room.controller.signal;
   inviteSlot=slot;inviteRoom=room;
-  by('invite-title').textContent=slot.label+' invite';
+  by('invite-title').textContent=slot.label+(relay?' internet relay invite':' direct invite');
   inviteState('Creating a private invite for '+slot.label+'.');
   if(!inviteDialog.open)inviteDialog.showModal();
   try{
-    if(typeof RTCPeerConnection!=='function')throw Error('This display cannot receive a direct two-camera connection. Use single-camera pairing with internet relay.');
+    if(relay){
+      slot.relayButton.textContent='Disconnect relay';slot.relayButton.setAttribute('aria-label','Disconnect internet relay for '+slot.label);
+      relayInvite(slot,room);return;
+    }
+    if(typeof RTCPeerConnection!=='function')throw Error('This display cannot receive a direct connection. Choose internet relay for this camera.');
     const timer=setTimeout(()=>{
       if(slot.room===room)dispose(slot,'The pairing service took too long. Check that this display is online, then retry.');
     },11000);
@@ -146,14 +252,7 @@ async function invite(slot) {
     Object.assign(room,{id:result.id,expiry:result.expiresAt});
     const url=new URL('phone',location.href);
     url.hash=new URLSearchParams({room:room.id,invite:result.invite,camera:slot.cameraId,session,until:String(room.expiry)});
-    if(room===inviteRoom && inviteDialog.open){
-      phoneLink.href=url;phoneLink.hidden=false;
-      by('invite-note').textContent="Connect the phone to the display's Wi-Fi, then scan the code and tap Start camera.";
-      try{
-        const qr=globalThis.qrcode(0,'M');qr.addData(url.href);qr.make();
-        by('qr').innerHTML=qr.createSvgTag({cellSize:5,margin:20,scalable:true});
-      }catch{by('invite-note').textContent='The QR code could not load. Copy the private phone link and open it on the camera phone.';}
-    }
+    showPhoneLink(slot,room,url,"Connect the phone to the display's Wi-Fi, then scan the code and tap Start camera.");
     slot.status.textContent='Invite ready · waiting for phone';
     slot.node.querySelector('.invite').textContent='Replace invite';
     const pc=createPeer();room.pc=pc;
@@ -162,21 +261,25 @@ async function invite(slot) {
     pc.onconnectionstatechange=()=>{
       if(slot.room!==room || room.finishing)return;
       if(pc.connectionState==='connected'){
-        room.wasConnected=true;
+        room.wasConnected=true;watchPhoneVideo(slot,room);
         clearTimeout(room.watchdog);slot.status.textContent='Direct connected · waiting for capture timestamps';
         if(room===inviteRoom && inviteDialog.open)by('invite-note').textContent='Phone connected. Waiting for video from '+slot.label+'.';
-      } else if(pc.connectionState==='failed')dispose(slot,directConnectionMessage(room.wasConnected));
+      } else if(pc.connectionState==='failed')failedConnection(slot,room,directConnectionMessage(room.wasConnected));
       else if(pc.connectionState==='disconnected')slot.status.textContent='Camera interrupted';
     };
-    await negotiate(pc,{...room,signal},false);
+    await negotiate(pc,{...room,signal,onPhoneClaimed:()=>{
+      if(slot.room!==room || room.wasConnected)return;
+      setText(slot.status,'Phone joined. Waiting for its direct video connection.');
+      if(room===inviteRoom && inviteDialog.open)setText(by('invite-note'),'Phone joined. Waiting for its direct video connection.');
+    }},false);
     if(signal.aborted)return;
-    if(pc.connectionState!=='connected')room.watchdog=setTimeout(()=>dispose(slot,directConnectionMessage(room.wasConnected)),22000);
+    if(pc.connectionState!=='connected')room.watchdog=setTimeout(()=>failedConnection(slot,room,directConnectionMessage(room.wasConnected)),22000);
   }catch(error){
     if(signal.aborted)return;
     const message=!room.id && error.status===429?'The pairing service is busy. Wait a minute, then retry.':
       !room.id && error.status===403?'The pairing service did not accept this display address.':
       !room.id && (error instanceof TypeError || error instanceof SyntaxError)?'Could not create a private invite. Check that this display is online, then retry.':error.message;
-    dispose(slot,message);
+    failedConnection(slot,room,message);
   }
 }
 function finishPhone(room) {
@@ -206,12 +309,13 @@ async function finishSource(slot){
         await original.stop();
         if(room.originalError)throw Error(room.originalError);
       }catch{issue=slot.label+' original could not be confirmed. Check Webcam originals.';}
-    }else if(room.channel?.readyState==='open' || room.wasConnected || room.video){
+    }else if(room.relay){checkPhone=!!(room.claimed || room.video);}
+    else if(room.channel?.readyState==='open' || room.wasConnected || room.video){
       const saved=await finishPhone(room);
       if(saved===null)checkPhone=true;
       else if(!saved)issue=slot.label+' stopped. Check the original on the phone.';
     }
-    if(!room.local && room.id){
+    if(!room.local && !room.relay && room.id){
       const revoke=new AbortController(),timer=setTimeout(()=>revoke.abort(),3500);
       try{await call('/'+room.id+'/end',room.key,{},revoke.signal);}
       catch(error){if(error.status!==410 && error.status!==404 && !issue)issue='Could not confirm invite closure for '+slot.label+'. Check that phone.';}
@@ -264,7 +368,7 @@ function setDemo(value) {
   demo=value;mode='delay';origin=performance.now()-3200-Number(by('delay').value)*1000;cursor=3200;markIn=markOut=null;clipId=null;
   by('save').disabled=true;by('clip-status').textContent='';
   by('demo').textContent=value?'Exit demo':'Try synced demo';
-  by('mode').textContent=value?'Demo · shared clock':'Webcams on this device · phones on the same Wi-Fi';
+  by('mode').textContent=value?'Demo · shared clock':'Webcams, direct phones on the same Wi-Fi, or internet relay';
   for(const s of slots){
     s.rendered=null;s.displayed=null;s.frameJob++;s.canvas.getContext('2d').clearRect(0,0,s.canvas.width,s.canvas.height);
     s.status.textContent=value?'Simulated camera':(s.room?'Live camera':'No source selected');
@@ -280,31 +384,33 @@ function draw(slot,time){
     const previous=slot.buffer.frames.at(-2);
     if(previous?.epoch===slot.epoch || room.preview.state()==='live')inviteDialog.close();
   }
-  if(slot.node.hidden){if(room?.video)room.video.hidden=true;return;}
+  if(slot.node.hidden)return;
   if(demo){
-    if(room?.video)room.video.hidden=true;
     slot.canvas.hidden=false;slot.missing.hidden=true;slot.rendered='demo';
     renderMock(slot.canvas,time/1000,{angle:slot.name});return;
   }
-  const frame=slot.buffer.nearest(time);
+  const receiptTimed=room?.relay || slot.buffer.frames.at(-1)?.receipt;
+  const frame=receiptTimed?relayFrameAt(slot.buffer.frames,time):slot.buffer.nearest(time);
   if(!frame){
     const live=room?.preview?.state();
-    if(live==='live' && mode==='delay'){
+    const frames=slot.buffer.frames;
+    const insideHistory=frames.length && time>=frames[0].time && time<=frames.at(-1).time;
+    const reason=live==='live' && mode==='delay' && !insideHistory && room.preview.liveReason(time);
+    if(reason){
       if(slot.rendered!==null){slot.frameJob++;slot.rendered=null;}
       slot.displayed=null;slot.canvas.hidden=true;slot.missing.hidden=true;
-      room.video.hidden=false;
-      setText(slot.status,'Live only · replay timestamps unavailable');
+      setText(slot.status,reason);
     }else{
-      if(room?.video)room.video.hidden=true;
-      if(live==='stalled')setText(slot.status,'No new video frames');
+      if(live==='stalled' && room?.delivery!=='stalled')setText(slot.status,'No new video frames');
       const message=live==='stalled'?'Camera stopped sending frames':live==='live'?'Synchronized replay unavailable':
         room || slot.buffer.frames.length?'Angle unavailable at this time':'Choose a webcam or invite a phone';
       blank(slot,message);
     }
     return;
   }
-  if(room?.video)room.video.hidden=true;
-  if(Number.isFinite(slot.displayed) && Math.abs(slot.displayed-time)>50){
+  if(room?.replayStatus)setText(slot.status,room.replayStatus);
+  if(slot.rendered!==frame && ((slot.canvas.hidden && slot.missing.hidden) ||
+      (Number.isFinite(slot.displayed) && Math.abs(slot.displayed-frame.time)>250))){
     slot.displayed=null;slot.canvas.hidden=true;slot.missing.hidden=false;slot.missing.textContent='Loading frame';
   }
   if(slot.rendered===frame)return;
@@ -312,7 +418,7 @@ function draw(slot,time){
   createImageBitmap(frame.blob).then(bitmap=>{
     if(slot.frameJob===seq) {
       if(slot.canvas.width!==bitmap.width || slot.canvas.height!==bitmap.height){slot.canvas.width=bitmap.width;slot.canvas.height=bitmap.height;}
-      slot.canvas.getContext('2d').drawImage(bitmap,0,0);slot.displayed=frame.time;slot.canvas.hidden=false;slot.missing.hidden=true;
+      slot.canvas.getContext('2d').drawImage(bitmap,0,0);slot.displayed=frame.time;slot.displayedBasis=frame.receipt?'arrival':'capture';slot.canvas.hidden=false;slot.missing.hidden=true;
     }
     bitmap.close();
   }).catch(()=>{if(seq===slot.frameJob)blank(slot,'Frame could not be decoded');});
@@ -335,8 +441,11 @@ function refresh(now){
   by('position').textContent=have?(demo?(cursor/1000).toFixed(2)+' s':((now-cursor)/1000).toFixed(1)+' s behind live'):'Waiting for capture timestamps';
   by('pause').textContent=mode==='pause'?'Play':'Pause';
   for(const s of slots)draw(s,cursor);
-  if(now-lastClipRefresh>=250){lastClipRefresh=now;refreshClips();}
-  const both=!demo && slots.every(s=>!s.node.hidden && Number.isFinite(s.displayed));
+  if(now-lastClipRefresh>=250){
+    lastClipRefresh=now;refreshClips();
+    slots.forEach((slot,i)=>relayClipControls[i].update(!demo && (slot.room?.relay || (!slot.room && slot.buffer.frames.at(-1)?.receipt))));
+  }
+  const both=!demo && slots.every(s=>!s.node.hidden && Number.isFinite(s.displayed) && s.displayedBasis==='capture' && !s.room?.relay);
   by('alignment').textContent=both?'Displayed capture stamps differ by '+Math.round(Math.abs(slots[0].displayed-slots[1].displayed))+' ms':'';
   requestAnimationFrame(refresh);
 }
@@ -348,11 +457,18 @@ const renderWebcams=bindWebcams(slots,{
   },
   dispose,receive
 });
-for(const s of slots)s.node.querySelector('.invite').onclick=()=>invite(s);
-by('retry-invite').onclick=()=>{if(inviteSlot)invite(inviteSlot);};
+for(const s of slots){
+  s.node.querySelector('.invite').onclick=()=>invite(s);
+  s.relayButton.onclick=()=>{
+    if(s.room?.relay)dispose(s,'Internet relay disconnected.');
+    else invite(s,true);
+  };
+}
+by('retry-invite').onclick=()=>{if(inviteSlot)invite(inviteSlot,!!inviteRoom?.relay);};
+by('use-slot-relay').onclick=()=>{if(inviteSlot)invite(inviteSlot,true);};
 inviteDialog.addEventListener('close',()=>{
   if(inviteDialog.open)return;
-  const pending=inviteSlot && inviteRoom && inviteSlot.room===inviteRoom && !inviteRoom.id;
+  const pending=inviteSlot && inviteRoom && inviteSlot.room===inviteRoom && !inviteRoom.invited;
   if(pending)dispose(inviteSlot,'Invite canceled.');
   inviteSlot=null;inviteRoom=null;
   inviteState('');
@@ -376,7 +492,7 @@ by('step').onclick=()=>{
 };
 function covers(slot,start,end) {
   const room=slot.room;
-  if(!room)return false;
+  if(!room || room.relay)return false;
   if(room.local){
     if(!Number.isFinite(room.original?.start) || start<room.original.start)return false;
   }else{
@@ -386,11 +502,12 @@ function covers(slot,start,end) {
   // The full native recording remains continuous when the TV snapshot buffer
   // skips a preview frame. Require a single connected camera epoch that spans
   // the requested time in both local originals.
-  const frames=slot.buffer.frames.filter(f=>f.epoch===slot.epoch);
+  const frames=slot.buffer.frames.filter(f=>f.epoch===slot.epoch && !f.receipt);
   return frames.length>=2 && start>=frames[0].time && end<=frames.at(-1).time;
 }
 function trimSupport(room){
   if(!room)return null;
+  if(room.relay)return 'relay';
   if(room.local)return room.original && !room.originalError ? trimHere : null;
   return room.channel?.readyState==='open' && room.pc.connectionState==='connected' ? room.trimSupport : null;
 }
@@ -405,6 +522,10 @@ function refreshClips(){
     let label=(!demo && !room && slot.lastOriginalLocation) || '';
     if(!demo && room){
       if(support===true)eligible.push(slot);
+      else if(support==='relay')label='Timed by arrival on this display. Relay clips are independent of the other camera.';
+      else if(support==='starting')label='Starting the original recording on the phone.';
+      else if(support==='unavailable')label='Live video only. The phone could not record an original.';
+      else if(support==='partial')label='Recording stopped. Check Phone originals for the saved portion.';
       else if(support===false)label='Original only. '+originalLocation(room);
       else if(support==='unconfirmed')label='Clip support unconfirmed. '+originalLocation(room);
       else if(room.trimSupport===false)label='Original only. '+originalLocation(room,false);

@@ -152,6 +152,10 @@
     s.relayController?.abort();
     transport(s,'Disconnected');
     if (s.role === 'phone') {
+      if(s.angleOriginal) {
+        s.angleOriginal=null;
+        window.dispatchEvent(new CustomEvent('fgs:relay-angle-stop',{detail:{cameraId:s.cameraId}}));
+      }
       s.capture?.stop();
       stopTracks(s.media);
       if (el('phone-preview')) {
@@ -576,6 +580,8 @@
     const note=el('phone-connection-note'), browserHelp=el('phone-browser-help');
     const validKey=/^[A-Za-z0-9_-]{43}$/.test(params.get('key') || '');
     const canRelay=!!(validKey && window.FGSReplayRelay?.sendFormats()?.length);
+    const cameraId=params.get('camera');
+    const relayAngle=params.get('transport')==='relay' && ['1','2'].includes(cameraId);
     if(!match) {
       phoneStart.hidden=true;choice.hidden=true;
       status.textContent='On the display, choose Pair phone to TV and scan its new QR code.';
@@ -594,7 +600,16 @@
       status.textContent='This browser cannot start the camera. Open this private link in Safari or Chrome.';
       return;
     }
-    if(!canRelay) {
+    if(relayAngle) {
+      directOnly.checked=false;directOnly.disabled=true;
+      directOnly.closest('label').hidden=true;
+      if(!canRelay) {
+        phoneStart.hidden=true;browserHelp.hidden=false;
+        note.textContent='This browser cannot send video through the encrypted internet relay. Open the invite in Safari or Chrome.';
+        return;
+      }
+      note.textContent='Start camera shares Camera '+cameraId+' over the encrypted internet relay and records an original on this phone when supported. Cellular uses mobile data. Relay sessions last up to 30 minutes.';
+    } else if(!canRelay) {
       note.textContent=validKey ? 'This browser supports direct pairing only.' : 'This link supports direct pairing only. For internet relay, scan a new QR code on the TV.';
       directOnly.checked=true;directOnly.disabled=true;
     } else if(!hasDirect()) {
@@ -603,14 +618,22 @@
     }
     function updateRelayButton() {
       const s=active;
-      relay.hidden=!canRelay;
+      relay.hidden=!canRelay || relayAngle;
       relay.disabled=!canRelay || (s?.directOnly ?? directOnly.checked) || !!(s?.manualRelay || s?.interrupted || s?.relayPending || s?.relaying);
       relay.textContent=s?.relaying?'Internet relay active':s?.relayPending?'Switching to relay…':s?.manualRelay?'Relay selected':'Use internet relay';
     }
-    let capture=window.FGSPhoneCamera?.setup();
+    function original(stream) {
+      const s=active;
+      if(!relayAngle || !s || s.ended || !stream)return;
+      s.media=stream;
+      if(!s.claimed || s.angleOriginal===stream)return;
+      s.angleOriginal=stream;
+      window.dispatchEvent(new CustomEvent('fgs:relay-angle-capture',{detail:{stream,cameraId}}));
+    }
+    let capture=window.FGSPhoneCamera?.setup(original);
     async function start(manual) {
       const s=active || {role:'phone',id:match[1],key:token(),videoKey:validKey?params.get('key'):null,
-        directOnly:directOnly.checked,capture,updateRelayButton};
+        directOnly:directOnly.checked,capture,updateRelayButton,cameraId};
       if(manual) {
         if(!canRelay || s.directOnly || s.interrupted || s.relaying)return;
         s.manualRelay=true;
@@ -641,6 +664,7 @@
         const session=await api('/'+s.id+'/claim','POST',null,{invite:match[2],phoneToken:s.key});
         s.claimPending=false;s.claimed=true;
         if(!current(s)){api('/'+s.id+'/end','POST',s.key,null,true).catch(()=>{});return;}
+        original(s.media);
         expiry(s,session.expiresAt);
         monitorRelay(s);
         if(s.manualRelay || !hasDirect()){offerRelay(s,'Internet relay selected.');return;}
@@ -675,7 +699,7 @@
         if(s.media){
           s.capture?.stop();stopTracks(s.media);s.media=null;
           const preview=el('phone-preview');preview.srcObject=null;preview.hidden=true;
-          capture=window.FGSPhoneCamera?.setup();s.capture=capture;
+          capture=window.FGSPhoneCamera?.setup(original);s.capture=capture;
         }
         const denied=error.name==='NotAllowedError' || error.name==='SecurityError';
         if(claimFailed)status.textContent='The phone could not reach the pairing service. Check your connection and try again.';
@@ -692,7 +716,7 @@
     }
     directOnly.onchange=()=>{if(active && !active.starting && !active.media)active.directOnly=directOnly.checked;updateRelayButton();};
     phoneStart.disabled=false;updateRelayButton();
-    phoneStart.onclick=()=>start(false);
+    phoneStart.onclick=()=>start(relayAngle);
     relay.onclick=()=>start(true);
     stop.onclick=()=>{end(active);phoneStart.hidden=true;choice.hidden=true;browserHelp.hidden=true;status.textContent='Camera disconnected. Create a new room on the display for another phone link or QR code.';};
   }

@@ -1,7 +1,39 @@
 // This monitor only decides whether an unbuffered preview is live. None of
 // its local observation times may be used as capture times in the replay.
+export function playIncomingVideo(slot,room,onError) {
+  const video=room.video,signal=room.controller.signal;
+  let button,played=false,closed=false;
+  function clear() {
+    button?.remove();button=null;
+    if(room.video===video)room.playBlocked=false;
+  }
+  function ready() {if(!closed){played=true;clear();}}
+  function prompt() {
+    if(closed || signal.aborted || room.video!==video || room.finishing || video.ended || button)return;
+    room.playBlocked=true;
+    button=document.createElement('button');button.type='button';button.className='receiver-play';
+    button.textContent='Play camera';button.setAttribute('aria-label','Play '+slot.label+' on this display');
+    button.onclick=attempt;slot.node.querySelector('.picture').append(button);
+  }
+  function paused() {if(played && video.paused)prompt();}
+  function stop() {
+    closed=true;clear();video.removeEventListener('playing',ready);video.removeEventListener('pause',paused);
+    signal.removeEventListener('abort',stop);
+  }
+  function attempt() {
+    if(closed || signal.aborted || room.video!==video)return;
+    video.play().catch(error=>{
+      if(closed || signal.aborted || room.video!==video || !video.isConnected)return;
+      if(error.name==='NotAllowedError')prompt();
+      else if(error.name!=='AbortError'){stop();onError(error);}
+    });
+  }
+  video.addEventListener('playing',ready);video.addEventListener('pause',paused);
+  signal.addEventListener('abort',stop,{once:true});attempt();
+  return stop;
+}
 export function createLivePreview(video) {
-  let previousCallback, previousCounter, previousCapture = -Infinity;
+  let previousCallback, previousCounter, firstCapture, previousCapture = -Infinity;
   let lastProgress = -Infinity, lastTimedFrame = -Infinity, nextPoll = 0;
   let sample, previousPixels;
 
@@ -13,6 +45,7 @@ export function createLivePreview(video) {
       previousCallback = marker;
     }
     if (Number.isFinite(captureTime) && captureTime > previousCapture) {
+      firstCapture ??= captureTime;
       previousCapture = captureTime;
       lastTimedFrame = now;
     }
@@ -53,7 +86,6 @@ export function createLivePreview(video) {
         video.readyState < 2 || !video.videoWidth) {
       return Number.isFinite(lastProgress) ? 'stalled' : null;
     }
-    if (now - lastTimedFrame < 900) return null;
     if (now >= nextPoll) {
       nextPoll = now + 150;
       poll(now);
@@ -62,5 +94,15 @@ export function createLivePreview(video) {
     return now - lastProgress <= 1400 ? 'live' : 'stalled';
   }
 
-  return {frame, state};
+  // Only capture stamps describe the replay timeline. Local progress is used
+  // to distinguish a live camera from one that stopped delivering frames.
+  function liveReason(time) {
+    if (firstCapture === undefined) return 'Live only · replay timestamps unavailable';
+    if (time < firstCapture) return 'Live · building delayed replay';
+    if (time > previousCapture && performance.now() - lastTimedFrame >= 900) {
+      return 'Live only · replay timestamps unavailable';
+    }
+    return null;
+  }
+  return {frame, state, liveReason, lastFrameAt: () => lastProgress};
 }

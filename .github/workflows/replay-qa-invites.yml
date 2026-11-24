@@ -7,6 +7,9 @@ on:
       - 'site/_headers'
       - 'apps/site-review/**'
       - 'tests/replay-qa-invites.mjs'
+      - 'tests/replay-qa-pictures.mjs'
+      - 'tests/replay-relay-*.mjs'
+      - 'tests/replay-tv-relay-angle.test.mjs'
       - '.github/workflows/replay-qa-invites.yml'
   workflow_dispatch:
 permissions:
@@ -28,6 +31,13 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/replay-qa" --no-audit --no-fund --ignore-scripts --no-save playwright-core@1.52.0 pngjs@7.0.0 jsqr@1.4.0
       - name: Check rendered invites and camera video on the test URLs
         run: node tests/replay-qa-invites.mjs
+        env:
+          REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
+          FGS_CHROME_BIN: /usr/bin/google-chrome
+      - name: Check relay lifecycle and received-frame history
+        run: node --test tests/replay-tv-relay-angle.test.mjs tests/replay-relay-history.test.mjs
+      - name: Decode and verify trimmed relay clips
+        run: node tests/replay-relay-clips.mjs
         env:
           REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
           FGS_CHROME_BIN: /usr/bin/google-chrome
