@@ -121,7 +121,16 @@ export async function checkRelaySync(browser,{site,service,newDevice,jpeg=false,
     // builds. Measure once there is a full delay interval to play and seek.
     await wait((delaySeconds+1)*1000);
     const pairs=[],offsets=[];
-    for(let i=0;i<(long?52:22);i++){const pair=await both();pairs.push(pair);offsets.push(markerDelta(...pair));await wait(long?420:125);}
+    // Sample the low-rate JPEG fallback for about 10 seconds to observe motion
+    // even when the hosted relay delivers fewer than two pictures per second.
+    const sampleCount=long?52:22;
+    const sampleSpacingMs=jpeg?475:long?420:125;
+    for(let i=0;i<sampleCount;i++){
+      if(i)await wait(sampleSpacingMs);
+      const pair=await both();
+      pairs.push(pair);
+      offsets.push(markerDelta(...pair));
+    }
     const distinct=[0,1].map(i=>new Set(pairs.map(x=>x[i])).size);
     const sorted=offsets.map(Math.abs).sort((a,b)=>a-b);
     const sample={format,driverStamps,clockSkewMs:4500,delaySeconds,count:sorted.length,markerMs:MARKER_MS,distinct,first:pairs[0],last:pairs.at(-1),
