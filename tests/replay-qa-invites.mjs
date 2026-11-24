@@ -62,16 +62,20 @@ export async function checkInvite(browser, camera, relay = false) {
   const label = relay ? 'USB webcam and relayed phone' : multi ? 'Camera ' + camera : 'Single camera';
   const tv = await newDevice(browser, {width:1280,height:800});
   const phone = await newDevice(browser, {width:390,height:844});
-  let acceptedChunks = 0, largestChunk = 0, offers = 0, starts = 0;
+  let acceptedChunks = 0, largestChunk = 0, offers = 0, starts = 0, rooms = 0, claims = 0;
+  let webcamTrack;
   if(relay) {
     await phone.page.addInitScript(installPhoneCounter);
+    // ICE is available in the browser but cannot produce a usable address.
+    await phone.page.addInitScript(blockDirectNetwork);
     phone.page.on('response', response => {
       const req=response.request(), url=new URL(response.url());
       if(url.origin!==service || req.method()!=='POST' || !response.ok())return;
       if(url.pathname.endsWith('/relay-chunk')){
         acceptedChunks++;
         largestChunk=Math.max(largestChunk,req.postDataBuffer()?.length || 0);
-      } else if(url.pathname.endsWith('/offer'))offers++;
+      } else if(url.pathname.endsWith('/claim'))claims++;
+      else if(url.pathname.endsWith('/offer'))offers++;
       else if(url.pathname.endsWith('/relay') && req.postDataJSON()?.action==='start')starts++;
     });
   }
@@ -90,6 +94,7 @@ export async function checkInvite(browser, camera, relay = false) {
   tv.page.on('response', response => {
     const request = response.request();
     if (request.url() !== api || request.method() !== 'POST' || response.status() !== 201) return;
+    rooms++;
     createRead = (async () => {
       token = request.postDataJSON().tvToken;
       room = (await response.json()).id;
@@ -103,8 +108,9 @@ export async function checkInvite(browser, camera, relay = false) {
       await tv.page.waitForFunction(()=>typeof document.querySelector('#baseline .webcam')?.onchange==='function',null,{timeout:12000});
       await tv.page.locator('#baseline .webcam').selectOption('default');
       await verifyMoving(tv.page,'#baseline .picture');
+      webcamTrack=await tv.page.locator('#baseline .picture video').evaluate(video=>video.srcObject.getVideoTracks()[0].id);
     }
-    const button = tv.page.locator(multi ? '#camera-' + camera + (relay ? '-relay' : '-invite') : '#pairTvBtn');
+    const button = tv.page.locator(multi ? '#camera-' + camera + '-invite' : '#pairTvBtn');
     if (!multi && !await button.isVisible()) {
       const open = tv.page.locator('#toggleReplayControls[aria-expanded="false"]');
       if (await open.isVisible()) await open.click();
@@ -122,7 +128,8 @@ export async function checkInvite(browser, camera, relay = false) {
     const link = await dialog.locator(multi ? '#phone-link' : '#tv-phone-link').getAttribute('href');
     assert.ok(decoded.data === link, 'Scanned QR differs from phone link.');
     const url = new URL(link);
-    assert.ok(url.origin === site && url.pathname === (multiSender ? '/replay/multicam/phone' : '/replay/tv/phone'));
+    assert.ok(url.origin === site && url.pathname === (multiSender ? '/replay/multicam/phone' : '/replay/tv/phone'),
+      'The primary phone invite must select a working transport for the current setup.');
     await createRead;
     assert.ok(typeof room === 'string' && room.length === 22 && token?.length === 43, 'Room creation was not observed on the isolated API.');
     const hash = new URLSearchParams(url.hash.slice(1));
@@ -146,6 +153,8 @@ export async function checkInvite(browser, camera, relay = false) {
       assert.equal(await phone.page.evaluate(()=>testCamera.opens),1,'Camera opened more than once');
       assert.ok(acceptedChunks>=2 && largestChunk>0 && largestChunk<=256*1024,'Expected capped encrypted packets');
       assert.equal(offers,0,'Relay selection sent a direct offer');
+      assert.equal(rooms,1,'The mixed setup required a second invite');
+      assert.equal(claims,1,'The phone had to join more than once');
       assert.equal(starts,1,'Relay started more than once');
       console.log(label+': selected transport active; delayed optical picture '+replay.lagMs+' ms behind phone; pause held and scrub restored the chosen marker.');
     }
@@ -158,6 +167,8 @@ export async function checkInvite(browser, camera, relay = false) {
       await original.locator('button').first().click();
       await original.locator('a[href^="blob:"]').first().waitFor({timeout:10000});
       assert.equal(await tv.page.locator('#baseline .webcam').inputValue(),'default');
+      assert.equal(await tv.page.locator('#baseline .picture video').evaluate(video=>video.srcObject.getVideoTracks()[0].id),webcamTrack,
+        'Phone pairing or disconnection replaced the active webcam');
       await verifyMoving(tv.page,'#baseline .picture',10000);
       const finished=acceptedChunks;
       await delay(1500);
@@ -187,6 +198,86 @@ export async function checkInvite(browser, camera, relay = false) {
   }
 }
 
+function blockDirectNetwork() {
+  const PeerConnection = window.RTCPeerConnection;
+  window.RTCPeerConnection = class extends PeerConnection {
+    constructor(configuration) {
+      super({...configuration, iceServers:[], iceTransportPolicy:'relay'});
+    }
+  };
+}
+
+export async function runOpticalSync(browser,options={}) {
+  const {checkRelaySync}=await import('./replay-qa-sync.mjs');
+  return checkRelaySync(browser,{site,service,newDevice,...options});
+}
+
+export async function checkBlockedDirectRecovery(browser) {
+  const tv = await newDevice(browser,{width:1280,height:800});
+  const phone = await newDevice(browser,{width:390,height:844});
+  const panel = tv.page.locator('#sideline');
+  const sessions = [];
+  const creations = [];
+  tv.page.on('response',response=>{
+    if(response.url()!==api || response.request().method()!=='POST' || response.status()!==201)return;
+    creations.push(response.json().then(({id})=>sessions.push({id,key:response.request().postDataJSON().tvToken})));
+  });
+  try {
+    await phone.page.addInitScript(blockDirectNetwork);
+    await phone.page.addInitScript(installPhoneCounter);
+    phase='checking the phone-first USB webcam setup link';
+    await tv.page.goto(site+'/replay/multicam/?setup=webcam-phone');
+    await panel.locator('.invite').click();
+    await tv.page.locator('#qr svg').waitFor();
+    const first=await tv.page.locator('#phone-link').getAttribute('href');
+    assert.equal(new URLSearchParams(new URL(first).hash.slice(1)).get('transport'),'relay');
+    await tv.page.locator('#close').click();
+    await tv.page.locator('#baseline .webcam').selectOption('default');
+    await verifyMoving(tv.page,'#baseline .picture');
+    const webcam=tv.page.locator('#baseline .picture video');
+    const webcamTrack=await webcam.evaluate(v=>v.srcObject.getVideoTracks()[0].id);
+    // Exercise the same failure dialog users reach on a network blocking WebRTC.
+    await panel.locator('.invite').click();
+    await tv.page.locator('#use-slot-direct').click();
+    await tv.page.locator('#phone-link[href*="#room="]').waitFor();
+    const direct=await tv.page.locator('#phone-link').getAttribute('href');
+    phase='waiting for a blocked direct connection to offer relay for this camera';
+    await phone.page.goto(direct);
+    await phone.page.locator('#start').click();
+    await tv.page.locator('#retry-invite').waitFor({timeout:55000});
+    await tv.page.locator('#use-slot-relay').click();
+    const code=tv.page.locator('#qr svg');
+    await code.waitFor();
+    const png=PNG.sync.read(await code.screenshot());
+    const decoded=decodeQR(new Uint8ClampedArray(png.data),png.width,png.height);
+    assert.ok(decoded,'Could not scan the replacement relay invite');
+    assert.ok(decoded.data===await tv.page.locator('#phone-link').getAttribute('href'));
+    const recovered=new URL(decoded.data);
+    assert.equal(recovered.pathname,'/replay/tv/phone');
+    assert.equal(new URLSearchParams(recovered.hash.slice(1)).get('transport'),'relay');
+    phase='starting the replacement relay with the same phone and webcam';
+    await phone.page.goto(decoded.data);
+    await phone.page.locator('#phone-start').click();
+    await verifyMoving(tv.page,'#sideline .picture');
+    await verifyMoving(tv.page,'#baseline .picture');
+    assert.equal(await webcam.evaluate(v=>v.srcObject.getVideoTracks()[0].id),webcamTrack);
+    await phone.page.locator('#phone-stop').click();
+    console.log('Phone-first setup offers relay. A blocked direct camera can rescan its replacement QR while the original webcam continues.');
+  } finally {
+    try {
+      await Promise.all(creations);
+      await tv.page.evaluate(async ({api,sessions})=>{
+        for(const {id,key} of sessions) {
+          await fetch(api+'/'+id+'/end',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+            body:'{}',signal:AbortSignal.timeout(8000)});
+        }
+      },{api,sessions});
+    } finally {
+      await Promise.all([tv.context.close(),phone.context.close()]);
+    }
+  }
+}
+
 async function main(){
   let browser;
   try {
@@ -199,6 +290,11 @@ async function main(){
   ]});
   for (const camera of [1,2,null]) await checkInvite(browser,camera);
   await checkInvite(browser,2,true);
+  await checkBlockedDirectRecovery(browser);
+  phase='measuring USB and relayed phone sync on the hosted preview';
+  await runOpticalSync(browser,{delaySeconds:3,long:true});
+  phase='measuring USB and JPEG fallback sync on the hosted preview';
+  await runOpticalSync(browser,{jpeg:true,driverStamps:false});
 } catch (error) {
   // Playwright errors can contain the phone's private fragment. Log only
   // the stage and the safe assertion text defined here, never browser URLs.

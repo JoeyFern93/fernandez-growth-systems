@@ -23,6 +23,7 @@
     let lensChoice = lens.value, resolution = size.value, rate = fps.value;
     let relayEdge = 1280, relayFps = 30, nextRelayTime = null, lastInputTime = null;
     let frameCallback, timer, lastPaint = -Infinity, lastMediaTime = -1, lastDecoded;
+    let stampWriter, lastSample, sampleAnchor, previousSampleMedia = -Infinity;
     function track() { return source?.getVideoTracks()[0]; }
     function settings() { return track()?.getSettings?.() || {}; }
     function capabilities() {
@@ -95,7 +96,26 @@
       } catch { /* The facing-camera preferences remain available. */ }
     }
 
-    function paint(force = false, mediaTime = input.currentTime) {
+    function cameraSample(mediaTime, metadata, forced) {
+      // A redraw for rotation, encoder resizing, or setup is not a new sample.
+      if (forced) return Math.abs(mediaTime-previousSampleMedia)<.002 ? lastSample : null;
+      const now=performance.now();
+      if (mediaTime < previousSampleMedia || mediaTime-previousSampleMedia>2) sampleAnchor=null;
+      previousSampleMedia=mediaTime;
+      const capture=metadata?.captureTime;
+      if (Number.isFinite(capture) && capture>0 && capture<=now+5 && now-capture<4000) {
+        sampleAnchor=capture-mediaTime*1000;
+        return lastSample={time:capture,estimated:false};
+      }
+      // Keep the lowest observed presentation lag. A delayed callback cannot
+      // move the media timeline forward. The receiver labels this estimate.
+      const present=metadata?.presentationTime;
+      const observed=Number.isFinite(present) && present>0 && present<=now+5 ? present : now;
+      const offset=observed-mediaTime*1000;
+      sampleAnchor=Math.min(sampleAnchor??offset,offset);
+      return lastSample={time:sampleAnchor+mediaTime*1000,estimated:true};
+    }
+    function paint(force = false, mediaTime = input.currentTime, metadata) {
       if (!context || !source || !input.videoWidth || input.readyState < 2) return;
       if (!Number.isFinite(mediaTime) || (!force && mediaTime === lastMediaTime)) return;
       if (lastInputTime !== null && (mediaTime < lastInputTime || mediaTime - lastInputTime > 1)) nextRelayTime = null;
@@ -130,13 +150,14 @@
       context.scale(flipped ? -scale : scale, scale);
       context.rotate(angle * Math.PI / 180);
       context.drawImage(input, -w / 2, -h / 2, w, h);
+      if (stampWriter) stampWriter.paint(canvas,cameraSample(mediaTime,metadata,force));
       lastPaint = performance.now();
       lastMediaTime = mediaTime;
       if (resized) rendered?.getVideoTracks()[0]?.dispatchEvent(new CustomEvent('fgs-resize', {detail:{width:cw, height:ch}}));
     }
     function frame(_time, metadata) {
       if (stopped || !rendered) return;
-      paint(false, metadata.mediaTime);
+      paint(false, metadata.mediaTime, metadata);
       frameCallback = input.requestVideoFrameCallback(frame);
     }
     function composedStream() {
@@ -212,6 +233,7 @@
       const previous = source;
       source = candidate;
       nextRelayTime = lastInputTime = null; lastMediaTime = -1;
+      sampleAnchor=lastSample=null; previousSampleMedia=-Infinity;
       input.srcObject = candidate;
       input.play().catch(() => {});
       candidate.getVideoTracks()[0].addEventListener('ended', () => {
@@ -316,10 +338,18 @@
       },
       directStream,
       setSender(value) { sender = value; },
-      forRelay(mime) {
+      forRelay(mime, writer) {
         relayMime = mime; relayEdge = 1280; relayFps = 30;
         refresh();
-        return canCompose ? composedStream() : source;
+        if (!canCompose) return source;
+        stampWriter=writer;
+        const clean=composedStream();
+        if (!writer) return clean;
+        const timed=writer.getStream();
+        timed.getVideoTracks()[0].addEventListener('fgs-relay-profile',event=>{
+          clean.getVideoTracks()[0]?.dispatchEvent(new CustomEvent('fgs-relay-profile',{detail:event.detail}));
+        });
+        return timed;
       },
       stop() {
         stopped = true; sender = null;
@@ -328,6 +358,7 @@
         clearInterval(timer);
         if (frameCallback !== undefined) input.cancelVideoFrameCallback?.(frameCallback);
         stopTracks(source); stopTracks(rendered);
+        stampWriter?.stop();
         source = rendered = null;
         input.pause(); input.srcObject = null; input.remove();
         preview.pause(); preview.srcObject = null;

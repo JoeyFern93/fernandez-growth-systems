@@ -198,7 +198,9 @@
       await video.play();
       while (!session.signal.aborted) {
         if (video.videoWidth) {
-          dimensions(canvas,video.videoWidth,video.videoHeight,960);
+          // The composed timing stream already bounds the picture to 960px.
+          // Preserve its extra rows so the strip geometry survives JPEG.
+          dimensions(canvas,video.videoWidth,video.videoHeight,session.timed ? Infinity : 960);
           ctx.drawImage(video,0,0,canvas.width,canvas.height);
           const blob = await new Promise(resolve => canvas.toBlob(resolve,jpeg,.62));
           if (blob && blob.size <= maxPlainBytes) await upload(blob);
@@ -226,9 +228,15 @@
     const video = decoder();
     let mediaUrl, sourceBuffer, output, poll, callback, decodes = 0;
     let previousFrame = -1, lastPresentation = -1, manualOutput = false, initialized = false;
+    let inspect;
+    if (session.timed) {
+      try { inspect=(await import('/replay/tv/frame-stamp.mjs')).createStampReader(); }
+      catch { /* Video is still decodable if timing support did not load. */ }
+    }
     function draw(frame, w, h) {
       if (!w || !h || session.signal.aborted) return;
-      dimensions(canvas,w,h);
+      const picture=inspect ? inspect(frame,w,h) : {height:h,stamp:null};
+      dimensions(canvas,w,picture.height);
       let first = !output;
       if (first) {
         output = canvas.captureStream(0);
@@ -238,9 +246,10 @@
           output = canvas.captureStream();
         }
       }
-      ctx.drawImage(frame,0,0,w,h);
+      ctx.drawImage(frame,0,0,w,picture.height,0,0,canvas.width,canvas.height);
       if (manualOutput) output.getVideoTracks()[0].requestFrame();
       if (first) Promise.resolve(session.onStream(output)).catch(session.onError);
+      session.onPicture?.(canvas,picture.stamp);
     }
     function presented(now, metadata) {
       if (session.signal.aborted) return;

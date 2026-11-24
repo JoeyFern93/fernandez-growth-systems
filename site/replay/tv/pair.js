@@ -191,7 +191,9 @@
     }
   }
   function relayOptions(s,mimeType) {
-    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream:s.capture?.forRelay(mimeType) || s.media,
+    const stream=s.capture?.forRelay(mimeType,s.stampWriter) || s.media;
+    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream,
+      timed:Boolean(s.stampWriter?.ownsStream(stream)),
       mimeType,signal:s.relayController.signal,
       onStatus:message=>{if(!s.ended && s.role==='phone')el('phone-status').textContent=message;},
       onError:error=>{if(!s.ended && !s.relayController.signal.aborted)fail(s,error);}};
@@ -299,6 +301,16 @@
       s.updateRelayButton?.();
       expiry(s,agreed.expiresAt || s.expires);
       s.relayController=new AbortController();
+      if(s.timedAngle && s.capture) {
+        try {
+          const [{startRelayClock},{createStampWriter}]=await Promise.all([
+            import('/replay/multicam/relay-clock.mjs'),import('/replay/tv/frame-stamp.mjs')
+          ]);
+          if(!current(s))return;
+          const clock=startRelayClock({origin:apiRoot,id:s.id,token:s.key,signal:s.relayController.signal});
+          s.stampWriter=createStampWriter(clock);
+        } catch { /* Keep video available when this phone cannot carry timing. */ }
+      }
       showTransport(s,mime);
       s.frameDeadline=setTimeout(()=>fail(s,new Error('The TV did not confirm relay video.')),relayFrameWait+4000);
       el('phone-status').textContent=s.transport+' · Sending video to the TV.';
@@ -633,7 +645,7 @@
     let capture=window.FGSPhoneCamera?.setup(original);
     async function start(manual) {
       const s=active || {role:'phone',id:match[1],key:token(),videoKey:validKey?params.get('key'):null,
-        directOnly:directOnly.checked,capture,updateRelayButton,cameraId};
+        directOnly:directOnly.checked,capture,updateRelayButton,cameraId,timedAngle:relayAngle && params.get('sync')==='1'};
       if(manual) {
         if(!canRelay || s.directOnly || s.interrupted || s.relaying)return;
         s.manualRelay=true;

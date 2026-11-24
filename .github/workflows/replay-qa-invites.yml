@@ -8,6 +8,7 @@ on:
       - 'apps/site-review/**'
       - 'tests/replay-qa-invites.mjs'
       - 'tests/replay-qa-pictures.mjs'
+      - 'tests/replay-qa-sync.mjs'
       - 'tests/replay-relay-*.mjs'
       - 'tests/replay-tv-relay-angle.test.mjs'
       - '.github/workflows/replay-qa-invites.yml'
@@ -35,9 +36,11 @@ jobs:
           REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
           FGS_CHROME_BIN: /usr/bin/google-chrome
       - name: Check relay lifecycle and received-frame history
-        run: node --test tests/replay-tv-relay-angle.test.mjs tests/replay-relay-history.test.mjs
-      - name: Decode and verify trimmed relay clips
-        run: node tests/replay-relay-clips.mjs
+        run: node --test tests/replay-tv-relay-angle.test.mjs tests/replay-relay-*.test.mjs
+      - name: Verify encoded picture times and trimmed relay clips
+        run: |
+          node tests/replay-relay-stamps.mjs
+          node tests/replay-relay-clips.mjs
         env:
           REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
           FGS_CHROME_BIN: /usr/bin/google-chrome

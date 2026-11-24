@@ -1,7 +1,7 @@
 import '../js/frame-export-v1.js';
 
-// These timestamps are local to the TV's received pictures. Do not use them
-// for matching a play to another angle or trimming a phone's original.
+// Export decoded phone pictures from one continuous timing segment. Source
+// originals remain on the phone.
 const maxBytes = 32 * 1024 * 1024;
 function showPicture(canvas, bitmap) {
   const ctx = canvas.getContext('2d', {alpha:false});
@@ -34,6 +34,8 @@ export async function exportRelayClip(frames, signal) {
     const f = frames[i];
     if (!f.receipt || f.epoch !== frames[0].epoch || !Number.isFinite(f.time) || !(f.blob instanceof Blob))
       throw Error('Choose footage from a single relay connection.');
+    if (f.timingSegment !== frames[0].timingSegment)
+      throw Error('The phone clock changed during this selection. Choose a shorter clip.');
     if (i && (f.time <= frames[i-1].time || f.time-frames[i-1].time > 1500))
       throw Error('This range includes a break in received video. Shorten the selection.');
   }
@@ -151,7 +153,9 @@ export function bindRelayClips(slot) {
   function capture() {
     // Keep these Blob references while the user trims. The live rolling buffer
     // can continue recording and evicting old frames independently.
-    const frames = slot.buffer.frames.filter(f=>f.epoch===epoch && f.receipt);
+    const latest = slot.buffer.frames.at(-1);
+    const frames = slot.buffer.frames.filter(f=>f.epoch===epoch && f.receipt &&
+      f.timingSegment===latest?.timingSegment);
     if (frames.length < 3 || frames.at(-1).time-frames[0].time < 250) {
       from.disabled = to.disabled = prepare.disabled = true;
       status.textContent = 'Waiting for received video to save.';

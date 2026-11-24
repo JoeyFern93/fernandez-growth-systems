@@ -268,7 +268,14 @@ export async function replayPair(request,env,url,helpers) {
       return new Response(null,{status:204,headers});
     }
     if(!methods.includes(request.method)) fail(405,'Use the correct method for this pairing action.');
-    const result=await handle(request,env,id,action,Date.now(),url,helpers,preview);
+    const receivedAt=Date.now();
+    const result=await handle(request,env,id,action,receivedAt,url,helpers,preview);
+    if(action==='relay' && request.method==='GET') {
+      // Both authenticated devices use the same service time reference. Two
+      // readings let the browser remove Worker/database processing from RTT.
+      result.data.serverReceivedAt=receivedAt;
+      result.data.serverSentAt=Date.now();
+    }
     if(result.bytes) {
       headers.set('Content-Type','application/octet-stream');
       headers.set('Content-Length',String(result.bytes.length));

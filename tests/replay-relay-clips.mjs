@@ -42,7 +42,7 @@ try {
       const abort=new AbortController();
       for (const invalid of [
         {...frames[2],epoch:2}, {...frames[2],receipt:false}, {...frames[2],time:frames[3].time+1000},
-        {...frames[2],time:frames[1].time+1600}
+        {...frames[2],time:frames[1].time+1600}, {...frames[2],timingSegment:2}
       ]) {
         let rejected=false;
         try {await exportRelayClip([frames[0],frames[1],invalid,frames[3]],abort.signal);} catch {rejected=true;}
