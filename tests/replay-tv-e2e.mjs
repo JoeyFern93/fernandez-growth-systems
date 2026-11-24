@@ -17,7 +17,7 @@ const api='https://sitereview.fernandezgrowthsystems.com';
 const probeOnly=process.argv.includes('--test-browser');
 const manualRelay=process.argv.includes('--manual-relay');
 const auditCase=process.argv.find(arg=>arg.startsWith('--audit='))?.slice('--audit='.length);
-if(auditCase)assert(['single','direct','relay','disconnect','quiet-stop','still','replacement'].includes(auditCase),'Unknown --audit case');
+if(auditCase)assert(['single','direct','relay','disconnect','quiet-stop','still','replacement','stall'].includes(auditCase),'Unknown --audit case');
 const relayScenario=manualRelay || process.argv.includes('--relay') || auditCase==='relay';
 const controlsScenario=process.argv.includes('--controls');
 const webcamScenario=process.argv.includes('--webcam');
@@ -72,7 +72,7 @@ const chrome=process.env.FGS_CHROME_BIN||[path.join(process.env.ProgramFiles||''
   '/usr/bin/google-chrome','/usr/bin/chromium','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
 assert(chrome,'Set FGS_CHROME_BIN to a local Chrome executable');
 const cameraFixture=[];
-if(auditCase){
+if(auditCase && auditCase!=='stall'){
   const {writeHistoryCamera}=await import('./replay-tv-history.mjs');
   const fixture=path.join(temps,'replay-optical.y4m');
   await writeHistoryCamera(fixture,auditCase==='still');
@@ -204,7 +204,10 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(auditCase){
+  if(auditCase==='stall'){
+    const {runStallAudit}=await import('./replay-tv-stall.mjs');
+    await runStallAudit({tv,site,output,delay});
+  }else if(auditCase){
     const {runHistoryAudit}=await import('./replay-tv-history.mjs');
     await runHistoryAudit({tv,phone,site,requests,output,delay},auditCase);
   }else if(demoStopScenario){
