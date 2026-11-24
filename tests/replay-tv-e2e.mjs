@@ -16,9 +16,12 @@ const site='https://www.fernandezgrowthsystems.com';
 const api='https://sitereview.fernandezgrowthsystems.com';
 const probeOnly=process.argv.includes('--test-browser');
 const manualRelay=process.argv.includes('--manual-relay');
-const relayScenario=manualRelay || process.argv.includes('--relay');
+const auditCase=process.argv.find(arg=>arg.startsWith('--audit='))?.slice('--audit='.length);
+if(auditCase)assert(['single','direct','relay','disconnect','quiet-stop','still','replacement'].includes(auditCase),'Unknown --audit case');
+const relayScenario=manualRelay || process.argv.includes('--relay') || auditCase==='relay';
 const controlsScenario=process.argv.includes('--controls');
 const webcamScenario=process.argv.includes('--webcam');
+const demoStopScenario=process.argv.includes('--demo-stop');
 const temps=await mkdtemp(path.join(process.env.REPLAY_QA_TEMP||os.tmpdir(),'fgs-tv-check-'));
 const output=process.env.REPLAY_QA_PROOF || path.join(here,'replay-tv-proof');
 await mkdir(output,{recursive:true});
@@ -69,7 +72,12 @@ const chrome=process.env.FGS_CHROME_BIN||[path.join(process.env.ProgramFiles||''
   '/usr/bin/google-chrome','/usr/bin/chromium','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
 assert(chrome,'Set FGS_CHROME_BIN to a local Chrome executable');
 const cameraFixture=[];
-if(controlsScenario){
+if(auditCase){
+  const {writeHistoryCamera}=await import('./replay-tv-history.mjs');
+  const fixture=path.join(temps,'replay-optical.y4m');
+  await writeHistoryCamera(fixture,auditCase==='still');
+  cameraFixture.push('--use-file-for-fake-video-capture='+fixture);
+}else if(controlsScenario){
   const {writeTestCamera}=await import('./replay-tv-controls.mjs');
   const fixture=path.join(temps,'replay-camera.y4m');
   await writeTestCamera(fixture);
@@ -79,7 +87,7 @@ const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-gpu','--no-
   '--disable-background-networking','--disable-component-update','--autoplay-policy=no-user-gesture-required',
   '--host-resolver-rules=MAP * ~NOTFOUND','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',
   '--allow-loopback-in-peer-connection','--disable-features=WebRtcHideLocalIpsWithMdns',
-  ...(webcamScenario?['--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows']:[]),
+  ...((webcamScenario||auditCase||demoStopScenario)?['--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows']:[]),
   ...cameraFixture,'--remote-debugging-pipe','--user-data-dir='+path.join(temps,'profile')],
   {stdio:['ignore','ignore','ignore','pipe','pipe'],windowsHide:true});
 const finished=once(child,'exit');let serial=0,tail='',closing=false;
@@ -196,7 +204,13 @@ async function tab(width,height,mobile=false){
 let tv,phone;
 try{
   tv=await tab(1280,720);phone=await tab(390,844,true);
-  if(webcamScenario){
+  if(auditCase){
+    const {runHistoryAudit}=await import('./replay-tv-history.mjs');
+    await runHistoryAudit({tv,phone,site,requests,output,delay},auditCase);
+  }else if(demoStopScenario){
+    const {runDemoStop}=await import('./replay-tv-demo-stop.mjs');
+    await runDemoStop({tv,phone,site,taskErrors,delay,output});
+  }else if(webcamScenario){
     const {runWebcam}=await import('./replay-tv-webcam.mjs');
     await runWebcam({tv,phone,site,requests,rounds,taskErrors,delay});
   }else if(controlsScenario){

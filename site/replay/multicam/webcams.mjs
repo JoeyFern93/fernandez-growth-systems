@@ -42,16 +42,18 @@ function cameraError(error){
 async function discover(slots,slot) {
   if(asking)return;
   asking=true;
+  const discovery={};slot.discovery=discovery;
   const epoch=slot.epoch;
   let probe;
   try{
     if(!devices?.getUserMedia)throw Error('This browser cannot access a webcam. Use a camera-enabled browser over HTTPS.');
     slot.status.textContent='Allow access to list webcams, then choose one.';
     probe=await devices.getUserMedia({video:true,audio:false});
-    await list(slots);
+    if(slot.discovery!==discovery)return;
+    discovery.stream=probe;await list(slots);
     if(slot.epoch===epoch)slot.status.textContent=listed.length?'Choose a webcam from the list.':'Choose Default webcam to use this browser’s camera.';
   }catch(error){if(slot.epoch===epoch)slot.status.textContent=cameraError(error);}
-  finally{stopTracks(probe);asking=false;updateChoices(slots);}
+  finally{stopTracks(probe);if(slot.discovery===discovery)slot.discovery=null;asking=false;updateChoices(slots);}
 }
 export function bindWebcams(slots,{begin,dispose,receive}) {
   const render=()=>updateChoices(slots);
@@ -97,10 +99,11 @@ export function bindWebcams(slots,{begin,dispose,receive}) {
         receive(slot,room,track);
         list(slots);
         try{
-          const original=await startOriginal(stream,slot.name,message=>{
+          room.originalReady=startOriginal(stream,slot.name,message=>{
             room.originalError=String(message);
             if(slot.room===room)slot.status.textContent=room.originalError;
           },'webcam');
+          const original=await room.originalReady;
           if(slot.room!==room){await original.stop();return;}
           room.original=original;
         }catch{room.originalError='Original recording unavailable on this device.';}

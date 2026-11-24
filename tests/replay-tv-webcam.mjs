@@ -28,6 +28,14 @@ async function decodeClip(selector) {
 }
 
 export async function runWebcam({tv, phone, site, requests, rounds, taskErrors, delay}) {
+  // Run with --webcam --original-only-phone or --webcam --original-only-webcam.
+  const originalOnlyPhone = process.argv.includes('--original-only-phone');
+  const originalOnlyWebcam = process.argv.includes('--original-only-webcam');
+  for (const [page, limited] of [[tv, originalOnlyWebcam], [phone, originalOnlyPhone]]) {
+    if (limited) await page.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: "Object.defineProperty(HTMLMediaElement.prototype, 'captureStream', {value: undefined, configurable: true});"
+    });
+  }
   const slots = [...Array(2)].map((_, i) => 'document.querySelectorAll("#angles section")[' + i + ']');
   const showing = i => slots[i] + '.querySelector(".missing").hidden';
   const selectWebcam = async value => {
@@ -70,6 +78,13 @@ export async function runWebcam({tv, phone, site, requests, rounds, taskErrors, 
   await phone.click('start');
   await tv.until(showing(0) + ' && ' + showing(1), 'both buffered views', 40000);
   await tv.until('document.getElementById("alignment").textContent.includes("ms")', 'measured capture-time alignment');
+  const button = originalOnlyWebcam && originalOnlyPhone ? 'Prepare clips' : originalOnlyWebcam ?
+    'Prepare Camera 2 clip' : originalOnlyPhone ? 'Prepare Camera 1 clip' : 'Prepare both clips';
+  await tv.until('document.getElementById("save").textContent === ' + JSON.stringify(button), 'confirmed trim support before marking');
+  for (const [slot, limited, location] of [[0, originalOnlyWebcam, 'Webcam originals'], [1, originalOnlyPhone, 'Phone originals']]) {
+    if (limited) assert.match(await tv.get(slots[slot] + '.querySelector(".clip-capability").textContent'), new RegExp('Original only.*' + location));
+  }
+  if (originalOnlyPhone) assert.match(await phone.get('document.getElementById("clip-capability").textContent'), /Original only.*Phone originals/);
   await checkMoving([0, 1]);
   // Trying the occupied webcam on Camera 2 must keep its working phone.
   await tv.get('(() => { const input = document.querySelectorAll(".webcam")[1]; input.value = "default"; input.dispatchEvent(new Event("change", {bubbles: true})); })()');
@@ -87,9 +102,14 @@ export async function runWebcam({tv, phone, site, requests, rounds, taskErrors, 
   await tv.get('document.querySelector("#mark-in").click()');
   await scrub(1150);
   await tv.get('document.querySelector("#mark-out").click()');
-  await tv.until('!document.getElementById("save").disabled', 'matching original coverage', 20000);
-  await tv.get('document.querySelector("#save").click()');
-  for (const [page, selector] of [[tv, '#clip-downloads a'], [phone, '#clips a']]) {
+  if (originalOnlyWebcam && originalOnlyPhone) {
+    assert(await tv.get('document.getElementById("save").disabled'));
+  } else {
+    await tv.until('!document.getElementById("save").disabled', 'matching original coverage', 20000);
+    await tv.get('document.querySelector("#save").click()');
+  }
+  for (const [page, selector, limited] of [[tv, '#clip-downloads a', originalOnlyWebcam], [phone, '#clips a', originalOnlyPhone]]) {
+    if (limited) { assert.equal(await page.get('!!document.querySelector(' + JSON.stringify(selector) + ')'), false); continue; }
     await page.until('document.querySelector(' + JSON.stringify(selector) + ')?.href.startsWith("blob:")', 'local matching clip', 35000);
     const clip = await page.get('(' + decodeClip.toString() + ')(' + JSON.stringify(selector) + ')');
     assert(clip.frames >= 5 && clip.duration > 0.65, 'Each saved interval must decode moving video');
@@ -98,18 +118,31 @@ export async function runWebcam({tv, phone, site, requests, rounds, taskErrors, 
   await tv.click('follow');
   await selectWebcam('');
   await tv.until('!' + showing(0) + ' && ' + showing(1), 'phone replay continues after webcam stops');
+  await tv.until('document.getElementById("save").textContent === ' + JSON.stringify(originalOnlyPhone ? 'Prepare clips' : 'Prepare Camera 2 clip'), 'export choices after webcam disconnects');
   await tv.until('__inspectMedia().then(s => s.tracks.length && s.tracks.every(t => t.state === "ended"))', 'released webcam');
   await checkMoving([1]);
   await selectWebcam(device);
   await tv.until(showing(0), 'reopened selected webcam');
+  await tv.until('document.getElementById("save").textContent === ' + JSON.stringify(button), 'export choices after webcam rejoins');
   await phone.click('stop');
   await tv.until(showing(0) + ' && !' + showing(1), 'webcam replay continues after phone disconnects');
+  await tv.until('document.getElementById("save").textContent === ' + JSON.stringify(originalOnlyWebcam ? 'Prepare clips' : 'Prepare Camera 1 clip'), 'export choices after phone disconnects');
   await checkMoving([0]);
   await selectWebcam('');
   await tv.until('__inspectMedia().then(s => s.tracks.every(t => t.state === "ended"))', 'released all webcam tracks');
   await phone.until('__inspectMedia().then(s => s.tracks.every(t => t.state === "ended"))', 'released phone camera');
+  for (const [page, selector, limited] of [[tv, '#original-list', originalOnlyWebcam], [phone, '#originals', originalOnlyPhone]]) {
+    if (!limited) continue;
+    await page.get('document.querySelector(' + JSON.stringify(selector) + ').closest("details").open = true');
+    await page.until('document.querySelector(' + JSON.stringify(selector + ' button') + ')', 'saved original on the indicated device');
+    // The first webcam recording is the older row after the reconnection test.
+    await page.get('Array.from(document.querySelectorAll(' + JSON.stringify(selector + ' button') + ')).at(-1).click()');
+    await page.until('document.querySelector(' + JSON.stringify(selector + ' a') + ')?.href.startsWith("blob:")', 'original download');
+    const original = await page.get('(' + decodeClip.toString() + ')(' + JSON.stringify(selector + ' a') + ')');
+    assert(original.frames >= 5 && original.duration > 0.65, 'Original-only angle retains decodable video');
+  }
   assert.equal(rounds.length, 1);
   assert(!requests.some(r => r.op === 'relay-chunk' && r.verb === 'POST'));
   assert.deepEqual(taskErrors, []);
-  console.log('PASS local webcam and paired phone: moving replay, pause, scrub, two decoded clips, independent source recovery');
+  console.log('PASS local webcam and paired phone: moving replay, pause, scrub, supported clips and originals, independent source recovery');
 }

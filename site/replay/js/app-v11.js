@@ -49,6 +49,9 @@
     sessionDuration: 0, sessionThumbnails: [], encoderStartedAt: 0, fallbackStartedAt: 0,
     restartEncoderIfResized: null, replaySizes: [], sessionAspects: []
   };
+  let pendingLocalCamera = null;
+  let activeLocalCamera = null;
+  let activeDeviceId = '';
   const MAX_QUEUED_BYTES = 32 * 1024 * 1024;
   const HISTORY_BUDGET_BITS = 64 * 1024 * 1024 * 8;
   const MIN_CLIP_SECONDS = 0.25;
@@ -162,7 +165,7 @@
     ui.start.disabled = state.running || state.starting || busy;
     ui.demo.disabled = state.running || state.starting || busy;
     ui.stop.disabled = !state.running && !state.starting;
-    ui.flip.disabled = !state.running || state.starting || state.sourceMode !== 'camera' || busy || !!state.trim;
+    ui.flip.disabled = !state.running || state.starting || state.sourceMode !== 'camera' || busy || !!state.trim || !nextCameraTarget();
     ui.camera.disabled = state.starting || ['demo','remote'].includes(state.sourceMode) || busy || !!state.trim;
     ui.recordClip.disabled = !source || (!state.sessionReview && !state.replayReady) || busy || !!state.trim
       || !window.MediaRecorder || !ui.clipCanvas.captureStream;
@@ -171,6 +174,7 @@
     ui.delay.disabled = busy || !!state.trim;
     ui.connectionBadge.textContent = state.starting ? (state.sourceMode === 'demo' ? 'Starting demo' : 'Starting camera')
       : state.running ? (state.sourceMode === 'demo' ? 'Demo active' : 'Camera active') : 'Ready';
+    if (state.running && state.starting && state.sourceMode === 'camera') ui.connectionBadge.textContent = 'Switching camera';
     if (state.sourceMode === 'remote') ui.connectionBadge.textContent = state.starting ? 'Connecting phone' : 'Phone camera active';
     ui.recordClip.textContent = 'Save clip';
     if (ui.sessionRecord) {
@@ -299,6 +303,10 @@
   function reviewPosition() {
     return state.sessionReview ? ui.sessionVideo.currentTime : state.engine === 'compressed' ? ui.delayedVideo.currentTime : state.reviewTime;
   }
+  function delayStatus(span) {
+    const remaining = Math.ceil(state.delaySeconds - span);
+    return remaining > 0 ? `Waiting ${remaining}s for delay` : 'Delayed playback';
+  }
   function formatTime(seconds) {
     const value = Math.max(0, Math.round(seconds));
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
@@ -340,7 +348,7 @@
       ui.review.setAttribute('aria-valuetext', `${formatTime(reviewPosition())} of ${formatTime(range.end)} recorded session`);
     }
     ui.replayStatus.textContent = state.sessionReview ? 'Recorded session'
-      : state.reviewing ? (state.reviewPaused ? 'Paused review' : `${state.reviewSpeed}x review`) : 'Delayed playback';
+      : state.reviewing ? (state.reviewPaused ? 'Paused review' : `${state.reviewSpeed}x review`) : delayStatus(available.end - available.start + 0.003);
     renderTimeline(ui.timeline, range, state.sessionReview ? state.sessionThumbnails : state.thumbnails, state.sessionReview ? false : state.mirrored);
     if (ui.timelineTrack) ui.timelineTrack.style.setProperty('--playhead', `${100 * Math.max(0, Math.min(1, (reviewPosition() - range.start) / (range.end - range.start)))}%`);
   }
@@ -461,8 +469,16 @@
   async function enumerateCameras(selectedId = '', request = state.cameraRequest) {
     if (!navigator.mediaDevices?.enumerateDevices) return;
     try {
-      const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
+      const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
+      const physical = inputs.filter(device => device.deviceId && !['default', 'communications'].includes(device.deviceId));
+      const devices = physical.length ? physical : inputs;
       if (request !== state.cameraRequest) return;
+      const track = state.sourceMode === 'camera' && state.stream?.getVideoTracks()[0];
+      if (track && !devices.some(device => device.deviceId === activeDeviceId)) {
+        const matches = devices.filter(device => track.label && device.label === track.label);
+        if (matches.length === 1) activeDeviceId = matches[0].deviceId;
+      }
+      if (track && activeDeviceId) selectedId = activeDeviceId;
       ui.camera.replaceChildren();
       for (const [index, device] of devices.entries()) {
         const option = document.createElement('option');
@@ -472,6 +488,7 @@
         ui.camera.append(option);
       }
       if (!devices.length) ui.camera.add(new Option('Default camera', ''));
+      updateControls();
     } catch (error) { console.info('Could not list cameras', error); }
   }
   async function requestWakeLock() {
@@ -846,13 +863,11 @@
     // MediaRecorder timeslices are not clock ticks. Gate playback using the
     // encoded media timeline instead of counting dataavailable events.
     if (span < state.delaySeconds) {
-      if (state.playbackStarted) {
-        ui.delayedVideo.pause();
-        state.playbackStarted = false;
-        setReplayReady(false);
-        showViewerMessage('Rebuilding replay buffer', 'The browser paused the replay. Wait for the delay buffer to refill.');
-      }
-      ui.replayStatus.textContent = `Warming up ${Math.ceil(state.delaySeconds - span)}s`;
+      state.playbackStarted = false;
+      if (!ui.delayedVideo.paused) ui.delayedVideo.pause();
+      if (state.replayReady && Math.abs(ui.delayedVideo.currentTime - start) > 0.05) ui.delayedVideo.currentTime = start;
+      updateReviewControls();
+      ui.replayStatus.textContent = delayStatus(span);
       return;
     }
     const target = Math.max(start, end - state.delaySeconds);
@@ -865,7 +880,7 @@
       ui.delayedVideo.play().then(() => {
         if (generation === state.generation && ui.delayedVideo.readyState >= 2) setReplayReady(true);
       }).catch(() => {
-        if (generation !== state.generation) return;
+        if (generation !== state.generation || !state.playbackStarted || state.reviewing) return;
         setReplayReady(false);
         showViewerMessage('Tap the replay to play', 'Your browser paused playback. Tap the video to resume.');
       });
@@ -913,7 +928,7 @@
       state.nativeReplay = allowNative && (preferOriginalTrack() || !ui.processingCanvas.captureStream) &&
         typeof state.stream?.getVideoTracks()[0]?.clone === 'function';
       state.encoderStream = state.nativeReplay ? cloneCameraVideo() : canvasVideo(ui.processingCanvas, state.replayFps);
-      let sourceWidth, sourceHeight, restarting = false;
+      let sourceWidth, sourceHeight, secondsAtCurrentBitrate, restarting = false;
       function beginSegment() {
         if (generation !== state.generation || !state.running || state.remoteHandoff) return;
         sourceWidth = ui.live.videoWidth; sourceHeight = ui.live.videoHeight;
@@ -927,7 +942,8 @@
         const height = state.nativeReplay ? sourceHeight : ui.processingCanvas.height;
         const videoBitsPerSecond = Math.round(Math.min(recordingBitrate(width, height, state.replayFps),
           HISTORY_BUDGET_BITS / (state.delaySeconds + 20)));
-        state.historySeconds = Math.min(Math.max(120, state.delaySeconds + 20), HISTORY_BUDGET_BITS / videoBitsPerSecond);
+        secondsAtCurrentBitrate = HISTORY_BUDGET_BITS / videoBitsPerSecond;
+        state.historySeconds = Math.min(Math.max(120, state.delaySeconds + 20), secondsAtCurrentBitrate);
         const recorder = new MediaRecorder(state.encoderStream, { mimeType, videoBitsPerSecond });
         let first = true;
         recorder.ondataavailable = event => {
@@ -947,11 +963,16 @@
         recorder.start(1000);
         restarting = false;
       }
-      // Dimension changes start a fresh codec initialization, leaving SourceBuffer
-      // and its earlier, independently seekable pictures on the same timeline.
-      state.restartEncoderIfResized = () => {
+      // A larger history may require a lower bitrate for future frames. Keep
+      // the SourceBuffer, its existing pictures and the camera track in place.
+      state.restartEncoderIfResized = (delayChanged = false) => {
         if (restarting || !ui.live.videoWidth) return restarting;
-        if (ui.live.videoWidth === sourceWidth && ui.live.videoHeight === sourceHeight) return false;
+        if (delayChanged) {
+          const desiredHistory = Math.min(Math.max(120, state.delaySeconds + 20), secondsAtCurrentBitrate);
+          state.historySeconds = Math.max(state.historySeconds, desiredHistory);
+        }
+        const needsLongerHistory = delayChanged && state.delaySeconds + 2 > state.historySeconds;
+        if (!needsLongerHistory && ui.live.videoWidth === sourceWidth && ui.live.videoHeight === sourceHeight) return false;
         if (state.recorder.state !== 'recording') return true;
         restarting = true;
         state.recorder.onstop = () => {
@@ -1050,7 +1071,16 @@
           updateControls();
           return;
         }
-        if (!candidate) return;
+        if (!candidate) {
+          const range = getReplayWindow();
+          if (state.replayReady && range) {
+            state.reviewTime = range.start;
+            drawFallbackAt(range.start);
+          }
+          updateReviewControls();
+          ui.replayStatus.textContent = delayStatus(range ? range.end - range.start : 0);
+          return;
+        }
         showFallbackFrame(candidate.canvas);
         state.reviewTime = candidate.at / 1000;
         setReplayReady(true);
@@ -1205,18 +1235,70 @@
         } catch { /* Reported capabilities can span incompatible combinations. */ }
       }
     }
-    if (request === state.cameraRequest) {
-      state.capabilityFps = cameraMax;
-      state.sourceFps = Number(settings().frameRate) || 0;
-    }
-    return settings();
+    return { settings: settings(), cameraMax };
   }
-  async function startCamera() {
-    stopCamera();
-    state.sessionReview = false;
-    ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
-    state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
-    const request = ++state.cameraRequest;
+  function nextCameraTarget() {
+    const track = state.stream?.getVideoTracks()[0];
+    if (!track || track.readyState !== 'live') return null;
+    const ids = [...new Set(Array.from(ui.camera.options, option => option.value).filter(Boolean))];
+    const index = ids.indexOf(activeDeviceId);
+    if (index >= 0 && ids.length > 1) return { deviceId: ids[(index + 1) % ids.length] };
+    try {
+      const facing = track.getSettings?.().facingMode;
+      const other = track.getCapabilities?.().facingMode?.find(mode => facing && mode !== facing);
+      if (other) return { facingMode: other };
+    } catch { /* Not every browser reports lens capabilities. */ }
+    return null;
+  }
+  function cameraDisconnected() {
+    return new DOMException('The camera disconnected. Choose Start camera to try again.', 'CameraDisconnected');
+  }
+  function waitForCameraFrame(video, stream, signal) {
+    const track = stream.getVideoTracks()[0];
+    return new Promise((resolve, reject) => {
+      let frameCallback;
+      let received = false, playing = false;
+      let done = false;
+      function finish(error) {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        clearInterval(poll);
+        video.removeEventListener('loadeddata', delivered);
+        signal.removeEventListener('abort', check);
+        if (frameCallback != null) video.cancelVideoFrameCallback?.(frameCallback);
+        if (error) reject(error); else resolve();
+      }
+      function check() {
+        if (signal.aborted) return finish(signal.reason);
+        if (track.readyState !== 'live' || !stream.active) return finish(cameraDisconnected());
+        if (playing && received && !track.muted && !video.paused && video.readyState >= 2 &&
+            video.videoWidth > 2 && video.videoHeight > 2) finish();
+      }
+      function delivered() { received = true; check(); }
+      // loadeddata or a decoded frame confirms this source supplied a picture.
+      // A still court is legitimate; its pixels do not have to change.
+      const timeout = setTimeout(() => finish(new Error('No usable camera frame arrived.')), 8000);
+      const poll = setInterval(check, 100);
+      signal.addEventListener('abort', check, { once: true });
+      video.addEventListener('loadeddata', delivered);
+      video.srcObject = stream;
+      frameCallback = video.requestVideoFrameCallback?.(delivered);
+      video.play().then(() => { playing = true; check(); }, finish);
+      check();
+    });
+  }
+  async function startCamera(target = {}) {
+    const replacing = state.running && state.sourceMode === 'camera';
+    const selectedDevice = target.deviceId ?? (target.facingMode ? '' : ui.camera.value);
+    if (state.starting || (replacing && !target.facingMode && (!selectedDevice || selectedDevice === activeDeviceId))) return;
+    if (!replacing) {
+      stopCamera();
+      state.sessionReview = false;
+      ui.sessionVideo.pause(); ui.sessionVideo.hidden = true;
+      state.reviewing = false; state.reviewPaused = false; state.reviewSpeed = 1;
+    }
+    let request = ++state.cameraRequest;
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
       showViewerMessage('Camera unavailable', 'Open this page over HTTPS in Safari, Chrome, or Edge.');
       return;
@@ -1225,44 +1307,102 @@
     state.starting = true;
     updateControls();
     const capture = parseResolution(ui.captureResolution.value);
-    const selectedDevice = ui.camera.value;
     const wanted = selectedRate();
     const video = {
       width: { ideal: capture.width }, height: { ideal: capture.height },
       frameRate: wanted && wanted <= 30 ? { ideal: wanted, max: wanted } : { ideal: wanted || 240 }
     };
     if (selectedDevice) video.deviceId = { exact: selectedDevice };
-    else video.facingMode = { ideal: state.facingMode };
-    showViewerMessage('Starting camera', 'Approve camera access if your browser asks. You can press Stop to cancel.');
-    let acquired = null;
+    else video.facingMode = target.facingMode ? { exact: target.facingMode } : { ideal: state.facingMode };
+    if (!replacing) showViewerMessage('Starting camera', 'Approve camera access if your browser asks. You can press Stop to cancel.');
+    const controller = new AbortController();
+    const signal = controller.signal;
+    pendingLocalCamera = controller;
+    let acquired, probe;
+    const oldTracks = state.stream?.getTracks() || [];
+    function releaseCandidate() {
+      acquired?.getTracks().forEach(track => { if (!oldTracks.includes(track)) track.stop(); });
+    }
+    function disconnect() {
+      controller.abort(cameraDisconnected());
+      if (activeLocalCamera === controller) {
+        stopCamera();
+        ui.cameraStatus.textContent = 'Camera disconnected';
+        showViewerMessage('Camera disconnected', 'Choose Start camera to try again.');
+      }
+    }
     try {
       try {
         acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video });
       } catch (error) {
-        if (request !== state.cameraRequest || error.name !== 'OverconstrainedError') throw error;
+        if (signal.aborted || error.name !== 'OverconstrainedError') throw error;
         const relaxed = { ...video };
         delete relaxed.frameRate;
         acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video: relaxed });
       }
-      if (request !== state.cameraRequest) { acquired.getTracks().forEach(track => track.stop()); return; }
-      state.stream = acquired;
+      if (signal.aborted) { releaseCandidate(); return; }
       const track = acquired.getVideoTracks()[0];
-      const settings = await negotiateCameraRate(track, request, video);
-      if (request !== state.cameraRequest) { acquired.getTracks().forEach(track => track.stop()); return; }
-      ui.live.srcObject = acquired;
-      await ui.live.play();
-      if (request !== state.cameraRequest) return;
-      await waitForCameraMetadata();
-      if (request !== state.cameraRequest) return;
-      track.addEventListener('ended', () => {
-        if (state.stream !== acquired) return;
-        stopCamera();
-        showViewerMessage('Camera disconnected', 'Start the camera again to rebuild your replay.');
+      if (!track) throw cameraDisconnected();
+      track.addEventListener('ended', disconnect, { signal });
+      acquired.addEventListener('inactive', disconnect, { signal });
+      // MediaStreamTrack.stop() can end a track without dispatching ended.
+      const verify = () => { if (track.readyState !== 'live' || !acquired.active) disconnect(); };
+      const monitor = setInterval(verify, 150);
+      signal.addEventListener('abort', () => {
+        clearInterval(monitor);
+        // stopCamera finalizes any session recording before releasing the active stream.
+        if (state.stream !== acquired) releaseCandidate();
       }, { once: true });
+      verify();
+      if (signal.aborted) throw signal.reason;
+      const interrupted = new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      const { settings, cameraMax } = await Promise.race([negotiateCameraRate(track, request, video), interrupted]);
+      verify();
+      if (signal.aborted) throw signal.reason;
+      if (replacing) {
+        if (oldTracks.includes(track) || (selectedDevice && settings.deviceId &&
+            (settings.deviceId !== selectedDevice || settings.deviceId === activeDeviceId)) ||
+            (target.facingMode && settings.facingMode !== target.facingMode)) {
+          throw new Error('The browser returned the current camera.');
+        }
+        // Keep the current replay and its video element running during the trial.
+        probe = ui.live.cloneNode(false);
+        probe.removeAttribute('id');
+        probe.muted = true;
+        ui.live.after(probe);
+        await waitForCameraFrame(probe, acquired, signal);
+        verify();
+        if (signal.aborted) throw signal.reason;
+        if (state.trim || state.clip) throw new Error('Finish saving the current clip first.');
+        // Promote the already-playing element in place. Rebinding the stream to
+        // a second element would introduce another fallible play() after teardown.
+        pendingLocalCamera = null;
+        stopCamera();
+        request = ++state.cameraRequest;
+        probe.id = ui.live.id;
+        ui.live.removeEventListener('resize', sourceResized);
+        ui.live.remove();
+        ui.live = probe;
+        probe = null;
+        ui.live.addEventListener('resize', sourceResized);
+        state.sourceMode = 'camera';
+      } else {
+        await waitForCameraFrame(ui.live, acquired, signal);
+        verify();
+        if (signal.aborted) throw signal.reason;
+      }
+      state.stream = acquired;
+      activeLocalCamera = controller;
+      pendingLocalCamera = null;
+      activeDeviceId = settings.deviceId || selectedDevice;
+      state.facingMode = settings.facingMode || state.facingMode;
+      state.capabilityFps = cameraMax;
+      state.sourceFps = Number(settings.frameRate) || 0;
       state.running = true;
       state.starting = false;
       state.generation += 1;
-      enumerateCameras(settings.deviceId || selectedDevice, request);
+      enumerateCameras(activeDeviceId, request);
+      if (replacing) window.FGSReplayQuality?.capture?.(ui.live, acquired);
       const dimensions = `${settings.width || ui.live.videoWidth}×${settings.height || ui.live.videoHeight}`;
       ui.actualBadge.textContent = state.sourceFps ? `${dimensions} · ${rateLabel(state.sourceFps)} FPS setting` : dimensions;
       ui.cameraStatus.textContent = track.label || 'Active';
@@ -1272,28 +1412,44 @@
       requestWakeLock();
       savePreferences();
     } catch (error) {
-      if (request !== state.cameraRequest) { acquired?.getTracks().forEach(track => track.stop()); return; }
+      controller.abort();
+      releaseCandidate();
+      if (request !== state.cameraRequest) return;
+      if (pendingLocalCamera === controller) pendingLocalCamera = null;
+      if (replacing && state.running && activeLocalCamera !== controller) {
+        state.starting = false;
+        ui.camera.value = activeDeviceId;
+        updateControls();
+        showToast('Could not switch cameras. Your current camera and replay are still available.');
+        return;
+      }
       stopCamera();
       const messages = {
+        CameraDisconnected: 'Choose Start camera to try again.',
         NotAllowedError: 'Camera permission was denied. Allow camera access in browser settings and try again.',
         NotFoundError: 'No camera was found on this device.',
         NotReadableError: 'Another app may be using the camera. Close it and try again.',
         OverconstrainedError: 'This camera could not start with those settings. Choose another camera or a lower resolution.',
         SecurityError: 'Camera access requires a secure HTTPS page.'
       };
-      const message = messages[error.name] || 'Check camera permission and try again.';
-      showViewerMessage('Could not start camera', message);
+      const disconnected = error.name === 'CameraDisconnected';
+      if (disconnected) ui.cameraStatus.textContent = 'Camera disconnected';
+      const message = messages[error.name] || 'Check the camera and choose Start camera to try again.';
+      showViewerMessage(disconnected ? 'Camera disconnected' : 'Could not start camera', message);
       showToast(message);
+    } finally {
+      if (probe) { probe.pause(); probe.srcObject = null; probe.remove(); }
     }
   }
   function updatePhoneDimensions() {
     if (state.sourceMode !== 'remote' || !ui.live.videoWidth) return;
     ui.actualBadge.textContent = `Phone · ${ui.live.videoWidth}×${ui.live.videoHeight}`;
   }
-  ui.live.addEventListener('resize', () => {
+  function sourceResized() {
     updatePhoneDimensions();
     state.restartEncoderIfResized?.();
-  });
+  }
+  ui.live.addEventListener('resize', sourceResized);
   function remotePhase(phase, message) {
     window.dispatchEvent(new CustomEvent('fgs:remote-phase', { detail: { phase, message } }));
   }
@@ -1472,6 +1628,9 @@
   });
   function stopCamera(reason = 'user', message = '') {
     const wasRemote = state.sourceMode === 'remote';
+    const pending = pendingLocalCamera, active = activeLocalCamera;
+    pendingLocalCamera = null; activeLocalCamera = null; activeDeviceId = '';
+    pending?.abort(); active?.abort();
     state.cancelRemoteStart?.(); state.remoteMuted = false;
     state.removeRemoteListener?.(); state.removeRemoteListener = null; state.remoteSource = null;
     state.cameraRequest += 1;
@@ -1515,10 +1674,9 @@
     ui.mirror.setAttribute('aria-pressed', String(state.mirrored));
   }
   function switchCamera() {
-    if (state.sourceMode !== 'camera') return;
-    state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
-    ui.camera.value = '';
-    startCamera();
+    if (!state.running || state.starting || state.sourceMode !== 'camera') return;
+    const target = nextCameraTarget();
+    if (target) startCamera(target);
   }
   function pickClipMime() {
     if (!window.MediaRecorder?.isTypeSupported) return '';
@@ -2254,7 +2412,7 @@
     updateDelayText();
   }
 
-  ui.start.addEventListener('click', startCamera);
+  ui.start.addEventListener('click', () => startCamera());
   ui.demo.addEventListener('click', startDemo);
   ui.stop.addEventListener('click', stopCamera);
   ui.flip.addEventListener('click', switchCamera);
@@ -2262,11 +2420,13 @@
   ui.delay.addEventListener('input', () => { updateDelayText(); ui.restartNote.hidden = !state.running; });
   ui.delay.addEventListener('change', () => {
     ui.restartNote.hidden = true;
-    if (state.running) {
-      const cancelledClip = !!state.clip;
-      stopReplayEngine();
-      startReplayEngine();
-      if (cancelledClip) showToast('Clip cancelled because the replay delay changed.');
+    state.delaySeconds = Number(ui.delay.value);
+    if (state.running && state.engine === 'compressed') {
+      state.restartEncoderIfResized?.(true);
+      if (!state.reviewing && !state.sessionReview && !state.trim && !state.clip) {
+        state.playbackStarted = false;
+        updateCompressedPlayback(state.generation);
+      }
     }
     savePreferences();
   });
@@ -2451,4 +2611,5 @@
   restorePreferences();
   updateControls();
   enumerateCameras();
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => enumerateCameras(activeDeviceId || ui.camera.value));
 })();

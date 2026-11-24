@@ -28,6 +28,11 @@ export async function loadOriginal(meta) {
 function chooseType() {
   return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/mp4','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
 }
+export function canTrimOriginal() {
+  const video=HTMLVideoElement.prototype;
+  return typeof video.captureStream==='function' && typeof video.requestVideoFrameCallback==='function' &&
+    typeof MediaRecorder==='function';
+}
 export async function startOriginal(stream,angle,onError,source='phone') {
   const type=chooseType();
   const rec=new MediaRecorder(stream,{...(type?{mimeType:type}:{}),videoBitsPerSecond:14000000});
@@ -71,7 +76,7 @@ export async function startOriginal(stream,angle,onError,source='phone') {
 async function trimOriginal(blob,start,end) {
   const video=document.createElement('video');
   video.muted=true;video.playsInline=true;video.preload='auto';
-  if(!video.captureStream || !video.requestVideoFrameCallback)throw Error('This browser can save the original only. Use Chrome for paired trimming.');
+  if(!canTrimOriginal())throw Error('Original only. Open the originals on the recording device.');
   const url=URL.createObjectURL(blob);
   let recorder,stream,callback,safetyTimer;
   try {

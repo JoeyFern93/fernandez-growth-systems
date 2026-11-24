@@ -4,19 +4,25 @@ import {call,token,negotiate,createPeer,directConnectionMessage} from './signali
 import {bindWebcams,offerClip,clearClipDownloads} from './webcams.mjs';
 import {createLivePreview} from './live-preview.mjs';
 import {cameras} from './cameras.mjs';
+import {canTrimOriginal} from './originals.mjs';
 const by=id=>document.getElementById(id);
+const trimHere=canTrimOriginal();
 function setText(node,text){if(node.textContent!==text)node.textContent=text;}
 const slots=cameras.map(({id:cameraId,angle:name,label})=>{
   const node=by(name);
   return {name,cameraId,label,node,canvas:node.querySelector('canvas'),missing:node.querySelector('.missing'),status:node.querySelector('.status'),
-    buffer:new AngleBuffer(),room:null,rendered:null,frameJob:0,epoch:0};
+    capability:node.querySelector('.clip-capability'),buffer:new AngleBuffer(),room:null,rendered:null,frameJob:0,epoch:0};
 });
 let demo=false,origin=0,mode='delay',cursor=0,markIn=null,markOut=null,clipId=null;
+let exportJobs=[],exportOriginals=[],lastClipRefresh=-Infinity;
 const session=token().slice(0,16);
 function dispose(slot,msg,notify=true) {
   slot.pendingWebcam=null;
+  slot.discovery?.stream?.getTracks().forEach(t=>t.stop());slot.discovery=null;
   const room=slot.room;
   if(room){
+    const originalOnly=room.local ? room.original && !room.originalError && !trimHere : room.trimSupport===false;
+    slot.lastOriginalLocation=originalOnly?'Original only. '+originalLocation(room,false):'';
     slot.room=null;room.controller.abort();clearInterval(room.clockTimer);clearTimeout(room.watchdog);
     if(room.video){room.video.pause();room.video.srcObject=null;room.video.remove();}
     room.pc?.close();
@@ -68,6 +74,11 @@ function receive(slot,room,track) {
 function control(slot,room,channel) {
   if(channel.label!=='replay-clock-v1' || room.channel){channel.close();return;}
   room.channel=channel;
+  channel.addEventListener('message',event=>{
+    if(!room.finishReply || typeof event.data!=='string' || event.data.length>600)return;
+    let m;try{m=JSON.parse(event.data);}catch{return;}
+    if(m.op==='source-stopped')room.finishReply(m.saved===true);
+  });
   const probes=new Map();
   function ping() {
     if(channel.readyState!=='open' || slot.room!==room)return;
@@ -80,10 +91,11 @@ function control(slot,room,channel) {
     let m;try{m=JSON.parse(e.data);}catch{return;}
     if(m.op==='pong' && probes.delete(m.tv)){
       room.clock.add(m.tv,m.p1,m.p2,performance.now());room.originalStart=m.originalStart;
+      room.trimSupport=typeof m.canTrim==='boolean'?m.canTrim:'unconfirmed';
     }
-    if(m.op==='clip-result' && m.id===clipId) {
+    if(m.op==='clip-result' && m.id===clipId && exportJobs.some(job=>job.room===room)) {
       room.clipResult=m.ok?'ready on phone':'failed on phone';
-      clipStatus();
+      refreshClips();
     }
   };
   if(channel.readyState==='open')channel.onopen();
@@ -111,7 +123,7 @@ async function invite(slot) {
     pc.ontrack=e=>{if(slot.room===room && e.track.kind==='video')receive(slot,room,e.track);};
     pc.ondatachannel=e=>control(slot,room,e.channel);
     pc.onconnectionstatechange=()=>{
-      if(slot.room!==room)return;
+      if(slot.room!==room || room.finishing)return;
       if(pc.connectionState==='connected'){
         room.wasConnected=true;
         clearTimeout(room.watchdog);slot.status.textContent='Direct connected · waiting for capture timestamps';
@@ -124,6 +136,87 @@ async function invite(slot) {
     if(pc.connectionState!=='connected')room.watchdog=setTimeout(()=>dispose(slot,directConnectionMessage(room.wasConnected)),22000);
   }catch(error){if(!signal.aborted)dispose(slot,error.message);}
 }
+function finishPhone(room) {
+  if(room.channel?.readyState!=='open')return Promise.resolve(null);
+  return new Promise(resolve=>{
+    const channel=room.channel;
+    function done(saved){
+      clearTimeout(timer);room.finishReply=null;resolve(saved);
+    }
+    const timer=setTimeout(()=>done(null),5000);
+    room.finishReply=done;
+    try{channel.send(JSON.stringify({op:'finish-source'}));}catch{done(null);}
+  });
+}
+async function finishSource(slot){
+  slot.pendingWebcam=null;slot.discovery?.stream?.getTracks().forEach(t=>t.stop());slot.discovery=null;
+  const room=slot.room;
+  let issue='',checkPhone=false;
+  if(room){
+    room.finishing=true;room.controller.abort();clearTimeout(room.watchdog);
+    if(room.local){
+      // Stop acquisition immediately, then wait for the recorder's last database write.
+      room.stream.getTracks().forEach(t=>t.stop());
+      try{
+        const original=await room.originalReady;
+        if(!original)throw Error();
+        await original.stop();
+        if(room.originalError)throw Error(room.originalError);
+      }catch{issue=slot.label+' original could not be confirmed. Check Webcam originals.';}
+    }else if(room.channel?.readyState==='open' || room.wasConnected || room.video){
+      const saved=await finishPhone(room);
+      if(saved===null)checkPhone=true;
+      else if(!saved)issue=slot.label+' stopped. Check the original on the phone.';
+    }
+    if(!room.local && room.id){
+      const revoke=new AbortController(),timer=setTimeout(()=>revoke.abort(),3500);
+      try{await call('/'+room.id+'/end',room.key,{},revoke.signal);}
+      catch(error){if(error.status!==410 && error.status!==404 && !issue)issue='Could not confirm invite closure for '+slot.label+'. Check that phone.';}
+      finally{clearTimeout(timer);}
+    }
+  }
+  dispose(slot,'No source selected',false);
+  slot.buffer=new AngleBuffer();
+  return {issue,checkPhone,label:slot.label};
+}
+const demoDialog=by('demo-dialog');
+let finishing=false,pendingPhoneChecks=[],recordingIssues=[];
+const demoTitle=by('demo-title').textContent,demoDescription=by('demo-description').textContent;
+const sourcesPresent=()=>slots.some(s=>s.room || s.pendingWebcam || s.discovery);
+function showDemoChoice(){
+  const check=pendingPhoneChecks.length>0;
+  by('demo-title').textContent=check?'Confirm the phone has stopped':demoTitle;
+  by('demo-description').textContent=check?
+    'The display could not confirm that '+pendingPhoneChecks.join(' and ')+' stopped. Check the phone and tap Stop camera if it is still recording.':demoDescription;
+  by('demo-keep').textContent=check?'Back to cameras':'Keep recording';
+  by('demo-finish').textContent=check?'Camera stopped. Continue':'Finish recording and start demo';
+  by('demo-progress').textContent=recordingIssues.join(' ');
+  if(!demoDialog.open)demoDialog.showModal();
+}
+function enterDemo(){
+  setDemo(true);
+  if(recordingIssues.length)by('mode').textContent+=' · '+recordingIssues.join(' ');
+  recordingIssues=[];demoDialog.close();
+}
+by('demo-keep').onclick=()=>demoDialog.close();
+demoDialog.addEventListener('cancel',event=>{if(finishing)event.preventDefault();});
+by('demo-finish').onclick=async()=>{
+  if(finishing)return;
+  if(pendingPhoneChecks.length){
+    pendingPhoneChecks=[];
+    if(sourcesPresent())showDemoChoice();else enterDemo();
+    return;
+  }
+  finishing=true;by('demo-keep').disabled=by('demo-finish').disabled=true;
+  by('demo-progress').textContent='Stopping cameras and finishing the originals…';
+  try{
+    const results=await Promise.all(slots.map(finishSource));
+    pendingPhoneChecks=results.filter(r=>r.checkPhone).map(r=>r.label);
+    recordingIssues.push(...results.map(r=>r.issue).filter(Boolean));
+    if(by('local-originals').open)by('local-originals').ontoggle();
+    if(pendingPhoneChecks.length)showDemoChoice();else enterDemo();
+  }finally{finishing=false;by('demo-keep').disabled=by('demo-finish').disabled=false;}
+};
 function setDemo(value) {
   demo=value;mode='delay';origin=performance.now()-3200-Number(by('delay').value)*1000;cursor=3200;markIn=markOut=null;clipId=null;
   by('save').disabled=true;by('clip-status').textContent='';
@@ -195,6 +288,7 @@ function refresh(now){
   by('position').textContent=have?(demo?(cursor/1000).toFixed(2)+' s':((now-cursor)/1000).toFixed(1)+' s behind live'):'Waiting for capture timestamps';
   by('pause').textContent=mode==='pause'?'Play':'Pause';
   for(const s of slots)draw(s,cursor);
+  if(now-lastClipRefresh>=250){lastClipRefresh=now;refreshClips();}
   const both=!demo && slots.every(s=>!s.node.hidden && Number.isFinite(s.displayed));
   by('alignment').textContent=both?'Displayed capture stamps differ by '+Math.round(Math.abs(slots[0].displayed-slots[1].displayed))+' ms':'';
   requestAnimationFrame(refresh);
@@ -208,7 +302,10 @@ const renderWebcams=bindWebcams(slots,{
   dispose,receive
 });
 for(const s of slots)s.node.querySelector('.invite').onclick=()=>invite(s);
-by('demo').onclick=()=>setDemo(!demo);
+by('demo').onclick=()=>{
+  if(demo){setDemo(false);return;}
+  if(sourcesPresent() || pendingPhoneChecks.length)showDemoChoice();else setDemo(true);
+};
 by('close').onclick=()=>by('invite-dialog').close();
 by('layout').onchange=e=>{
   const view=e.target.value;by('angles').classList.toggle('single',view!=='both');
@@ -237,34 +334,79 @@ function covers(slot,start,end) {
   const frames=slot.buffer.frames.filter(f=>f.epoch===slot.epoch);
   return frames.length>=2 && start>=frames[0].time && end<=frames.at(-1).time;
 }
+function trimSupport(room){
+  if(!room)return null;
+  if(room.local)return room.original && !room.originalError ? trimHere : null;
+  return room.channel?.readyState==='open' && room.pc.connectionState==='connected' ? room.trimSupport : null;
+}
+function originalLocation(room,active=true){
+  if(room.local)return active?'Disconnect this webcam, then open Webcam originals here.':'Open Webcam originals here.';
+  return active?'Stop this camera, then open Phone originals on its phone.':'Open Phone originals on its phone.';
+}
+function refreshClips(){
+  const eligible=[];
+  for(const slot of slots){
+    const room=slot.room,support=trimSupport(room);
+    let label=(!demo && !room && slot.lastOriginalLocation) || '';
+    if(!demo && room){
+      if(support===true)eligible.push(slot);
+      else if(support===false)label='Original only. '+originalLocation(room);
+      else if(support==='unconfirmed')label='Clip support unconfirmed. '+originalLocation(room);
+      else if(room.trimSupport===false)label='Original only. '+originalLocation(room,false);
+      else if(room.channel?.readyState==='open')label='Checking clip support…';
+    }
+    setText(slot.capability,label);
+  }
+  const save=by('save');
+  const valid=Number.isFinite(markIn) && Number.isFinite(markOut) && markOut>markIn;
+  const covered=valid && eligible.length>0 && eligible.every(s=>covers(s,markIn,markOut));
+  const pending=clipId && exportJobs.some(({slot,room})=>slot.room===room && trimSupport(room)===true && !room.clipResult);
+  save.disabled=demo || !covered || Boolean(pending);
+  setText(save,eligible.length===2?'Prepare both clips':eligible.length===1?'Prepare '+eligible[0].label+' clip':'Prepare clips');
+  let message='';
+  if(clipId){
+    message=exportJobs.map(({slot,room})=>{
+      const available=slot.room===room && trimSupport(room)===true;
+      return slot.label+' '+(room.clipResult || (available?'preparing':'disconnected. Check the recording device.'));
+    }).join(' · ');
+    if(exportOriginals.length)message+=' · '+exportOriginals.join(' · ');
+  }else if(markIn!==null || markOut!==null){
+    if(demo)message='Choose a real camera to export a recording.';
+    else if(!valid)message='Mark a start followed by a later end.';
+    else message=((markOut-markIn)/1000).toFixed(2)+' s '+(covered?'selected':'outside the available clip range');
+  }
+  setText(by('clip-status'),message);
+  return eligible;
+}
 function mark(which){
   if(which==='start')markIn=cursor;else markOut=cursor;
-  const valid=Number.isFinite(markIn)&&Number.isFinite(markOut)&&markOut>markIn;
-  by('save').disabled=demo || !valid || !slots.every(s=>covers(s,markIn,markOut));
-  by('clip-status').textContent=demo?'Clip export requires two camera originals.':valid?
-    ((markOut-markIn)/1000).toFixed(2)+' s'+(by('save').disabled?' · both angles must cover the range':' selected'):'Mark the other end of the interval.';
+  clipId=null;
+  refreshClips();
 }
 by('mark-in').onclick=()=>mark('start');by('mark-out').onclick=()=>mark('end');
-function clipStatus(){
-  by('clip-status').textContent=slots.map(s=>s.label+' '+(s.room?.clipResult || 'preparing')).join(' · ');
-}
 by('save').onclick=()=>{
-  if(!slots.every(s=>covers(s,markIn,markOut))){by('clip-status').textContent='Both cameras must still cover the range.';return;}
+  const targets=refreshClips();
+  if(by('save').disabled)return;
   const id=clipId=crypto.randomUUID();
   clearClipDownloads();
-  for(const s of slots){
-    const room=s.room;room.clipResult='';
+  exportJobs=targets.map(slot=>({slot,room:slot.room}));
+  exportOriginals=slots.filter(slot=>trimSupport(slot.room)===false)
+    .map(slot=>slot.label+' original only. '+originalLocation(slot.room,false));
+  for(const {slot,room} of exportJobs){
+    room.clipResult='';
     if(room.local){
       room.original.clip(markIn,markOut).then(blob=>{
-        if(clipId!==id || s.room!==room)return;
-        offerClip(s,blob,id);room.clipResult='ready here';
-      }).catch(error=>{room.clipResult=error.message;}).finally(()=>{if(clipId===id && s.room===room)clipStatus();});
+        if(clipId!==id)return;
+        offerClip(slot,blob,id);room.clipResult='ready here';
+      }).catch(error=>{if(clipId===id)room.clipResult=error.message;}).finally(refreshClips);
     }else{
       const fit=room.clock.fit(performance.now());
-      room.channel.send(JSON.stringify({op:'clip',id,start:fit.phoneTime(markIn),end:fit.phoneTime(markOut)}));
+      try{
+        room.channel.send(JSON.stringify({op:'clip',id,start:fit.phoneTime(markIn),end:fit.phoneTime(markOut)}));
+      }catch{room.clipResult='request interrupted; check the recording phone';}
     }
   }
-  clipStatus();
+  refreshClips();
 };
 window.addEventListener('pagehide',()=>slots.forEach(s=>dispose(s,'Closed',false)));
 requestAnimationFrame(refresh);

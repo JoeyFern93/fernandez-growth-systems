@@ -1,5 +1,5 @@
 import {call,token,negotiate,createPeer,directConnectionMessage} from './signaling.mjs';
-import {startOriginal,recordings,loadOriginal} from './originals.mjs';
+import {startOriginal,recordings,loadOriginal,canTrimOriginal} from './originals.mjs';
 import {cameras} from './cameras.mjs';
 const by=id=>document.getElementById(id);
 const q=new URLSearchParams(location.hash.slice(1));
@@ -9,6 +9,8 @@ const validInvite=/^~[A-Za-z0-9_-]{21}$/.test(id) && /^[A-Za-z0-9_-]{43}$/.test(
   camera && Number.isFinite(expiry) && expiry>0;
 const expiredMessage='This invite expired. Scan a new invite for this camera on the TV.';
 let active=null,claimKey;
+const canTrim=canTrimOriginal();
+if(!canTrim)by('clip-capability').textContent='Original only. After you stop this camera, open Phone originals below to download its recording.';
 function saveLink(container,blob,label,file){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file;
   a.textContent=label;container.append(a);return a;
@@ -31,13 +33,29 @@ async function showOriginals() {
     };container.append(b);
   }
 }
-async function close(room,message,retry=false){
+async function close(room,message,retry=false,finishChannel=null){
   if(active!==room)return;active=null;room.controller.abort();clearTimeout(room.watchdog);clearTimeout(room.inviteTimer);
-  room.pc?.close();room.stream?.getTracks().forEach(t=>t.stop());
+  if(!finishChannel)room.pc?.close();
+  room.stream?.getTracks().forEach(t=>t.stop());
   by('camera').srcObject=null;by('start').disabled=!retry || Date.now()>=expiry;by('stop').disabled=true;
   by('status').textContent=message;
   if(room.claimed)call('/'+id+'/end',room.key,{}).catch(()=>{});
-  try{await room.original?.stop();await showOriginals();}catch(error){by('originals').textContent=error.message;}
+  let saved=false;
+  try{
+    const original=await room.originalReady;
+    if(original){await original.stop();saved=!room.originalError;}
+  }catch(error){by('originals').textContent=error.message;}
+  if(finishChannel){
+    const pc=room.pc;
+    if(finishChannel.readyState==='open'){
+      try{finishChannel.send(JSON.stringify({op:'source-stopped',saved}));}catch{}
+      // Let the display receive the acknowledgement and close the connection first.
+      const safety=setTimeout(()=>pc.close(),3000);
+      finishChannel.addEventListener('close',()=>{clearTimeout(safety);pc.close();},{once:true});
+    }else pc.close();
+    by('status').textContent=saved?'Camera stopped for the TV demo. Your original is available below.':'Camera stopped for the TV demo. Original saving could not be confirmed.';
+  }
+  try{await showOriginals();}catch(error){by('originals').textContent=error.message;}
 }
 async function start() {
   if(active || !validInvite)return;
@@ -71,7 +89,8 @@ async function start() {
     room.claimed=true;clearTimeout(room.inviteTimer);
     // Keep an unclaimed invitation usable through a reload. A claimed invite is single-use.
     try{history.replaceState(history.state,'',location.pathname+location.search);}catch{}
-    room.original=await startOriginal(stream,camera.angle,message=>{by('status').textContent=String(message);});
+    room.originalReady=startOriginal(stream,camera.angle,message=>{room.originalError=true;if(active===room)by('status').textContent=String(message);});
+    room.original=await room.originalReady;
     if(signal.aborted){await room.original.stop();return;}
     const anchor=(_,m)=>{
       if(active!==room)return;
@@ -82,22 +101,27 @@ async function start() {
     const pc=createPeer();room.pc=pc;
     pc.addTransceiver(stream.getVideoTracks()[0],{direction:'sendonly',streams:[stream]});
     const channel=pc.createDataChannel('replay-clock-v1');
+    channel.onclose=()=>{if(active===room)close(room,'Display disconnected. Open your saved original below.');};
     channel.onmessage=async event=>{
       const received=performance.now();
       if(active!==room || typeof event.data!=='string' || event.data.length>600)return;
       let msg;try{msg=JSON.parse(event.data);}catch{return;}
+      if(msg.op==='finish-source'){
+        await close(room,'Finishing the original for the TV demo.',false,channel);return;
+      }
       if(msg.op==='ping' && Number.isFinite(msg.tv)){
         channel.send(JSON.stringify({op:'pong',tv:msg.tv,p1:received,p2:performance.now(),
-          originalStart:room.original.start}));
+          originalStart:room.original.start,canTrim}));
       }else if(msg.op==='clip' && /^[a-f0-9-]{36}$/.test(msg.id) && [msg.start,msg.end].every(Number.isFinite)){
         let ok=false;
         try{
+          if(!canTrim)throw Error('Original only. After you stop this camera, open Phone originals below.');
           if(room.exporting)throw Error('A clip is already being prepared.');
           room.exporting=msg.id;
           const blob=await room.original.clip(msg.start,msg.end);
           saveLink(by('clips'),blob,'Download '+camera.label+' clip','FGS-'+camera.label.replace(' ','-')+'-'+msg.id+'.'+extension(blob));
-          ok=true;by('status').textContent='Matching clip ready. The camera is still recording.';
-        }catch(error){by('status').textContent='Clip export · '+error.message;}
+          ok=true;if(active===room)by('status').textContent='Matching clip ready. The camera is still recording.';
+        }catch(error){if(active===room)by('status').textContent='Clip export · '+error.message;}
         finally{if(room.exporting===msg.id)room.exporting=null;}
         if(channel.readyState==='open')channel.send(JSON.stringify({op:'clip-result',id:msg.id,ok}));
       }
