@@ -1,7 +1,6 @@
 (() => {
   'use strict';
-  const apiRoot = document.querySelector('meta[name="replay-pair-api"]')?.content === '/api/replay-pair'
-    ? location.origin + '/api/replay-pair' : 'https://sitereview.fernandezgrowthsystems.com/api/replay-pair';
+  const apiRoot = window.FGSReplayPairEndpoint;
   const phoneStart = document.getElementById('phone-start');
   const tvButton = document.getElementById('pairTvBtn');
   if (!phoneStart && !tvButton) return;
@@ -114,6 +113,7 @@
       .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   }
   async function api(path, method, credential, body, keepalive = false) {
+    if (!apiRoot) throw new Error('Phone pairing is unavailable at this address. Open Replay Cam from its website or the test preview.');
     const headers = {};
     if (credential) headers.Authorization = 'Bearer ' + credential;
     if (body) headers['Content-Type'] = 'application/json';
@@ -152,6 +152,10 @@
     s.relayController?.abort();
     transport(s,'Disconnected');
     if (s.role === 'phone') {
+      if(s.angleOriginal) {
+        s.angleOriginal=null;
+        window.dispatchEvent(new CustomEvent('fgs:relay-angle-stop',{detail:{cameraId:s.cameraId}}));
+      }
       s.capture?.stop();
       stopTracks(s.media);
       if (el('phone-preview')) {
@@ -172,7 +176,11 @@
   function fail(s, error) {
     if (s.ended) return;
     end(s);
-    const message = error.name === 'NotAllowedError' ? 'Allow camera access in your browser settings.' :
+    const creatingRoom=s.role==='tv' && !s.id;
+    const message = creatingRoom && error.status===429 ? 'The pairing service is busy. Wait a minute, then retry.' :
+      creatingRoom && error.status===403 ? 'The pairing service did not accept this display address.' :
+      creatingRoom ? 'Could not create a private room. Check that this display is online, then retry.' :
+      error.name === 'NotAllowedError' ? 'Allow camera access in your browser settings.' :
       error.name === 'NotFoundError' ? 'This phone could not find an available camera.' :
       error instanceof TypeError ? 'Pairing could not reach the service.' :
       error.message || 'The room connection was lost.';
@@ -183,7 +191,9 @@
     }
   }
   function relayOptions(s,mimeType) {
-    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream:s.capture?.forRelay(mimeType) || s.media,
+    const stream=s.capture?.forRelay(mimeType,s.stampWriter) || s.media;
+    return {id:s.id,token:s.key,key:s.videoKey,origin:apiRoot,stream,
+      timed:Boolean(s.stampWriter?.ownsStream(stream)),
       mimeType,signal:s.relayController.signal,
       onStatus:message=>{if(!s.ended && s.role==='phone')el('phone-status').textContent=message;},
       onError:error=>{if(!s.ended && !s.relayController.signal.aborted)fail(s,error);}};
@@ -291,6 +301,16 @@
       s.updateRelayButton?.();
       expiry(s,agreed.expiresAt || s.expires);
       s.relayController=new AbortController();
+      if(s.timedAngle && s.capture) {
+        try {
+          const [{startRelayClock},{createStampWriter}]=await Promise.all([
+            import('/replay/multicam/relay-clock.mjs'),import('/replay/tv/frame-stamp.mjs')
+          ]);
+          if(!current(s))return;
+          const clock=startRelayClock({origin:apiRoot,id:s.id,token:s.key,signal:s.relayController.signal});
+          s.stampWriter=createStampWriter(clock);
+        } catch { /* Keep video available when this phone cannot carry timing. */ }
+      }
       showTransport(s,mime);
       s.frameDeadline=setTimeout(()=>fail(s,new Error('The TV did not confirm relay video.')),relayFrameWait+4000);
       el('phone-status').textContent=s.transport+' · Sending video to the TV.';
@@ -454,6 +474,10 @@
     tvState('Creating your private TV room.', 'loading');
     try {
       const session=await api('', 'POST', null, {tvToken:s.key});
+      if (!/^[A-Za-z0-9_-]{10,90}$/.test(session?.id || '') ||
+          !/^[A-Za-z0-9_-]{16,96}$/.test(session?.invite || '') || !Number.isFinite(session?.expiresAt) || session.expiresAt<=Date.now()) {
+        throw new Error('The pairing service returned an incomplete invite.');
+      }
       s.id=session.id;
       if (s.ended) { api('/'+s.id+'/end','POST',s.key).catch(()=>{}); return; }
       expiry(s,session.expiresAt);
@@ -530,6 +554,7 @@
     play.onclick=()=>window.FGSReplayCamera?.resumeRemote?.();
     el('tv-close').onclick=dismiss;
     el('tv-end').onclick=()=>{end(active); dialog.close();tvButton.focus();};
+    el('tv-new').textContent='Retry pairing';
     el('tv-new').onclick=openTv;
     dialog.addEventListener('cancel',event=>{event.preventDefault();dismiss();});
     tvButton.addEventListener('click',openTv);
@@ -567,6 +592,8 @@
     const note=el('phone-connection-note'), browserHelp=el('phone-browser-help');
     const validKey=/^[A-Za-z0-9_-]{43}$/.test(params.get('key') || '');
     const canRelay=!!(validKey && window.FGSReplayRelay?.sendFormats()?.length);
+    const cameraId=params.get('camera');
+    const relayAngle=params.get('transport')==='relay' && ['1','2'].includes(cameraId);
     if(!match) {
       phoneStart.hidden=true;choice.hidden=true;
       status.textContent='On the display, choose Pair phone to TV and scan its new QR code.';
@@ -585,7 +612,16 @@
       status.textContent='This browser cannot start the camera. Open this private link in Safari or Chrome.';
       return;
     }
-    if(!canRelay) {
+    if(relayAngle) {
+      directOnly.checked=false;directOnly.disabled=true;
+      directOnly.closest('label').hidden=true;
+      if(!canRelay) {
+        phoneStart.hidden=true;browserHelp.hidden=false;
+        note.textContent='This browser cannot send video through the encrypted internet relay. Open the invite in Safari or Chrome.';
+        return;
+      }
+      note.textContent='Start camera shares Camera '+cameraId+' over the encrypted internet relay and records an original on this phone when supported. Cellular uses mobile data. Relay sessions last up to 30 minutes.';
+    } else if(!canRelay) {
       note.textContent=validKey ? 'This browser supports direct pairing only.' : 'This link supports direct pairing only. For internet relay, scan a new QR code on the TV.';
       directOnly.checked=true;directOnly.disabled=true;
     } else if(!hasDirect()) {
@@ -594,14 +630,22 @@
     }
     function updateRelayButton() {
       const s=active;
-      relay.hidden=!canRelay;
+      relay.hidden=!canRelay || relayAngle;
       relay.disabled=!canRelay || (s?.directOnly ?? directOnly.checked) || !!(s?.manualRelay || s?.interrupted || s?.relayPending || s?.relaying);
       relay.textContent=s?.relaying?'Internet relay active':s?.relayPending?'Switching to relay…':s?.manualRelay?'Relay selected':'Use internet relay';
     }
-    let capture=window.FGSPhoneCamera?.setup();
+    function original(stream) {
+      const s=active;
+      if(!relayAngle || !s || s.ended || !stream)return;
+      s.media=stream;
+      if(!s.claimed || s.angleOriginal===stream)return;
+      s.angleOriginal=stream;
+      window.dispatchEvent(new CustomEvent('fgs:relay-angle-capture',{detail:{stream,cameraId}}));
+    }
+    let capture=window.FGSPhoneCamera?.setup(original);
     async function start(manual) {
       const s=active || {role:'phone',id:match[1],key:token(),videoKey:validKey?params.get('key'):null,
-        directOnly:directOnly.checked,capture,updateRelayButton};
+        directOnly:directOnly.checked,capture,updateRelayButton,cameraId,timedAngle:relayAngle && params.get('sync')==='1'};
       if(manual) {
         if(!canRelay || s.directOnly || s.interrupted || s.relaying)return;
         s.manualRelay=true;
@@ -632,6 +676,7 @@
         const session=await api('/'+s.id+'/claim','POST',null,{invite:match[2],phoneToken:s.key});
         s.claimPending=false;s.claimed=true;
         if(!current(s)){api('/'+s.id+'/end','POST',s.key,null,true).catch(()=>{});return;}
+        original(s.media);
         expiry(s,session.expiresAt);
         monitorRelay(s);
         if(s.manualRelay || !hasDirect()){offerRelay(s,'Internet relay selected.');return;}
@@ -666,7 +711,7 @@
         if(s.media){
           s.capture?.stop();stopTracks(s.media);s.media=null;
           const preview=el('phone-preview');preview.srcObject=null;preview.hidden=true;
-          capture=window.FGSPhoneCamera?.setup();s.capture=capture;
+          capture=window.FGSPhoneCamera?.setup(original);s.capture=capture;
         }
         const denied=error.name==='NotAllowedError' || error.name==='SecurityError';
         if(claimFailed)status.textContent='The phone could not reach the pairing service. Check your connection and try again.';
@@ -683,7 +728,7 @@
     }
     directOnly.onchange=()=>{if(active && !active.starting && !active.media)active.directOnly=directOnly.checked;updateRelayButton();};
     phoneStart.disabled=false;updateRelayButton();
-    phoneStart.onclick=()=>start(false);
+    phoneStart.onclick=()=>start(relayAngle);
     relay.onclick=()=>start(true);
     stop.onclick=()=>{end(active);phoneStart.hidden=true;choice.hidden=true;browserHelp.hidden=true;status.textContent='Camera disconnected. Create a new room on the display for another phone link or QR code.';};
   }

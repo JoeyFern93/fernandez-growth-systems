@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://sitereview.fernandezgrowthsystems.com">
+<script src="/replay/tv/pair-endpoint.js?v=7e5069636023"></script>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex">
@@ -12,10 +14,11 @@
   <title>Phone camera | Replay Cam</title>
   <link rel="stylesheet" href="/replay/tv/quality.css?v=eb51917b3520">
   <script defer src="/replay/tv/quality.js?v=df1580f4c305"></script>
-  <script defer src="/replay/tv/relay-media.js?v=5c2d3db6276c"></script>
-  <script defer src="/replay/tv/phone-camera.js?v=5dacf2209e2b"></script>
+  <script defer src="/replay/tv/relay-media.js?v=1aca8c4075b3"></script>
+  <script defer src="/replay/tv/phone-camera.js?v=2eb05c6d4730"></script>
   <script defer src="/replay/tv/phone-view.js?v=f66199e9189d"></script>
-  <script defer src="/replay/tv/pair.js?v=d7f6185a96d1"></script>
+  <script type="module" src="/replay/tv/relay-original.mjs"></script>
+  <script defer src="/replay/tv/pair.js?v=05e0af7b9285"></script>
 </head>
 <body class="replay-phone">
   <main class="phone-shell">
@@ -85,6 +88,13 @@
         </div>
       </details>
     <p id="phone-camera-status" role="status"></p>
+    <div id="relay-original-panel" hidden>
+      <p id="relay-original-status" role="status"></p>
+      <details id="relay-originals">
+        <summary>Phone originals</summary>
+        <div id="relay-original-list"></div>
+      </details>
+    </div>
     
 
     <details id="quality-panel" class="quality-panel">

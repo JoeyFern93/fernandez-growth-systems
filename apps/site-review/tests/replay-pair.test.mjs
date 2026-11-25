@@ -194,7 +194,19 @@ test('the TV requests encrypted sharing, the phone consents, and only the TV can
   const start={action:'start',mimeType:'video/webm;codecs=vp8'};
   const report=(state,role)=>call(route,'POST',{action:'direct',state},role);
   const receipt=async()=>(await (await call(route,'GET',undefined,phone)).json()).direct;
-  assert.equal(await receipt(),'waiting');
+  for(const role of [tv,phone]) {
+    const before=Date.now();
+    const response=await call(route,'GET',undefined,role);
+    assert.equal(response.status,200);
+    const {direct,serverReceivedAt,serverSentAt}=await response.json();
+    assert.equal(direct,'waiting');
+    assert.ok(Number.isSafeInteger(serverReceivedAt) && Number.isSafeInteger(serverSentAt));
+    assert.ok(before<=serverReceivedAt && serverReceivedAt<=serverSentAt && serverSentAt<=Date.now());
+  }
+  const denied=await call(route,'GET',undefined,token());
+  assert.equal(denied.status,403);
+  const deniedBody=await denied.json();
+  assert.ok(!('serverReceivedAt' in deniedBody) && !('serverSentAt' in deniedBody));
   assert.equal((await report('moving',phone)).status,403);
   assert.equal((await report('moving',token())).status,403);
   assert.equal((await report('relay-moving',tv)).status,409);
