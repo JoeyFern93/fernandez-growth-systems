@@ -1,0 +1,30 @@
+name: Verify production USB webcam and relay phone
+on:
+  push:
+    branches: [qa/replay-production-optical-20261125]
+    paths:
+      - '.github/workflows/replay-production-optical.yml'
+      - 'tests/replay-qa-invites.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: replay-production-optical
+  cancel-in-progress: false
+jobs:
+  production-browser:
+    if: github.ref == 'refs/heads/qa/replay-production-optical-20261125'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser test dependencies
+        run: npm install --prefix "$RUNNER_TEMP/replay-qa" --no-audit --no-fund --ignore-scripts --no-save playwright-core@1.52.0 pngjs@7.0.0 jsqr@1.4.0
+      - name: Check the mixed-camera QR, frame alignment, pause, and scrub on production
+        run: node tests/replay-qa-invites.mjs
+        env:
+          REPLAY_QA_PACKAGES: ${{ runner.temp }}/replay-qa
+          FGS_CHROME_BIN: /usr/bin/google-chrome

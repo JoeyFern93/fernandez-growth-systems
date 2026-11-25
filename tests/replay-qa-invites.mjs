@@ -5,19 +5,21 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {installPhoneCounter,verifyMoving,verifyMixedReplay} from './replay-qa-pictures.mjs';
 
-// Deliberately pinned to this test branch. Never follow a room API redirect.
-const site = 'https://qa-replay-audit-fixes-202611.fernandez-growth-systems.pages.dev';
-const service = 'https://qa-replay-audit-fixes-202611.fgs-site-review.pages.dev';
+// This isolated release check can reach only the canonical public site and pairing service.
+const site = 'https://www.fernandezgrowthsystems.com';
+const service = 'https://sitereview.fernandezgrowthsystems.com';
 const api = service + '/api/replay-pair';
 const require = createRequire(path.join(process.env.REPLAY_QA_PACKAGES, 'package.json'));
 const {chromium} = require('playwright-core');
 const {PNG} = require('pngjs');
 const decodeQR = require('jsqr');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-let phase = 'waiting for hosted test assets';
+let phase = 'waiting for the production release and public pairing service';
+let revokedRooms = 0;
 
 async function waitForDeployments() {
-  const assets = ['/replay/tv/pair-endpoint.js', '/replay/tv/pair.js', '/replay/multicam/tv.mjs', '/replay/multicam/signaling.mjs'];
+  const assets = ['/replay/tv/pair.js', '/replay/tv/relay-media.js', '/replay/tv/frame-stamp.mjs',
+    '/replay/multicam/tv.mjs', '/replay/multicam/relay-clock.mjs', '/replay/multicam/relay-buffer.mjs'];
   const expected = await Promise.all(assets.map(url => readFile('site' + url, 'utf8')));
   const until = Date.now() + 300000;
   do {
@@ -34,16 +36,24 @@ async function waitForDeployments() {
           Origin:site, 'Access-Control-Request-Method':'POST', 'Access-Control-Request-Headers':'content-type'
         }
       });
-      if(matching.every(Boolean) && preflight.ok && preflight.headers.get('access-control-allow-origin') === site) return;
-    } catch { /* The two preview deployments finish independently. */ }
+      if(matching.every(Boolean) && preflight.ok && preflight.headers.get('access-control-allow-origin') === site) {
+        console.log('Matched six released browser assets on '+site+' and pairing CORS on '+service+'.');
+        return;
+      }
+    } catch { /* The frontend and pairing service deploy independently. */ }
     await delay(6000);
   } while(Date.now() < until);
-  throw new Error('Preview assets or preview-origin preflight have not reached this commit.');
+  throw new Error('The release assets or the public pairing preflight did not match.');
 }
 
 async function newDevice(browser, viewport) {
   const context = await browser.newContext({viewport, deviceScaleFactor:2, serviceWorkers:'block'});
   await context.grantPermissions(['camera'],{origin:site});
+  context.on('response',response=>{
+    const url=new URL(response.url());
+    if(url.origin===service && /^\/api\/replay-pair\/[^/]+\/end$/.test(url.pathname)
+      && response.request().method()==='POST' && [200,410].includes(response.status()))revokedRooms++;
+  });
   // Keep this smoke test isolated even if the deployed frontend is misconfigured.
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -102,7 +112,7 @@ export async function checkInvite(browser, camera, relay = false) {
   });
   try {
     phase = label + ' opening the invite dialog';
-    await tv.page.goto(site + (multi ? '/replay/multicam/' : '/replay/'), {waitUntil:'domcontentloaded'});
+    await tv.page.goto(site + (relay ? '/replay/multicam/?setup=webcam-phone' : multi ? '/replay/multicam/' : '/replay/'), {waitUntil:'domcontentloaded'});
     if(relay) {
       phase=label+' selecting the display webcam';
       await tv.page.waitForFunction(()=>typeof document.querySelector('#baseline .webcam')?.onchange==='function',null,{timeout:12000});
@@ -288,13 +298,17 @@ async function main(){
     '--disable-background-timer-throttling','--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding','--disable-features=WebRtcHideLocalIpsWithMdns'
   ]});
-  for (const camera of [1,2,null]) await checkInvite(browser,camera);
   await checkInvite(browser,2,true);
-  await checkBlockedDirectRecovery(browser);
-  phase='measuring USB and relayed phone sync on the hosted preview';
+  assert.ok(revokedRooms>0,'The production service did not acknowledge the QR room closing.');
+  const afterInvite=revokedRooms;
+  phase='measuring USB and VP8 phone sync on production';
   await runOpticalSync(browser,{delaySeconds:3,long:true});
-  phase='measuring USB and JPEG fallback sync on the hosted preview';
+  assert.ok(revokedRooms>afterInvite,'The production service did not acknowledge the VP8 room closing.');
+  const afterVP8=revokedRooms;
+  phase='measuring USB and JPEG phone sync on production';
   await runOpticalSync(browser,{jpeg:true,driverStamps:false});
+  assert.ok(revokedRooms>afterVP8,'The production service did not acknowledge the JPEG room closing.');
+  console.log('All three temporary production rooms closed.');
 } catch (error) {
   // Playwright errors can contain the phone's private fragment. Log only
   // the stage and the safe assertion text defined here, never browser URLs.
